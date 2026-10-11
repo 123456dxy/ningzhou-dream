@@ -61,9 +61,25 @@ namespace nz::api {
 
 using json::Value;
 
+namespace {
+Session& defaultSession() { static Session s; return s; }
+Session* currentSession = nullptr;
+Session& cur() { return currentSession ? *currentSession : defaultSession(); }
+} // namespace
+
+void bindSession(Session* s) { currentSession = s; }
+
+bool restoreGame(Session& s, const std::string& text, std::string* err) {
+    Game loaded;
+    if (!loadFromJson(text, loaded, err)) return false;
+    s.g = std::move(loaded);
+    checkpointEnable(s.g);
+    s.started = true;
+    return true;
+}
+
 Game& game() {
-    static Game g;
-    return g;
+    return cur().g;
 }
 
 // 这一份 game() 里是否真的开过局。
@@ -71,8 +87,7 @@ Game& game() {
 // 前端要靠它区分「空壳默认值」和「真的存档」，
 // 否则会把默认值当存档渲染，一读 S.clock 就崩。
 bool& started() {
-    static bool v = false;
-    return v;
+    return cur().started;
 }
 
 namespace {
@@ -1386,8 +1401,8 @@ Value buildState(const Game& g) {
 Value okWithState(Game& g) {
     checkpointTick(g);
     // 月历可能在一次长行动中创建自动快照；请求返回时将其落入独立槽位。
-    static string lastAutomatic;
-    static string writeError;
+    string& lastAutomatic = cur().lastAutomatic;
+    string& writeError = cur().writeError;
     if (g.checkpoint.enabled && g.checkpoint.source == "auto" &&
         !g.checkpoint.snapshot.empty() && lastAutomatic != g.checkpoint.snapshot) {
         Game automatic;

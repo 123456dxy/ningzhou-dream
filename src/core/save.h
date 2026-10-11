@@ -25,6 +25,8 @@ bool loadFromFile(const std::string& path, Game& out, std::string* err);
 
 // 存档目录：可执行文件同级的 saves/
 std::string defaultSaveDir();
+// 覆盖存档目录（多人服务端按玩家切换；空串恢复默认）
+void setSaveDirOverride(const std::string& dir);
 // 某个存档位的完整路径（slot 从 1 开始）
 std::string savePathFor(int slot);
 

@@ -43,7 +43,8 @@ target_link_libraries(ningzhou PRIVATE nzcore)
 # ---- Web 服务：原版界面 + C++ 规则 ----
 # 这是推荐的玩法：复用 JS 版的 HTML/CSS，C++ 只当规则引擎。
 add_executable(ningzhou_web ${CMAKE_CURRENT_SOURCE_DIR}/src/web_main.cpp)
-target_link_libraries(ningzhou_web PRIVATE nzcore)
+find_package(Threads REQUIRED)
+target_link_libraries(ningzhou_web PRIVATE nzcore Threads::Threads)
 if(WIN32)
     target_link_libraries(ningzhou_web PRIVATE ws2_32)
 endif()

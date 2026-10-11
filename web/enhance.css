@@ -1532,3 +1532,20 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
   .renown-source-footer { align-items: flex-start; flex-wrap: wrap; }
   .renown-source-heading { flex-wrap: wrap; }
 }
+
+/* ---- 多人版：道号登录 ---- */
+#nz-login { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center;
+  background: rgba(20, 40, 36, .72); backdrop-filter: blur(3px); }
+#nz-login[hidden] { display: none; }
+.nz-login-card { width: min(420px, 92vw); background: #f4efe3; color: #23332e; border-radius: 14px;
+  padding: 28px 26px 22px; box-shadow: 0 18px 50px rgba(0,0,0,.35); display: grid; gap: 12px; text-align: center; }
+.nz-login-seal { width: 52px; height: 52px; margin: 0 auto; border-radius: 12px; background: #183c37; color: #e4d9bf;
+  display: grid; place-items: center; font-size: 28px; }
+.nz-login-card h2 { margin: 0; letter-spacing: .3em; }
+.nz-login-card p { margin: 0; font-size: 14px; line-height: 1.6; color: #4b5c55; }
+.nz-login-card input { font-size: 16px; padding: 10px 12px; border-radius: 8px; border: 1px solid #b9b19c; background: #fffdf7; }
+.nz-login-card button { font-size: 16px; padding: 10px; border-radius: 8px; border: 0; background: #183c37; color: #f4efe3; cursor: pointer; letter-spacing: .4em; }
+.nz-login-card button:disabled { opacity: .6; }
+.nz-login-error { min-height: 1.2em; color: #a23b2a; font-size: 13px; }
+.nz-login-card small { color: #7a7f78; font-size: 12px; }
+#nz-user { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; font-size: 13px; }

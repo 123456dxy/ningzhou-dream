@@ -6,6 +6,9 @@
 #include <cstdlib>
 #include <iostream>
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 #ifdef _WIN32
 #include <io.h>
 #include <windows.h>

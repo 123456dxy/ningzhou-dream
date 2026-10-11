@@ -8,6 +8,12 @@
 #include <map>
 #include <chrono>
 #include <sstream>
+#include <algorithm>
+#include <atomic>
+#include <csignal>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
 
 #include "core/json.h"
 
@@ -22,12 +28,18 @@ using socklen_t = int;
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <poll.h>
 #define CLOSE_SOCKET close
 #endif
 
 namespace nz::http {
 
 namespace {
+
+constexpr size_t kMaxBody = 6u * 1024 * 1024;     // 绝对上限（仅存档导入可用到）
+constexpr size_t kMaxImportBody = 6u * 1024 * 1024; // 存档导入：一份新档约 1.3MB，导出包转义后更大
+constexpr size_t kMaxApiBody = 512u * 1024;         // 其余接口
+constexpr size_t kMaxHeader = 16u * 1024;
 
 // 常见扩展名 -> MIME
 std::string mimeOf(const std::string& path) {
@@ -42,6 +54,8 @@ std::string mimeOf(const std::string& path) {
     if (ends(".json")) return "application/json; charset=utf-8";
     if (ends(".svg"))  return "image/svg+xml";
     if (ends(".png"))  return "image/png";
+    if (ends(".webp")) return "image/webp";
+    if (ends(".jpg") || ends(".jpeg")) return "image/jpeg";
     if (ends(".ico"))  return "image/x-icon";
     if (ends(".woff2")) return "font/woff2";
     return "application/octet-stream";
@@ -94,7 +108,12 @@ std::string statusText(int code) {
         case 204: return "No Content";
         case 400: return "Bad Request";
         case 404: return "Not Found";
+        case 401: return "Unauthorized";
+        case 403: return "Forbidden";
         case 405: return "Method Not Allowed";
+        case 413: return "Payload Too Large";
+        case 429: return "Too Many Requests";
+        case 503: return "Service Unavailable";
         case 500: return "Internal Server Error";
         default:  return "OK";
     }
@@ -105,8 +124,13 @@ std::string buildResponse(const Response& r) {
     out << "HTTP/1.1 " << r.status << " " << statusText(r.status) << "\r\n";
     out << "Content-Type: " << r.contentType << "\r\n";
     out << "Content-Length: " << r.body.size() << "\r\n";
-    // 本地调试用，禁止缓存，改完前端刷新就能看到
-    out << "Cache-Control: no-store\r\n";
+    bool cacheSet = false;
+    for (const auto& [k, v] : r.extraHeaders) {
+        out << k << ": " << v << "\r\n";
+        if (k == "Cache-Control") cacheSet = true;
+    }
+    if (!cacheSet) out << "Cache-Control: no-store\r\n";
+    out << "X-Content-Type-Options: nosniff\r\n";
     out << "Connection: close\r\n";
     out << "\r\n";
     out << r.body;
@@ -131,7 +155,7 @@ bool contentLengthOf(const std::string& head, size_t& length) {
         for (size_t i = start; i <= end; ++i) {
             if (line[i] < '0' || line[i] > '9') return false;
             length = length * 10 + (line[i] - '0');
-            if (length > 8u * 1024 * 1024) return false;
+            if (length > kMaxBody) return false;
         }
     }
     return true;
@@ -165,147 +189,284 @@ bool parseRequest(const std::string& raw, Request& req) {
         raw.size() < headerEnd + 4 + contentLength) return false;
 
     req.body = raw.substr(headerEnd + 4, contentLength);
+    while (std::getline(hs, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        const auto colon = line.find(':');
+        if (colon == std::string::npos) continue;
+        std::string key = line.substr(0, colon);
+        for (auto& ch : key) ch = static_cast<char>(::tolower(static_cast<unsigned char>(ch)));
+        const auto vs = line.find_first_not_of(" \t", colon + 1);
+        req.headers[key] = vs == std::string::npos ? "" : line.substr(vs);
+    }
     return true;
 }
 
 } // namespace
 
-int serve(int port, const std::string& staticDir, Handler api) {
+namespace {
+
+std::atomic<bool> g_stop{false};
+std::atomic<int> g_active{0};
+std::mutex g_apiMutex;   // 串行执行全部 api / tick / shutdown
+
+void onSignal(int) { g_stop = true; }
+
+// 每个 IP 的简单令牌桶限流（仅 /api/）
+struct Bucket { double tokens = 0; std::chrono::steady_clock::time_point last; };
+std::mutex g_rateMutex;
+std::unordered_map<std::string, Bucket> g_buckets;
+
+bool allowRequest(const std::string& ip) {
+    constexpr double kRate = 15.0;    // 每秒补充
+    constexpr double kBurst = 60.0;   // 突发上限
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lock(g_rateMutex);
+    if (g_buckets.size() > 10000) g_buckets.clear();
+    auto it = g_buckets.find(ip);
+    if (it == g_buckets.end()) {
+        g_buckets[ip] = Bucket{kBurst - 1, now};
+        return true;
+    }
+    Bucket& b = it->second;
+    const double dt = std::chrono::duration<double>(now - b.last).count();
+    b.last = now;
+    b.tokens = std::min(kBurst, b.tokens + dt * kRate);
+    if (b.tokens < 1.0) return false;
+    b.tokens -= 1.0;
+    return true;
+}
+
+// 静态路径：URL 解码后再校验，并确认规范化后仍在静态根目录内
+bool resolveStatic(const std::string& root, const std::string& rel, std::filesystem::path& out) {
+    if (rel.empty() || rel[0] != '/') return false;
+    if (rel.find('\0') != std::string::npos || rel.find('\\') != std::string::npos) return false;
+    for (size_t i = 0; i < rel.size();) {   // 拒绝任何 . / .. 路径段
+        size_t j = rel.find('/', i + 1);
+        if (j == std::string::npos) j = rel.size();
+        const std::string seg = rel.substr(i + 1, j - i - 1);
+        if (seg == "." || seg == "..") return false;
+        i = j;
+    }
+    std::error_code ec;
+    const auto base = std::filesystem::weakly_canonical(std::filesystem::path(root), ec);
+    if (ec) return false;
+    const std::string relNoSlash = rel.substr(1);
+    const auto target = std::filesystem::weakly_canonical(
+        base / std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(relNoSlash.data()), relNoSlash.size())), ec);
+    if (ec) return false;
+    const std::string b = base.string(), t = target.string();
+    if (t.size() <= b.size() || t.compare(0, b.size(), b) != 0 || t[b.size()] != '/') return false;
+    out = target;
+    return true;
+}
+
+void sendAll(int fd, const std::string& out) {
+    size_t sent = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+    while (sent < out.size() && std::chrono::steady_clock::now() < deadline) {
 #ifdef _WIN32
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        std::fprintf(stderr, "WSAStartup 失败\n");
-        return 1;
-    }
-#endif
-
-    const int server = static_cast<int>(::socket(AF_INET, SOCK_STREAM, 0));
-    if (server < 0) {
-        std::fprintf(stderr, "创建 socket 失败\n");
-        return 1;
-    }
-
-    // 允许快速重启（避免 TIME_WAIT 占端口）
-    int yes = 1;
-    ::setsockopt(server, SOL_SOCKET, SO_REUSEADDR,
-                 reinterpret_cast<const char*>(&yes), sizeof(yes));
-
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(static_cast<unsigned short>(port));
-    ::inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);   // 只监听本机
-
-    if (::bind(server, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-        std::fprintf(stderr, "端口 %d 绑定失败（可能已被占用）\n", port);
-        CLOSE_SOCKET(server);
-#ifdef _WIN32
-        WSACleanup();
-#endif
-        return 1;
-    }
-    if (::listen(server, 16) < 0) {
-        std::fprintf(stderr, "listen 失败\n");
-        CLOSE_SOCKET(server);
-        return 1;
-    }
-
-    std::printf("宁州一梦 C++ 服务已启动：http://127.0.0.1:%d/\n", port);
-    std::printf("静态目录：%s\n", staticDir.c_str());
-    std::printf("按 Ctrl+C 停止。\n");
-    std::fflush(stdout);
-
-    // 单线程循环。本地单人游戏，不需要并发。
-    while (true) {
-        sockaddr_in client{};
-        socklen_t clientLen = sizeof(client);
-        const int fd = static_cast<int>(
-            ::accept(server, reinterpret_cast<sockaddr*>(&client), &clientLen));
-        if (fd < 0) continue;
-#ifdef _WIN32
-        const DWORD receiveTimeout = 1500, sendTimeout = 4000;
+        const int n = ::send(fd, out.data() + sent, static_cast<int>(out.size() - sent), 0);
 #else
-        const timeval receiveTimeout{1, 500000}, sendTimeout{4, 0};
+        const int n = static_cast<int>(::send(fd, out.data() + sent, out.size() - sent, MSG_NOSIGNAL));
 #endif
-        if (::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&receiveTimeout), sizeof(receiveTimeout)) != 0 ||
-            ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeout), sizeof(sendTimeout)) != 0) {
-            CLOSE_SOCKET(fd);
-            continue;
-        }
+        if (n <= 0) break;
+        sent += static_cast<size_t>(n);
+    }
+}
 
-        // 读到请求头结束
-        std::string raw;
-        char buf[8192];
-        size_t contentLength = 0;
-        bool headersDone = false;
-        bool requestComplete = false;
-        const auto requestDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        while (true) {
-            if (std::chrono::steady_clock::now() >= requestDeadline) break;
-            const int n = static_cast<int>(::recv(fd, buf, sizeof(buf), 0));
-            if (n <= 0) break;
-            raw.append(buf, static_cast<size_t>(n));
-            if (!headersDone) {
-                const size_t he = raw.find("\r\n\r\n");
-                if (he != std::string::npos) {
-                    headersDone = true;
-                    if (!contentLengthOf(raw.substr(0, he), contentLength)) break;
-                }
-            }
-            if (headersDone && contentLength <= 8u * 1024 * 1024 && raw.size() >= raw.find("\r\n\r\n") + 4 + contentLength) {
-                requestComplete = true;
-                break;
-            }
-            if (raw.size() > 8u * 1024 * 1024) break;   // 防御：超大请求
-        }
+void handleConnection(int fd, std::string ip, std::string staticDir, const Handler* api) {
+#ifdef _WIN32
+    const DWORD receiveTimeout = 1500, sendTimeout = 10000;
+#else
+    const timeval receiveTimeout{1, 500000}, sendTimeout{10, 0};
+#endif
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&receiveTimeout), sizeof(receiveTimeout));
+    ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeout), sizeof(sendTimeout));
 
-        Response resp;
-        Request req;
-        if (!requestComplete || !parseRequest(raw, req)) {
-            resp.status = 400;
-            resp.body = "{\"error\":\"请求格式错误\"}";
-        } else if (req.path.rfind("/api/", 0) == 0) {
-            // 交给游戏接口
+    std::string raw;
+    char buf[8192];
+    size_t contentLength = 0;
+    bool headersDone = false, requestComplete = false, tooLarge = false;
+    const auto requestDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+    while (std::chrono::steady_clock::now() < requestDeadline) {
+        const int n = static_cast<int>(::recv(fd, buf, sizeof(buf), 0));
+        if (n <= 0) break;
+        raw.append(buf, static_cast<size_t>(n));
+        if (!headersDone) {
+            const size_t he = raw.find("\r\n\r\n");
+            if (he == std::string::npos) {
+                if (raw.size() > kMaxHeader) break;
+                continue;
+            }
+            headersDone = true;
+            if (!contentLengthOf(raw.substr(0, he), contentLength)) { tooLarge = true; break; }
+            const bool isImport = raw.rfind("POST /api/import ", 0) == 0 || raw.rfind("POST /api/import?", 0) == 0;
+            if (contentLength > (isImport ? kMaxImportBody : kMaxApiBody)) { tooLarge = true; break; }
+        }
+        if (raw.size() > kMaxHeader + kMaxBody) { tooLarge = true; break; }
+        if (raw.size() >= raw.find("\r\n\r\n") + 4 + contentLength) { requestComplete = true; break; }
+    }
+
+    Response resp;
+    Request req;
+    if (tooLarge) {
+        resp.status = 413;
+        resp.body = "{\"ok\":false,\"error\":\"请求过大（存档导入上限 6MB，其余 512KB）\"}";
+    } else if (!requestComplete || !parseRequest(raw, req)) {
+        resp.status = 400;
+        resp.body = "{\"ok\":false,\"error\":\"请求格式错误\"}";
+    } else if (req.path.rfind("/api/", 0) == 0) {
+        req.clientIp = ip;
+        if (!allowRequest(ip)) {
+            resp.status = 429;
+            resp.body = "{\"ok\":false,\"error\":\"操作太频繁，请稍后再试\"}";
+        } else {
+            std::lock_guard<std::mutex> lock(g_apiMutex);
             try {
-                resp = api(req);
+                resp = (*api)(req);
             } catch (const std::exception& e) {
+                resp = Response{};
                 resp.status = 500;
                 json::Value error(json::Object{});
                 error.set("ok", false);
                 error.set("error", e.what());
                 resp.body = error.dump();
             }
-        } else {
-            // 静态文件
-            std::string rel = req.path == "/" ? "/index.html" : req.path;
-            if (!isSafePath(rel)) {
-                resp.status = 400;
-                resp.body = "路径不合法";
-                resp.contentType = "text/plain; charset=utf-8";
-            } else {
-                std::string content;
-                if (readFile(staticDir + rel, content)) {
-                    resp.body = std::move(content);
-                    resp.contentType = mimeOf(rel);
-                } else {
-                    resp.status = 404;
-                    resp.body = "找不到 " + rel;
-                    resp.contentType = "text/plain; charset=utf-8";
-                }
+        }
+    } else if (req.method != "GET" && req.method != "HEAD") {
+        resp.status = 405;
+        resp.body = "{\"ok\":false,\"error\":\"不支持的请求方法\"}";
+    } else {
+        std::string rel = req.path == "/" ? "/index.html" : req.path;
+        std::filesystem::path file;
+        std::string content;
+        bool found = false;
+        // 地图/立绘已压缩为 WebP：请求 .png 时优先返回同名 .webp
+        if (rel.size() > 4 && rel.compare(rel.size() - 4, 4, ".png") == 0) {
+            const std::string webp = rel.substr(0, rel.size() - 4) + ".webp";
+            if (resolveStatic(staticDir, webp, file) && readFile(file.string(), content)) {
+                found = true;
+                resp.contentType = "image/webp";
             }
         }
-
-        const std::string out = buildResponse(resp);
-        size_t sent = 0;
-        while (sent < out.size()) {
-            const int n = static_cast<int>(
-                ::send(fd, out.data() + sent,
-                       static_cast<int>(out.size() - sent), 0));
-            if (n <= 0) break;
-            sent += static_cast<size_t>(n);
+        if (!found) {
+            if (!resolveStatic(staticDir, rel, file)) {
+                resp.status = 404;
+                resp.body = "找不到文件";
+                resp.contentType = "text/plain; charset=utf-8";
+            } else if (readFile(file.string(), content)) {
+                found = true;
+                resp.contentType = mimeOf(rel);
+            } else {
+                resp.status = 404;
+                resp.body = "找不到文件";
+                resp.contentType = "text/plain; charset=utf-8";
+            }
         }
-        CLOSE_SOCKET(fd);
+        if (found) {
+            resp.body = std::move(content);
+            if (rel.rfind("/assets/", 0) == 0)
+                resp.extraHeaders.push_back({"Cache-Control", "public, max-age=604800"});
+        }
+        if (req.method == "HEAD") resp.body.clear();
     }
 
+    sendAll(fd, buildResponse(resp));
+    CLOSE_SOCKET(fd);
+    --g_active;
+}
+
+} // namespace
+
+int serve(const std::string& host, int port, const std::string& staticDir, Handler api,
+          std::function<void()> tick, std::function<void()> shutdown) {
+#ifdef _WIN32
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        std::fprintf(stderr, "WSAStartup 失败\n");
+        return 1;
+    }
+#else
+    std::signal(SIGPIPE, SIG_IGN);
+#endif
+    std::signal(SIGINT, onSignal);
+    std::signal(SIGTERM, onSignal);
+
+    const int server = static_cast<int>(::socket(AF_INET, SOCK_STREAM, 0));
+    if (server < 0) {
+        std::fprintf(stderr, "创建 socket 失败\n");
+        return 1;
+    }
+    int yes = 1;
+    ::setsockopt(server, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&yes), sizeof(yes));
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(static_cast<unsigned short>(port));
+    if (::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+        std::fprintf(stderr, "监听地址无效：%s\n", host.c_str());
+        CLOSE_SOCKET(server);
+        return 1;
+    }
+    if (::bind(server, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        std::fprintf(stderr, "端口 %d 绑定失败（可能已被占用）\n", port);
+        CLOSE_SOCKET(server);
+        return 1;
+    }
+    if (::listen(server, 64) < 0) {
+        std::fprintf(stderr, "listen 失败\n");
+        CLOSE_SOCKET(server);
+        return 1;
+    }
+
+    std::printf("宁州一梦 C++ 服务已启动：http://%s:%d/\n", host.c_str(), port);
+    std::printf("静态目录：%s\n", staticDir.c_str());
+    std::fflush(stdout);
+
+    constexpr int kMaxConnections = 64;
+    auto lastTick = std::chrono::steady_clock::now();
+    while (!g_stop) {
+#ifdef _WIN32
+        WSAPOLLFD pfd{static_cast<SOCKET>(server), POLLRDNORM, 0};
+        const int ready = WSAPoll(&pfd, 1, 1000);
+#else
+        pollfd pfd{server, POLLIN, 0};
+        const int ready = ::poll(&pfd, 1, 1000);
+#endif
+        const auto now = std::chrono::steady_clock::now();
+        if (tick && now - lastTick >= std::chrono::seconds(1)) {
+            lastTick = now;
+            std::lock_guard<std::mutex> lock(g_apiMutex);
+            try { tick(); } catch (...) {}
+        }
+        if (ready <= 0) continue;
+
+        sockaddr_in client{};
+        socklen_t clientLen = sizeof(client);
+        const int fd = static_cast<int>(::accept(server, reinterpret_cast<sockaddr*>(&client), &clientLen));
+        if (fd < 0) continue;
+        if (g_active.load() >= kMaxConnections) {
+            Response busy;
+            busy.status = 503;
+            busy.body = "{\"ok\":false,\"error\":\"服务器繁忙\"}";
+            sendAll(fd, buildResponse(busy));
+            CLOSE_SOCKET(fd);
+            continue;
+        }
+        char ipbuf[INET_ADDRSTRLEN] = {0};
+        ::inet_ntop(AF_INET, &client.sin_addr, ipbuf, sizeof(ipbuf));
+        ++g_active;
+        std::thread(handleConnection, fd, std::string(ipbuf), staticDir, &api).detach();
+    }
+
+    std::printf("正在停止服务，保存玩家数据……\n");
+    std::fflush(stdout);
+    {
+        std::lock_guard<std::mutex> lock(g_apiMutex);
+        if (shutdown) {
+            try { shutdown(); } catch (...) {}
+        }
+    }
     CLOSE_SOCKET(server);
 #ifdef _WIN32
     WSACleanup();

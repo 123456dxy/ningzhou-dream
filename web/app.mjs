@@ -11,6 +11,7 @@
 'use strict';
 
 import { createBuildPanel } from './build-panel.mjs';
+import { ensureLogin } from './login.mjs';
 import { loadRoster, invalidateRoster, renderRoster, bindRoster } from './roster.mjs';
 import { heading, panel, layout, asideBlock, timeline, yearControls, hintBox } from './shell.mjs';
 import { renderDaos, renderArtsAside, loadNodes, invalidateNodes,
@@ -2400,6 +2401,7 @@ $('#battle-target-modal').addEventListener('close', () => { removalSelection = n
 // 启动
 // ------------------------------------------------------------
 (async function boot() {
+  await ensureLogin();
   const res = await fetch('/api/state').then(r => r.json()).catch(() => null);
   // 只有后端明确说有存档时才用它；冷启动会返回 hasGame:false
   if (res && res.hasGame && res.state) { S = res.state; render(); return; }

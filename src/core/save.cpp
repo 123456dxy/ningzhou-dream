@@ -1999,7 +1999,14 @@ bool loadFromFile(const std::string& path, Game& out, std::string* err) {
 // ------------------------------------------------------------
 // 存档位
 // ------------------------------------------------------------
+namespace {
+std::string& saveDirOverrideRef() { static std::string v; return v; }
+}
+void setSaveDirOverride(const std::string& dir) { saveDirOverrideRef() = dir; }
+
 std::string defaultSaveDir() {
+    // 多人服务端：当前玩家的存档目录
+    if (!saveDirOverrideRef().empty()) return saveDirOverrideRef();
     // 与可执行文件同级的 saves/；拿不到路径时退回当前目录
 #ifdef _WIN32
     wchar_t buf[32768];

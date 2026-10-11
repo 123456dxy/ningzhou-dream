@@ -14,7 +14,22 @@
 
 namespace nz::api {
 
-// 当前游戏会话（单机单人，全局一份就够）
+// 一个玩家的游戏会话。多人服务端为每个玩家准备一份，
+// 处理请求前用 bindSession 切换「当前」会话（请求处理是串行的）。
+struct Session {
+    Game g;
+    bool started = false;
+    std::string lastAutomatic;
+    std::string writeError;
+};
+
+// 切换当前会话；nullptr 表示使用内置的默认会话（单机/自测）
+void bindSession(Session* s);
+
+// 从存档 JSON 恢复到会话（等同 /api/load 的处理）
+bool restoreGame(Session& s, const std::string& text, std::string* err);
+
+// 当前游戏会话
 Game& game();
 
 // 处理 /api/ 请求
