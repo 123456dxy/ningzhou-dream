@@ -1,0 +1,57 @@
+/* 宁州一梦 · 手机端适配（≤690px）。最后加载，只在窄屏生效，桌面端外观不变。 */
+@media (max-width: 690px) {
+  html, body { overflow-x: clip; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  .nz-fs14 { font-size: 14px !important; letter-spacing: 0 !important; }
+
+  /* 顶栏：原本工具按钮被挤成竖排单字，改为可换行的两行布局 */
+  .topbar { height: auto; min-height: 61px; flex-wrap: wrap; gap: 6px 10px; padding: 8px 0; }
+  .breadcrumb { flex: 1 1 100%; }
+  .toolbar { flex-wrap: wrap; gap: 6px; justify-content: flex-start; width: 100%; }
+  .toolbar > *, #nz-user { white-space: nowrap; }
+  #nz-user { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .toolbar button.subtle, #nz-user button { padding: 8px 12px; }
+  .icon-button { width: 44px; height: 44px; }
+
+  /* 触控目标 ≥44px（地图标记除外：其位置按坐标绝对定位） */
+  button:not(.map-pin):not(.atlas-dungeon-pin), select, summary, .subtle,
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]) {
+    min-height: 44px;
+  }
+  .alloc-ctl button, .qty button, .sr-btns button, .supply-btn, .seg button { min-width: 44px; }
+  .qty input { min-width: 48px; }
+  .atlas-controls button, .shop-row .buy { min-width: 44px; }
+  label:has(> input[type=checkbox]), label:has(> input[type=radio]) { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
+  .brand { min-height: 44px; }
+
+  /* 主导航：横向滑动并提示可滑 */
+  .main-tabs { gap: 6px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+    mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  .main-tabs button { min-height: 44px; padding: 0 10px; scroll-snap-align: start; }
+  .main-tabs .tab-end { display: none; }
+  .subtabs { flex-wrap: wrap; }
+
+  /* 侧栏人物卡：三列太挤，改两列 */
+  .player-stats { grid-template-columns: repeat(2, 1fr); }
+  .year-controls { max-width: 100%; }
+  .plan-options { grid-template-columns: repeat(2, 1fr); }
+
+  /* 建号面板：全屏化，操作栏不再遮挡天赋列表 */
+  .build-overlay { padding: 0; align-items: stretch; }
+  .build-panel { max-height: 100dvh; height: 100dvh; border-radius: 0; padding: 16px 14px 0; }
+  .build-points { flex-wrap: wrap; gap: 10px 16px; }
+  .build-innate { gap: 10px 16px; }
+  .innate-seed { margin-left: 0; }
+  .talent-grid { grid-template-columns: 1fr; }
+  .alloc-row { grid-template-columns: 1fr; }
+  .build-actions { bottom: 0; gap: 8px; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); }
+  .build-actions .why:empty { display: none; }
+  .build-actions .why { flex: 1 1 100%; }
+  .build-actions button { flex: 1 1 0; padding: 10px 8px; }
+
+  /* 表格、弹窗不撑破屏幕 */
+  table { display: block; max-width: 100%; overflow-x: auto; }
+  dialog { max-width: calc(100vw - 16px); }
+  img, svg, video { max-width: 100%; }
+  .landscape svg { max-width: none; }
+}
