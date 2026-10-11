@@ -99,6 +99,19 @@ check(code == 200 and b"image/webp" in data[:400], "请求 .png 返回压缩后�
 code, data = raw_get("/")
 check(code == 200 and b"app.mjs" in data, "首页可访问")
 
+# 排行榜：无需登录，数据来自服务器存档，不接受客户端提交
+s, b, _ = call(client(), "/api/leaderboard?limit=10")
+lb = js(b)
+names = [x.get("nickname") for x in lb.get("list", [])]
+check(s == 200 and lb.get("ok") and "测试甲" in names and "Tester_B" in names, "排行榜（未登录可读）包含两位玩家")
+check(all(x.get("realm") and "stage" in x and "xp" in x for x in lb.get("list", [])), "排行榜条目含境界/修为")
+st = [(x["stage"], x["xp"]) for x in lb.get("list", [])]
+check(st == sorted(st, reverse=True), "排行榜按境界、修为降序")
+s, b, _ = call(a, "/api/leaderboard", {"nickname": "测试甲", "stage": 12, "xp": 999999})
+check(s == 405, "排行榜拒绝 POST 提交分数")
+s, b, _ = call(anon, "/api/leaderboard?limit=1")
+check(len(js(b).get("list", [])) <= 1, "limit 参数生效")
+
 s, b, h = call(a, "/api/logout", {})
 s, b, _ = call(a, "/api/state")
 check(s == 401, "退出后需重新登录")

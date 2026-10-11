@@ -14,7 +14,9 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
 #include <map>
+#include <vector>
 #include <memory>
 #include <random>
 #include <sstream>
@@ -246,8 +248,94 @@ Response errorResp(int status, const std::string& msg, bool needLogin = false) {
     return jsonResp(status, o);
 }
 
+// ---------------- 排行榜 ----------------
+// 只从服务器端的存档（内存中的在线玩家 + 磁盘上的 session.json）计算，不接受客户端提交分数。
+// 排序：境界（stage）> 修为（xp）> 声望（renown）。结果缓存 30 秒。
+struct BoardRow { std::string nickname, name, realm; int stage = 0, xp = 0, renown = 0, age = 0, year = 0; bool ended = false; };
+
+BoardRow rowOf(const std::string& nick, const nz::Game& g) {
+    BoardRow r;
+    r.nickname = nick; r.name = g.player.name; r.stage = g.player.stage; r.xp = g.player.xp;
+    r.renown = g.player.renown; r.age = g.player.age; r.year = g.year; r.ended = g.ended;
+    r.realm = nz::realmName(g.player.stage);
+    return r;
+}
+
+std::vector<BoardRow> g_board;
+long long g_boardAt = -1000;
+
+const std::vector<BoardRow>& leaderboard() {
+    const long long now = nowSec();
+    if (now - g_boardAt < 30) return g_board;
+    g_boardAt = now;
+    std::vector<BoardRow> rows;
+    std::error_code ec;
+    for (fs::directory_iterator it(u8(g_dataDir + "/players"), ec), end; !ec && it != end; it.increment(ec)) {
+        if (!it->is_directory(ec)) continue;
+        const auto u = it->path().filename().u8string();
+        const std::string id(reinterpret_cast<const char*>(u.data()), u.size());
+        std::string nick;
+        if (!readAll(g_dataDir + "/players/" + id + "/nickname.txt", nick)) continue;
+        while (!nick.empty() && (nick.back() == '\n' || nick.back() == '\r')) nick.pop_back();
+        std::string why;
+        if (!validNickname(nick, why) || hexId(nick) != id) continue;
+        auto pit = g_players.find(id);
+        if (pit != g_players.end()) {
+            if (pit->second->s.started) rows.push_back(rowOf(nick, pit->second->s.g));
+            continue;
+        }
+        std::string text, err;
+        if (!readAll(g_dataDir + "/players/" + id + "/session.json", text)) continue;
+        nz::Game g;
+        if (!nz::loadFromJson(text, g, &err)) continue;
+        if (g.player.name.empty()) continue;
+        rows.push_back(rowOf(nick, g));
+    }
+    std::sort(rows.begin(), rows.end(), [](const BoardRow& a, const BoardRow& b) {
+        if (a.stage != b.stage) return a.stage > b.stage;
+        if (a.xp != b.xp) return a.xp > b.xp;
+        if (a.renown != b.renown) return a.renown > b.renown;
+        return a.nickname < b.nickname;
+    });
+    g_board = std::move(rows);
+    return g_board;
+}
+
+Response leaderboardResp(const Request& req) {
+    int limit = 20;
+    const size_t q = req.query.find("limit=");
+    if (q != std::string::npos) limit = std::clamp(std::atoi(req.query.c_str() + q + 6), 1, 100);
+    const auto& rows = leaderboard();
+    nz::json::Value list(nz::json::Array{});
+    for (size_t i = 0; i < rows.size() && (int)i < limit; ++i) {
+        const BoardRow& r = rows[i];
+        nz::json::Value o(nz::json::Object{});
+        o.set("rank", (double)(i + 1));
+        o.set("nickname", r.nickname);
+        o.set("name", r.name);
+        o.set("realm", r.realm);
+        o.set("stage", (double)r.stage);
+        o.set("xp", (double)r.xp);
+        o.set("renown", (double)r.renown);
+        o.set("age", (double)r.age);
+        o.set("ended", r.ended);
+        list.push(o);
+    }
+    nz::json::Value o(nz::json::Object{});
+    o.set("ok", true);
+    o.set("total", (double)rows.size());
+    o.set("updatedAt", (double)g_boardAt);
+    o.set("list", list);
+    return jsonResp(200, o);
+}
+
 Response handle(const Request& req) {
     const std::string& path = req.path;
+
+    if (path == "/api/leaderboard") {
+        if (req.method != "GET") return errorResp(405, "此操作需要 GET 请求。");
+        return leaderboardResp(req);
+    }
 
     if (path == "/api/login") {
         if (req.method != "POST") return errorResp(405, "此操作需要 POST 请求。");
