@@ -1,0 +1,288 @@
+/* 宁州一梦 · C++ 版 — 建号面板 / 通讯录 / 剧情 样式
+ * 接在 enhance.css 之后加载。
+ */
+
+/* ============================================================
+   建号面板（覆盖全屏）
+   ============================================================ */
+.build-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(24, 60, 55, .55);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+.build-panel {
+  width: min(1180px, 100%);
+  max-height: 92vh; overflow-y: auto;
+  background: linear-gradient(165deg, #f7f4ea, #efe9db);
+  border-radius: 16px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .34);
+  padding: 22px 26px 26px;
+  color: #2e463c;
+}
+.build-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 20px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.build-top h2 { margin: 0 0 4px; font-size: 23px; }
+.build-top p { margin: 0; font-size: 13px; color: #5b7268; }
+.build-points { display: flex; gap: 22px; }
+.build-points div { text-align: right; }
+.build-points label { display: block; font-size: 12px; color: #5b7268; }
+.build-points strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+.build-points strong.over { color: #a4533f; }
+.build-points strong.done { color: #2f7a52; }
+
+.build-section { margin-top: 18px; }
+.build-section > h3 {
+  margin: 0 0 8px; font-size: 15px;
+  display: flex; align-items: baseline; gap: 10px;
+}
+.build-section > h3 span { font-size: 12px; font-weight: 400; color: #6b7d73; }
+
+.build-fields { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.build-fields input[type=text], .build-fields input[type=number] {
+  font: inherit; padding: 7px 11px; border-radius: 9px;
+  border: 1px solid rgba(66, 95, 80, .26); background: rgba(255,255,255,.82);
+}
+.seg { display: flex; gap: 0; border-radius: 9px; overflow: hidden;
+       border: 1px solid rgba(66, 95, 80, .26); }
+.seg button {
+  font: inherit; padding: 7px 16px; cursor: pointer;
+  border: 0; background: rgba(255,255,255,.8); color: #45604f;
+}
+.seg button.active { background: #2f5a48; color: #f6f2e7; }
+
+/* 天赋：按类别分组的网格 */
+.talent-group { margin-bottom: 14px; }
+.talent-group > h4 {
+  margin: 0 0 7px; font-size: 13px; color: #45604f;
+  display: flex; align-items: center; gap: 8px;
+}
+.talent-group > h4::after {
+  content: ''; flex: 1; height: 1px; background: rgba(66, 95, 80, .16);
+}
+.talent-grid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+}
+.talent-card {
+  text-align: left; cursor: pointer; font: inherit; color: inherit;
+  border: 1px solid rgba(66, 95, 80, .2); border-radius: 11px;
+  background: rgba(255,255,255,.66); padding: 9px 11px;
+  transition: all .13s; position: relative;
+}
+.talent-card:hover { border-color: rgba(47, 90, 72, .5); }
+.talent-card.picked {
+  border-color: #2f5a48; background: rgba(47, 90, 72, .1);
+  box-shadow: inset 0 0 0 1px #2f5a48;
+}
+.talent-card.off { opacity: .45; }
+.talent-card .tc-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px; margin-bottom: 3px;
+}
+.talent-card .tc-name { font-weight: 600; font-size: 14px; }
+.talent-card .tc-cost {
+  font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: rgba(66, 95, 80, .13); color: #45604f;
+}
+.talent-card .tc-cost.free { background: rgba(47, 122, 82, .16); color: #2f7a52; }
+.talent-card .tc-cost.bad  { background: rgba(164, 83, 63, .16); color: #a4533f; }
+.talent-card .tc-effect { font-size: 12px; color: #55685e; line-height: 1.45; }
+
+/* 属性分配 */
+.alloc-list { display: flex; flex-direction: column; gap: 9px; }
+.alloc-row {
+  display: grid; align-items: center; gap: 12px;
+  grid-template-columns: 92px 1fr auto;
+  padding: 10px 13px; border-radius: 11px;
+  border: 1px solid rgba(66, 95, 80, .16); background: rgba(255,255,255,.6);
+}
+.alloc-row .an { font-weight: 600; }
+.alloc-row .ad { font-size: 12px; color: #5b7268; line-height: 1.5; }
+.alloc-ctl { display: flex; align-items: center; gap: 6px; }
+.alloc-ctl button {
+  width: 28px; height: 28px; border-radius: 7px; cursor: pointer;
+  border: 1px solid rgba(66, 95, 80, .24); background: rgba(255,255,255,.85);
+  font: inherit; line-height: 1;
+}
+.alloc-ctl button:disabled { opacity: .4; cursor: not-allowed; }
+.alloc-ctl .av {
+  min-width: 34px; text-align: center; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.alloc-ctl .cap { font-size: 12px; color: #7b8c82; }
+
+/* 操作栏吸底：面板有 2400+ px 高，「开始这一世」原本落在视口之外，
+   玩家得滚很久才找得到，自动化测试里也因为点不到而失败。 */
+.build-actions {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  margin-top: 20px; padding: 14px 0 18px;
+  border-top: 1px solid rgba(66, 95, 80, .16);
+  position: sticky; bottom: -26px; z-index: 3;
+  background: linear-gradient(180deg, rgba(239, 233, 219, .70), #efe9db 42%);
+}
+.build-actions .why { font-size: 13px; color: #a4533f; flex: 1; }
+.build-actions button {
+  font: inherit; padding: 10px 24px; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(66, 95, 80, .26); background: rgba(255,255,255,.8);
+}
+.build-actions button.primary { background: #2f5a48; color: #f6f2e7; border-color: #2f5a48; }
+.build-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.build-preview {
+  font-size: 12px; color: #45604f; background: rgba(47, 90, 72, .08);
+  border-radius: 9px; padding: 9px 13px; margin-top: 12px; line-height: 1.7;
+}
+
+/* ============================================================
+   通讯录
+   ============================================================ */
+.roster-bar {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.roster-bar input[type=text] {
+  font: inherit; padding: 6px 12px; border-radius: 8px; min-width: 170px;
+  border: 1px solid rgba(66, 95, 80, .24); background: rgba(255,255,255,.85);
+}
+.roster-list { display: flex; flex-direction: column; gap: 7px; }
+.roster-row {
+  display: grid; align-items: center; gap: 11px;
+  grid-template-columns: 130px 1fr 128px auto;
+  padding: 10px 13px; border-radius: 10px;
+  border: 1px solid rgba(66, 95, 80, .15); background: rgba(255,255,255,.55);
+  cursor: pointer; transition: all .13s;
+}
+.roster-row:hover { border-color: rgba(47, 90, 72, .45); }
+.roster-row.selected { border-color: #2f5a48; background: rgba(47, 90, 72, .08); }
+.roster-row .rn { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.roster-row .rmeta { font-size: 12px; color: #56695f; }
+.roster-row .rrel { display: flex; align-items: center; gap: 7px; }
+.roster-row .racts { display: flex; gap: 6px; }
+.roster-row .racts button {
+  font: inherit; font-size: 12px; padding: 4px 11px; border-radius: 7px;
+  cursor: pointer; border: 1px solid rgba(66, 95, 80, .26);
+  background: rgba(255, 255, 255, .85);
+}
+.roster-row .racts button:disabled { opacity: .4; cursor: not-allowed; }
+.roster-empty { padding: 26px; text-align: center; color: #6b7d73; }
+
+/* ============================================================
+   剧情阅读
+   ============================================================ */
+.story-overlay {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(24, 60, 55, .5); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.story-panel {
+  width: min(720px, 100%); max-height: 88vh; overflow-y: auto;
+  background: linear-gradient(170deg, #f8f5ec, #efe9db);
+  border-radius: 16px; padding: 26px 30px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.34); color: #2e463c;
+}
+.story-panel .s-eyebrow {
+  font-size: 12px; letter-spacing: .16em; color: #7b8c82; margin-bottom: 6px;
+}
+.story-panel h2 { margin: 0 0 14px; font-size: 22px; }
+.story-panel .s-text {
+  font-size: 15px; line-height: 2; color: #3a5148;
+  padding: 14px 0; border-top: 1px solid rgba(66,95,80,.14);
+  border-bottom: 1px solid rgba(66,95,80,.14);
+}
+.story-choices { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.story-choices button {
+  text-align: left; font: inherit; cursor: pointer;
+  padding: 13px 16px; border-radius: 11px;
+  border: 1px solid rgba(66, 95, 80, .24); background: rgba(255,255,255,.7);
+  transition: all .14s;
+}
+.story-choices button:hover { border-color: #2f5a48; background: rgba(47,90,72,.08); }
+.story-choices button strong { display: block; font-size: 15px; margin-bottom: 3px; }
+.story-choices button span { font-size: 13px; color: #5b7268; }
+.story-panel .s-foot { margin-top: 16px; font-size: 12px; color: #7b8c82; }
+.story-done-badge {
+  display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: rgba(47, 122, 82, .16); color: #2f7a52; margin-left: 8px;
+}
+
+/* ============================================================
+   丹毒面板
+   ============================================================ */
+.poison-box {
+  border-radius: 11px; padding: 12px 14px;
+  border: 1px solid rgba(66, 95, 80, .18); background: rgba(255,255,255,.58);
+}
+.poison-box.warn { border-color: rgba(164, 83, 63, .42); background: rgba(164, 83, 63, .07); }
+.poison-box .pb-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 7px;
+}
+.poison-box .pb-head strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.poison-box .pb-sum { font-size: 13px; color: #4a5f56; line-height: 1.7; }
+.poison-meter {
+  height: 8px; border-radius: 4px; background: rgba(66, 95, 80, .14);
+  overflow: hidden; margin: 8px 0 4px; position: relative;
+}
+.poison-meter i {
+  position: absolute; inset: 0 auto 0 0; border-radius: 4px;
+  background: linear-gradient(90deg, #8fae9c, #a4533f);
+}
+.poison-meter .mark {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: rgba(46, 70, 60, .5);
+}
+
+/* ============================================================
+   推进：时间粒度
+   ============================================================ */
+.time-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.time-btns button {
+  font: inherit; padding: 9px 16px; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(66, 95, 80, .26); background: rgba(255,255,255,.8);
+}
+.time-btns button.primary { background: #2f5a48; color: #f6f2e7; border-color: #2f5a48; }
+.time-btns button small { display: block; font-size: 11px; opacity: .78; }
+
+@media (max-width: 900px) {
+  .roster-row { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .alloc-row { grid-template-columns: 1fr; }
+  .build-points { gap: 14px; }
+}
+
+/* ===== 先天气运（种子掷出的初始资质/悟性） ===== */
+.build-innate {
+  display: flex; gap: 26px; align-items: center; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 14px; border-radius: 10px;
+  background: rgba(60, 120, 90, .07); border: 1px solid rgba(60, 120, 90, .18);
+}
+.innate-item, .innate-seed { display: flex; align-items: baseline; gap: 7px; }
+.build-innate label { font-size: 12px; color: #5b7268; }
+.build-innate strong {
+  font-size: 19px; font-variant-numeric: tabular-nums; color: #2e463c;
+}
+.innate-item span {
+  font-size: 11px; color: #7d9188; padding: 1px 6px;
+  border-radius: 5px; background: rgba(0, 0, 0, .05);
+}
+.innate-seed { margin-left: auto; }
+.innate-seed strong { font-size: 13px; }
+.innate-seed button {
+  padding: 4px 10px; border-radius: 7px; border: 1px solid rgba(60, 120, 90, .35);
+  background: transparent; cursor: pointer; font-size: 12px; color: #2e463c;
+}
+.innate-seed button:hover { background: rgba(60, 120, 90, .12); }
+
+.soft-cap { font-size: 11px; color: #a4533f; }
+.build-innate em { font-size: 11px; color: #7d9188; font-style: normal; }
+/* 名字骰子 */
+#bp-name-reroll {
+  padding: 9px 13px; border-radius: 9px; cursor: pointer;
+  border: 1px solid rgba(60,120,90,.35); background: transparent;
+  color: #2e463c; font-size: 13px; white-space: nowrap;
+}
+#bp-name-reroll:hover { background: rgba(60,120,90,.12); }
+.build-fields { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }

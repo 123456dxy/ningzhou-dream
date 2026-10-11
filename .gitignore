@@ -1,0 +1,25 @@
+# 构建产物，全部由 CMake 生成，可以随时删掉重建
+build*/
+dist/
+saves/
+**/saves/
+*.exe
+*.dll
+*.zip
+*.tmp
+*.nz-writing-*
+latest-session.json
+launcher-state.json
+
+# 立绘生成过程的临时记录；运行资源与地点参考表保留在版本库。
+web/assets/**/prompts*.json
+web/assets/**/generated-files.json
+web/assets/map/atlas-layout-prompt.json
+
+# 数据导出的中间文件（由 tools/dump-*.mjs 生成，可重新生成）
+tools/data-dump.json
+tools/society-dump.json
+
+# 临时文件
+_*.txt
+*.log

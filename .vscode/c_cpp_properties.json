@@ -1,0 +1,29 @@
+{
+    // c_cpp_properties 只影响 IntelliSense 的跳转与提示，不参与实际编译。
+    // 实际编译由 CMakeLists.txt + build.ps1 决定。
+    "version": 4,
+    "configurations": [
+        {
+            "name": "MSYS2 UCRT64",
+            "includePath": [
+                "${workspaceFolder}/src",
+                "${workspaceFolder}",
+                "C:/msys64/ucrt64/include",
+                "C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/*/include/c++",
+                "C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/*/include/c++/x86_64-w64-mingw32",
+                "C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/*/include"
+            ],
+            "defines": [],
+            "compilerPath": "C:/msys64/ucrt64/bin/g++.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-gcc-x64",
+            // 源文件是 UTF-8，告诉 IntelliSense 按 UTF-8 解析，
+            // 否则中文注释与字符串会显示成乱码。
+            "compilerArgs": [
+                "-finput-charset=UTF-8",
+                "-fexec-charset=UTF-8"
+            ]
+        }
+    ]
+}

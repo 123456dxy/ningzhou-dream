@@ -1,0 +1,86 @@
+param([string]$ReleaseName = '宁州一梦-单文件版-20261011-炼器修正版')
+$ErrorActionPreference = 'Stop'
+$workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$compilerRoot = 'C:/msys64/ucrt64/bin'
+$compiler = Join-Path $compilerRoot 'g++.exe'
+$windres = Join-Path $compilerRoot 'windres.exe'
+$env:PATH = $compilerRoot + ';' + $env:PATH
+$builtGame = Join-Path $workspace 'build/ningzhou_web.exe'
+if (-not (Test-Path -LiteralPath $builtGame)) { throw 'Build the latest game before packaging.' }
+$buildRoot = Join-Path $workspace ('build/release-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$staging = Join-Path $buildRoot 'staging'
+$runtime = Join-Path $staging 'runtime'
+$destination = Join-Path $workspace 'dist'
+New-Item -ItemType Directory -Path $runtime,$destination -Force | Out-Null
+Copy-Item -LiteralPath $builtGame -Destination (Join-Path $runtime 'ningzhou_web.exe')
+# Only game runtime assets. Generator metadata, private paths, test reports and saves are excluded.
+$assetRoot = Join-Path $workspace 'web'
+$allowed = @('.html','.css','.mjs','.png','.jpg','.jpeg','.webp','.woff','.woff2','.ttf','.ico','.svg','.mp3','.ogg','.wav')
+$manifest = @()
+Get-ChildItem -LiteralPath $assetRoot -File -Recurse | Sort-Object FullName | ForEach-Object {
+    if ($allowed -notcontains $_.Extension.ToLowerInvariant()) { return }
+    $relative = [IO.Path]::GetRelativePath($assetRoot,$_.FullName)
+    $target = Join-Path (Join-Path $runtime 'web') $relative
+    New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
+    Copy-Item -LiteralPath $_.FullName -Destination $target
+}
+Get-ChildItem -LiteralPath $staging -File -Recurse | Sort-Object FullName | ForEach-Object {
+    $manifest += [ordered]@{path=[IO.Path]::GetRelativePath($staging,$_.FullName).Replace('\','/'); length=$_.Length; sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash}
+}
+$manifestJson = $manifest | ConvertTo-Json -Depth 10
+[IO.File]::WriteAllText((Join-Path $buildRoot 'manifest.json'),$manifestJson,[Text.UTF8Encoding]::new($false))
+$packer = Join-Path $buildRoot 'release_pack.exe'
+& $compiler '-std=c++20' '-O2' '-municode' '-static' '-static-libgcc' '-static-libstdc++' (Join-Path $PSScriptRoot 'pack.cpp') '-lcabinet' '-o' $packer
+if ($LASTEXITCODE -ne 0) { throw 'Could not build package writer.' }
+$payload = Join-Path $buildRoot 'payload.bin'
+& $packer $staging $payload
+if ($LASTEXITCODE -ne 0) { throw 'Could not create embedded payload.' }
+$packageId = (Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash
+$resource = Join-Path $buildRoot 'payload.rc'
+$resourceText = @'
+101 RCDATA "payload.bin"
+1 24 "app.manifest"
+1 VERSIONINFO
+ FILEVERSION 5,2026,10,11
+ PRODUCTVERSION 5,2026,10,11
+ FILEOS 0x40004
+ FILETYPE 0x1
+ BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+   BLOCK "040904B0"
+   BEGIN
+    VALUE "FileDescription", "Ningzhou Dream - Single-file Game\0"
+    VALUE "ProductName", "Ningzhou Dream\0"
+    VALUE "FileVersion", "5.2026.10.11\0"
+    VALUE "OriginalFilename", "NingzhouDream.exe\0"
+   END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+   VALUE "Translation", 0x0409, 1200
+  END
+ END
+'@
+[IO.File]::WriteAllText($resource,$resourceText,[Text.Encoding]::ASCII)
+$appManifest = @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+ <assemblyIdentity version="5.2026.10.11" processorArchitecture="amd64" name="NingzhouDream.Game" type="win32"/>
+ <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges><requestedExecutionLevel level="asInvoker" uiAccess="false"/></requestedPrivileges></security></trustInfo>
+ <application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings><dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware></windowsSettings></application>
+ <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1"><application><supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/></application></compatibility>
+</assembly>
+'@
+[IO.File]::WriteAllText((Join-Path $buildRoot 'app.manifest'),$appManifest,[Text.UTF8Encoding]::new($false))
+Push-Location $buildRoot
+try {
+    & $windres '--input=payload.rc' '--output=payload.o' '--output-format=coff'
+    if ($LASTEXITCODE -ne 0) { throw 'Could not embed package resource.' }
+} finally { Pop-Location }
+$output = Join-Path $destination ($ReleaseName + '.exe')
+& $compiler '-std=c++20' '-O2' '-Wall' '-Wextra' '-municode' '-mwindows' '-static' '-static-libgcc' '-static-libstdc++' '-finput-charset=UTF-8' '-fexec-charset=UTF-8' ('-DNZ_PACKAGE_ID="'+$packageId+'"') ('-I'+(Join-Path $workspace 'src')) (Join-Path $PSScriptRoot 'launcher.cpp') (Join-Path $workspace 'src/core/json.cpp') (Join-Path $buildRoot 'payload.o') '-lcabinet' '-lwinhttp' '-lws2_32' '-lshell32' '-lole32' '-luuid' '-lcomctl32' '-o' $output
+if ($LASTEXITCODE -ne 0) { throw 'Could not build the single-file launcher.' }
+$record = [ordered]@{exe=$output; size=(Get-Item -LiteralPath $output).Length; sha256=(Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash; payloadId=$packageId; buildRoot=$buildRoot; files=$manifest.Count; gameSha256=(Get-FileHash -LiteralPath $builtGame -Algorithm SHA256).Hash}
+[IO.File]::WriteAllText((Join-Path $buildRoot 'release.json'),($record | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+Write-Output ($record | ConvertTo-Json -Depth 10)

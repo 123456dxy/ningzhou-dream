@@ -1,0 +1,83 @@
+{
+    // 调试配置。需要先 .\build.ps1 -Debug 生成带符号的可执行文件。
+    // Windows 上 gdb 需要 ucrt64\bin 在 PATH 里，才能找到 libstdc++ 等 DLL，
+    // 否则可执行文件会以 0xC0000135（找不到 DLL）静默退出。
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "宁州一梦（新建一世）",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/ningzhou.exe",
+            "args": ["--new"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "C:/msys64/ucrt64/bin;${env:PATH}"
+                }
+            ],
+            "externalConsole": true,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/msys64/ucrt64/bin/gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "为 gdb 启用整齐打印",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "宁州一梦（打印内部状态）",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/ningzhou.exe",
+            "args": ["--debug"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "C:/msys64/ucrt64/bin;${env:PATH}"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/msys64/ucrt64/bin/gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "为 gdb 启用整齐打印",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "自测（全部）",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/ningzhou_tests.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "C:/msys64/ucrt64/bin;${env:PATH}"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/msys64/ucrt64/bin/gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "为 gdb 启用整齐打印",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,231 @@
+// 宁州一梦 · C++ 版 — 洞府道法页
+//
+// 为什么单独一个文件：
+//   十二大道有 60 个节点，每个都有名称（金道入门…）和效果说明（金系伤害 +10%）。
+//   之前我只把「节点 id」发到前端，界面上就只有 ○1 ○2 ○3 五个小圆点，
+//   玩家根本不知道点下去会发生什么 —— 而 JS 版是把名称和效果都列出来的。
+//
+// 现在按 JS 版 arts-ui.mjs 的做法：每道一张卡，卡里列出 5 个节点的
+// 名称 / 花费 / 效果 / 领悟按钮，另外给一个「参悟 30 天」。
+
+'use strict';
+
+import { cardKind, cardRule } from './cards.mjs';
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+export const DAOS = ['金', '木', '水', '火', '土', '神', '体', '剑', '气', '阵', '丹', '器'];
+export const DAO_LEVELS = ['未入门', '初窥门径', '略有小成', '融会贯通', '道之真境', '大道已成'];
+const THRESHOLDS = [0, 30, 100, 300, 900, 2000];
+
+export function artLevelOf(exp) {
+  return Math.max(0, THRESHOLDS.filter(t => exp >= t).length - 1);
+}
+
+// 节点定义缓存（一次拉取，全局复用）
+let nodeCache = null;
+
+export async function loadNodes(force) {
+  if (nodeCache && !force) return nodeCache;
+  const r = await fetch('/api/arts/nodes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  }).then(x => x.json()).catch(() => null);
+  nodeCache = r?.nodes || [];
+  return nodeCache;
+}
+
+export function invalidateNodes() { nodeCache = null; }
+
+// 神通全表缓存（携带 / 卸下用）
+let spellCache = null;
+
+export async function loadSpells(force) {
+  if (spellCache && !force) return spellCache;
+  const r = await fetch('/api/arts/spells', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  }).then(x => x.json()).catch(() => null);
+  spellCache = r || { spells: [], max: 4, carriedCount: 0 };
+  return spellCache;
+}
+
+export function invalidateSpells() { spellCache = null; }
+
+// 神通种类的中文标签（与 Core 的 kind 对应）
+export function spellKindLabel(sp) {
+  const k = sp.kind;
+  if (k === 'attack') return '攻击';
+  if (k === 'sword') return '剑击';
+  if (k === 'fire') return '火法';
+  if (k === 'heal') return '治疗';
+  if (k === 'shield') return '护盾';
+  if (k === 'guard') return '守阵';
+  if (k === 'mana') return '回灵';
+  if (k === 'drain') return '神识';
+  return '其它';
+}
+
+// 渲染十二大道。
+// state 用于取经验、悟道点、主修方向；busy 表示当前不能操作。
+export function renderDaos(state, nodes) {
+  const a = state.arts;
+  const p = state.player;
+  const byDao = {};
+  for (const n of (nodes || [])) (byDao[n.dao] ||= []).push(n);
+
+  return DAOS.map(dao => {
+    const exp = a.exp[dao] || 0;
+    const lv = artLevelOf(exp);
+    const list = (byDao[dao] || []).slice().sort((x, y) => x.level - y.level);
+
+    const nodeHTML = list.map(n => {
+      const owned = a.nodes.includes(n.id);
+      const enoughLevel = lv >= n.level;
+      const enoughPoints = a.points >= n.cost;
+      const can = !owned && enoughLevel && enoughPoints;
+      const why = owned ? '已领悟'
+        : !enoughLevel ? `需「${DAO_LEVELS[n.level]}」`
+        : !enoughPoints ? `需 ${n.cost} 悟道点，你有 ${a.points}`
+        : '';
+      return `<div class="dao-node${owned ? ' owned' : ''}">`
+        + `<div class="dn-head"><strong>${esc(n.name)}</strong>`
+        + `<span class="dn-cost">${n.cost} 点</span></div>`
+        + `<p class="dn-desc">${esc(n.desc)}</p>`
+        + `<button class="dn-btn${owned ? ' owned' : ''}" `
+        + `${can ? `data-action="node" data-id="${n.id}"` : 'disabled'}>`
+        + `${owned ? '已领悟' : why || '领悟'}</button>`
+        + `</div>`;
+    }).join('');
+
+    return `<section class="card dao-card${a.focus === dao ? ' focused' : ''}">`
+      + `<div class="dao-card-top">`
+      + `<h3>${dao}之大道</h3>`
+      + `${a.focus === dao ? '<span class="tag">当前修行方向</span>' : ''}`
+      + `</div>`
+      + `<p class="dao-meta">${DAO_LEVELS[lv]} · 经验 ${exp}`
+      + `${lv < 5 ? ` / ${THRESHOLDS[lv + 1]}` : ''}</p>`
+      + `<div class="dao-bar"><i style="width:${lv >= 5 ? 100
+          : Math.min(100, exp / THRESHOLDS[lv + 1] * 100)}%"></i></div>`
+      + `<div class="arts-actions">`
+      + `<button data-action="meditate" data-id="${dao}">参悟 30 天</button>`
+      + `<button data-action="focus" data-id="${dao}" `
+      + `${a.focus === dao ? 'disabled' : ''}>设为修行方向</button>`
+      + `</div>`
+      + `<div class="dao-nodes">${nodeHTML}</div>`
+      + `</section>`;
+  }).join('');
+}
+
+// 洞府页的侧栏
+export function renderArtsAside(state) {
+  const a = state.arts;
+  const m = a.mods;
+  return `<h3>洞府概览</h3>`
+    + `<p class="intro">悟道点 ${a.points} · 主修 ${esc(a.focus)}道</p>`
+    + `<div class="detail-list" style="border-top:0;padding-top:0">`
+    + `<div><label>修炼效率</label><strong>×${m.cult.toFixed(3)}</strong></div>`
+    + `<div><label>斗法伤害</label><strong>×${m.attack.toFixed(3)}</strong></div>`
+    + `<div><label>气血上限</label><strong>×${m.hp.toFixed(3)}</strong></div>`
+    + `<div><label>${a.manaRegen != null ? '每回合基础灵力' : '回灵加成'}</label><strong>${a.manaRegen ?? m.mana}</strong></div>`
+    + `<div><label>丹炉耐久</label><strong>${a.durability}</strong></div>`
+    + `</div>`
+    + `<div class="hint-box">`
+    + `每道五境，经验阈值 30 / 100 / 300 / 900 / 2000，<br>`
+    + `升境得 1 / 1 / 2 / 2 / 2 点悟道点。<br>`
+    + `参悟 30 天可以专门推进某一道的经验。<br>`
+    + `节点永久生效，境界到位才能领悟。<br>`
+    + `每升一个大境界，额外神通槽 +2、基础回灵 +1。`
+    + `</div>`;
+}
+
+// 携带神通面板：列出全部神通，逐张切换。
+// JS 版有「携带神通 / 卸下神通」，C++ 版此前完全缺失，
+// 玩家只能一直用开局那四个初始神通。
+export function renderSpellPicker(data, state, options = {}) {
+  const max = state.arts.spellSlots ?? data?.max ?? 4;
+  const mandatoryIds = (state.arts.mandatorySpells || []).map(s => typeof s === 'string' ? s : s.id);
+  const list = (data?.spells || []).filter(sp => sp.mandatory || mandatoryIds.includes(sp.id)
+    || ((!options.dao || options.dao === 'all' || options.dao === sp.dao)
+      && (!options.spells || options.spells.includes(sp.id))));
+  const stage = state.player.stage;
+  const carriedIds = state.arts.spells || [];
+  const carried = carriedIds.filter(id => !mandatoryIds.includes(id)).length;
+
+  if (!list.length) {
+    return `<div class="empty">神通表为空。</div>`;
+  }
+
+  return `<p class="intro">额外神通 ${carried} / ${max} 槽。`
+    + `普通攻击与防御固定常备，各五张，不占额外槽。每种额外神通入牌组两张。`
+    + `${state.arts.manaRegen != null ? `当前每回合基础灵力 ${state.arts.manaRegen} 点。` : ''}</p>`
+    + `<div class="arts-grid spell-picker" style="margin:0">`
+    + list.map(sp => {
+        const mandatory = sp.mandatory || mandatoryIds.includes(sp.id);
+        const isCarried = mandatory || carriedIds.includes(sp.id);
+        const locked = stage < sp.stage;
+        const full = !isCarried && carried >= max;
+        const realms = ['炼气初期', '炼气中期', '炼气后期', '筑基初期', '筑基中期', '筑基后期', '金丹初期', '金丹中期', '金丹后期', '元婴初期', '元婴中期', '元婴后期', '化神初期', '化神中期', '化神后期'];
+        const stageName = sp.stageName || realms[sp.stage] || '更高境界';
+        const why = mandatory ? '固定常备，不占槽位'
+          : locked ? `尚未达到${stageName}`
+          : full ? `最多携带 ${max} 个，请先卸下一个`
+          : '';
+        return `<button class="card${isCarried ? ' selected' : ''}${mandatory ? ' mandatory' : ''}" `
+          + `${!mandatory && (isCarried || (!locked && !full))
+              ? `data-action="spell" data-id="${sp.id}"` : 'disabled'}>`
+          + `<div class="card-top"><span class="card-glyph">✦</span>`
+          + `<strong>${esc(sp.name)}</strong>`
+          + `${mandatory ? '<span class="count">固定常备</span>' : isCarried ? '<span class="count">已携带 · 点击卸下</span>' : ''}</div>`
+          + `<p class="card-rule">${esc(cardRule(sp))}</p>`
+          + `<div class="card-foot">${esc(sp.dao)}系 · `
+          + `${esc(cardKind(sp))} · 灵力 ${sp.actualCost ?? sp.cost}`
+          + `${sp.cooldown ? ` · 冷却 ${sp.cooldown} 回合` : ''} · 所需境界：${esc(stageName)}`
+          + `${why ? ` · ${why}` : ''}</div></button>`;
+      }).join('')
+    + `</div>`;
+}
+
+export function renderArtBuilds(state, data, nodes, selected = 'all') {
+  const builds = state.artBuilds || [];
+  if (!builds.length) return '';
+  const spells = data?.spells || [];
+  const resolve = (kind, ref) => {
+    const id = typeof ref === 'string' ? ref : ref.id;
+    const definition = typeof ref === 'string' ? null : ref;
+    if (kind === 'manual') {
+      const m = (state.arts.manualList || []).find(x => x.id === id);
+      const name = definition?.name || m?.name || (state.manualSources || []).find(x => x.id === id)?.name || id;
+      return { name, ready: !!(m?.isMain || m?.isAux), note: m ? m.isMain || m.isAux ? '已生效' : '已修，需设主辅修' : '尚未修习' };
+    }
+    if (kind === 'spell') {
+      const sp = spells.find(x => x.id === id);
+      const ready = (state.arts.spells || []).includes(id) || (state.arts.mandatorySpells || []).some(x => (typeof x === 'string' ? x : x.id) === id);
+      return { name: definition?.name || sp?.name || (state.arts.spellList || []).find(x => x.id === id)?.name || id,
+        ready, note: ready ? '已携带' : sp && state.player.stage < sp.stage ? `需${sp.stageName || '更高境界'}` : '待携带' };
+    }
+    const n = (nodes || []).find(x => x.id === id);
+    const ready = (state.arts.nodes || []).includes(id);
+    return { name: definition?.name || n?.name || id, ready, note: ready ? '已领悟' : '待领悟' };
+  };
+  const group = (label, kind, refs) => {
+    if (!refs?.length) return '';
+    return `<div class="build-components"><b>${label}</b>` + refs.map(ref => {
+      const item = resolve(kind, ref);
+      return `<span class="build-component ${item.ready ? 'ready' : ''}">${esc(item.name)}<small>${esc(item.note)}</small></span>`;
+    }).join('') + `</div>`;
+  };
+  return `<div class="art-build-controls"><label>流派组合 <select data-art-build-filter><option value="all">全部流派</option>`
+    + builds.map(b => `<option value="${esc(b.id)}" ${b.id === selected ? 'selected' : ''}>${esc(b.name)}</option>`).join('')
+    + `</select></label><span>选择一组后，神通列表只显示它需要的神通与固定常备牌。</span></div>`
+    + `<div class="art-builds">` + builds.filter(b => selected === 'all' || b.id === selected).map(b => {
+      const refs = [...(b.manuals || []).map(x => resolve('manual', x)), ...(b.spells || []).map(x => resolve('spell', x)), ...(b.nodes || []).map(x => resolve('node', x))];
+      const ready = refs.filter(x => x.ready).length;
+      return `<article class="art-build"><h4>${esc(b.name)} <span>${ready} / ${refs.length} 已具备</span></h4>`
+        + `<p>${esc(b.desc)}</p>` + group('功法', 'manual', b.manuals) + group('神通', 'spell', b.spells) + group('道法', 'node', b.nodes) + `</article>`;
+    }).join('') + `</div>`;
+}
+

@@ -1,0 +1,28 @@
+{
+    // VS Code 工作区配置：让 C++ 代码能正确跳转、编译、调试。
+    // 工具链是 MSYS2 的 UCRT64 GCC，路径按本机实际情况写死。
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.generator": "Ninja",
+    "cmake.configureSettings": {
+        "CMAKE_CXX_COMPILER": "C:/msys64/ucrt64/bin/g++.exe",
+        "CMAKE_BUILD_TYPE": "Debug"
+    },
+    "files.encoding": "utf8",
+    "files.associations": {
+        "*.h": "cpp"
+    },
+    // 源文件是 UTF-8 含中文，关掉自动猜编码避免乱码
+    "files.autoGuessEncoding": false,
+    "[cpp]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+    "search.exclude": {
+        "build/**": true,
+        "_*.txt": true
+    },
+    "files.exclude": {
+        "build/saves": false
+    }
+}
