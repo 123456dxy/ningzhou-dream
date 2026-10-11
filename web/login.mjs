@@ -17,8 +17,8 @@ function overlay() {
       <div class="nz-login-seal">觅</div>
       <h2>宁州一梦</h2>
       <p>输入你的道号与密码进入宁州。同一道号即同一份存档，换设备输入相同道号和密码即可继续。</p>
-      <input name="nickname" maxlength="16" placeholder="道号：1～16 个汉字、字母、数字或下划线" required>
-      <input name="password" type="password" maxlength="64" placeholder="密码：至少 4 位" autocomplete="current-password" required style="margin-top:10px">
+      <input name="nickname" aria-label="道号" autocomplete="username" maxlength="16" placeholder="道号：1～16 个汉字、字母、数字或下划线" required>
+      <input name="password" aria-label="密码" type="password" maxlength="64" placeholder="密码：至少 4 位" autocomplete="current-password" required style="margin-top:10px">
       <div class="nz-login-hint" style="font-size:12px;color:#a08049;min-height:1em;margin-top:6px"></div>
       <div class="nz-login-error" role="alert"></div>
       <button type="submit">入 世</button>

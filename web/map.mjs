@@ -107,7 +107,7 @@ function destinationPanel(state, focus, requestedMode) {
     + (art ? `<button class="destination-art-button" data-action="location-art" data-id="${esc(focus.id)}" aria-label="查看${esc(focus.name)}景观大图">`
       + `<img class="destination-art" src="${esc(art.src)}" alt="${esc(art.alt)}" width="1600" height="900">`
       + `<span class="destination-art-expand" aria-hidden="true">查看大图 ↗</span></button>` : '')
-    + `<div class="destination-body"><div class="destination-title"><div><span class="travel-eyebrow">${esc(TYPES[focus.type] || '山川')}${here ? ' · 当前所在' : ' · 目的地'}</span>`
+    + `<div class="destination-body"><button type="button" class="nz-map-return">↑ 返回舆图 · 切换地点</button><div class="destination-title"><div><span class="travel-eyebrow">${esc(TYPES[focus.type] || '山川')}${here ? ' · 当前所在' : ' · 目的地'}</span>`
     + `<h3>${esc(focus.name)}</h3></div><span class="destination-danger${focus.danger >= 50 ? ' high' : ''}">${focus.danger ? `危险 ${focus.danger}` : '安宁'}</span></div>`
     + (art ? `<p class="destination-theme" data-location-theme><span>${art.illustrative ? '景观意象' : '景观'}</span>${esc(art.subtitle)}</p>` : '')
     + `<p class="destination-description">${esc(focus.desc)}</p>`
@@ -144,7 +144,8 @@ export function renderAtlas(state, { focus: focusId = null, search = '', filter 
     const destination = !current && location.id === to?.id;
     const cls = ['map-pin', location.type, current ? 'here' : '', destination ? 'destination' : '',
       location.id === focus?.id ? 'focused' : '', !matches(location) ? 'dimmed' : '',
-      location.x >= 86 ? 'edge-right' : location.x <= 10 ? 'edge-left' : ''].filter(Boolean).join(' ');
+      location.x >= 86 ? 'edge-right' : location.x <= 10 ? 'edge-left' : '',
+      location.y >= 75 ? 'edge-bottom' : ''].filter(Boolean).join(' ');
     return `<button class="${cls}" style="left:${Number(location.x)}%;top:${Number(location.y)}%" data-map="${esc(location.id)}" data-map-loc="${esc(location.id)}" `
       + `title="${esc(location.name)} · ${esc(TYPES[location.type])}${current ? ' · 当前所在' : destination ? ' · 目的地' : ''}" aria-pressed="${location.id === focus?.id}">`
       + `<span class="pin-dot"></span><span class="pin-name">${esc(location.name)}${current ? '<small>此处</small>' : destination ? '<small>目的地</small>' : ''}</span></button>`;
@@ -156,6 +157,11 @@ export function renderAtlas(state, { focus: focusId = null, search = '', filter 
     const offset = visibleDungeonSites(state, site.location).indexOf(site);
     return `<button class="atlas-dungeon-pin" data-action="dungeon-locate" data-id="${esc(location.id)}" style="left:${Number(location.x)}%;top:calc(${Number(location.y)}% + ${24 + offset * 22}px)" aria-label="${esc(site.name)}，${esc(location.name)}，${esc(site.realmName)}" title="${esc(site.name)} · ${esc(site.realmName)}"><span>♜</span>${esc(site.name)}</button>`;
   }).join('');
+  // 手机以独立列表呈现秘境，避免同地点的 22px 标记间距挤压触控区域。
+  const mobileSites = visibleDungeonSites(state).filter(site => site.available && !site.cleared);
+  const mobileDungeons = mobileSites.length ? `<details class="nz-mobile-dungeons"><summary>地图秘境 · ${mobileSites.length} 处</summary><div>`
+    + mobileSites.map(site => `<button data-map="${esc(site.location)}"><strong>${esc(site.name)}</strong><small>${esc(locations.find(location => location.id === site.location)?.name || site.location)} · ${esc(site.realmName)}</small></button>`).join('')
+    + `</div></details>` : '';
   const scale = Math.max(.75, Math.min(2, Number(zoom) || 1));
   const directory = `<section class="atlas-directory"><div class="atlas-directory-body"><div class="atlas-search"><label><input data-map-search type="search" aria-label="搜索地点" value="${esc(search)}" placeholder="搜索城池、宗门、险地"></label>`
     + `<select data-map-filter aria-label="地点类型">${['all', 'city', 'sect', 'wild'].map(type => `<option value="${type}" ${filter === type ? 'selected' : ''}>${TYPES[type] || '全部地点'}</option>`).join('')}</select></div>`
@@ -170,6 +176,6 @@ export function renderAtlas(state, { focus: focusId = null, search = '', filter 
     + routeDrawing(from, to, job ? (Number(job.elapsed) || 0) / Math.max(1, Number(job.total) || 1) : 0)
     + pins + dungeonPins + `<span class="atlas-compass" aria-hidden="true">北<br>↑</span></div></div>`
     + `<div class="atlas-legend"><span><i class="city"></i>城池</span><span><i class="sect"></i>宗门</span><span><i class="wild"></i>险地</span>`
-    + `<span><i class="here"></i>当前所在</span><span><i class="destination"></i>目的地</span><small>滚动查看 · 点选地点</small></div></div>`
-    + directory + `</section>` + destinationPanel(state, focus, mode || (job?.to === focus?.id ? job.mode : '')) + `</div>`;
+    + `<span><i class="here"></i>当前所在</span><span><i class="destination"></i>目的地</span><small>滚动查看 · 点选地点</small></div><p class="nz-map-hint">全览看方位；放大舆图或使用下方「选择目的地」目录，可准确选择地点。</p></div>`
+    + directory + mobileDungeons + `</section>` + destinationPanel(state, focus, mode || (job?.to === focus?.id ? job.mode : '')) + `</div>`;
 }

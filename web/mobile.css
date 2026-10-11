@@ -1,57 +1,317 @@
-/* 宁州一梦 · 手机端适配（≤690px）。最后加载，只在窄屏生效，桌面端外观不变。 */
+/* 宁州一梦 · 手机端适配。独立覆盖层；桌面布局和游戏规则保持原样。 */
+.nz-character-toggle, .nz-tools-toggle, .nz-mobile-dungeons, .nz-mobile-nav, .nz-map-return, .nz-map-hint { display: none; }
+
 @media (max-width: 690px) {
-  html, body { overflow-x: clip; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  html, body { overflow-x: clip; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-padding-top: 12px; }
+  body { font-size: 15px; overflow-wrap: anywhere; }
+  *, *::before, *::after { box-sizing: border-box; }
+  .app-shell, main, .workspace, .sidebar, .chronicle-layout, .plan-panel,
+  .chronicle-panel, .card, .atlas-layout, .atlas-main, .atlas-destination,
+  .friend-split, .fs-panel, .build-panel, .story-panel { min-width: 0; max-width: 100%; }
+  main { padding: 0 14px; }
+  img, video { max-width: 100%; height: auto; }
+  svg { max-width: 100%; }
+  .landscape svg { max-width: none; }
   .nz-fs14 { font-size: 14px !important; letter-spacing: 0 !important; }
-
-  /* 顶栏：原本工具按钮被挤成竖排单字，改为可换行的两行布局 */
-  .topbar { height: auto; min-height: 61px; flex-wrap: wrap; gap: 6px 10px; padding: 8px 0; }
-  .breadcrumb { flex: 1 1 100%; }
-  .toolbar { flex-wrap: wrap; gap: 6px; justify-content: flex-start; width: 100%; }
-  .toolbar > *, #nz-user { white-space: nowrap; }
-  #nz-user { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .toolbar button.subtle, #nz-user button { padding: 8px 12px; }
-  .icon-button { width: 44px; height: 44px; }
-
-  /* 触控目标 ≥44px（地图标记除外：其位置按坐标绝对定位） */
-  button:not(.map-pin):not(.atlas-dungeon-pin), select, summary, .subtle,
-  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]) {
-    min-height: 44px;
-  }
-  .alloc-ctl button, .qty button, .sr-btns button, .supply-btn, .seg button { min-width: 44px; }
-  .qty input { min-width: 48px; }
-  .atlas-controls button, .shop-row .buy { min-width: 44px; }
+  p, small, label, .intro, .panel-note { line-height: 1.65; }
+  button, summary, select { touch-action: manipulation; }
+  button, summary, select, input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=range]) { min-height: 44px; }
+  button { min-width: 44px; max-width: 100%; white-space: normal; }
+  input, select, textarea { max-width: 100%; min-width: 0; font-size: 16px !important; }
+  textarea { min-height: 120px; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; flex: 0 0 22px; }
   label:has(> input[type=checkbox]), label:has(> input[type=radio]) { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
-  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
-  .brand { min-height: 44px; }
+  button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 3px solid #a57e38; outline-offset: 3px;
+  }
 
-  /* 主导航：横向滑动并提示可滑 */
-  .main-tabs { gap: 6px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
-    mask-image: linear-gradient(90deg, #000 88%, transparent); }
-  .main-tabs button { min-height: 44px; padding: 0 10px; scroll-snap-align: start; }
+  /* 人物状态可展开，默认留出空间给游戏；重要数值仍出现在摘要中。 */
+  .sidebar { display: block; padding: 16px 14px; }
+  .brand { min-height: 44px; margin: 0 0 10px; }
+  .brand small { font-size: 12px; letter-spacing: 2px; }
+  .nz-character-toggle { display: flex; flex-direction: column; align-items: stretch; text-align: left;
+    width: 100%; padding: 10px 12px; border: 1px solid #849a83; border-radius: 8px; background: #284e43; color: #f3eddb; }
+  .nz-character-toggle > span { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; font-weight: 600; }
+  .nz-character-toggle > small { color: #d3ddc9; font-size: 14px; line-height: 1.6; margin-top: 4px; }
+  .nz-mobile-ready .sidebar:not(.nz-character-open) > :is(#player-card, #progress-card, #npc-card) { display: none; }
+  #player-card { padding-top: 14px; }
+  .portrait.player-portrait { width: 54px; height: 82px; margin-right: 12px; }
+  #player-card .player-name { font-size: 23px; }
+  #player-card .player-identity { font-size: 14px; line-height: 1.6; }
+  .location-line { display: block; text-align: left; font-size: 14px; }
+  #player-card .player-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; margin: 14px 0; }
+  .stat { min-width: 0; }
+  .stat strong { font-size: 18px; }
+  .stat > span { display: block; margin: 3px 0 0; }
+  .progress-box { padding: 14px; margin-top: 14px; }
+  #npc-card:not([hidden]) { padding: 14px 0 0; }
+  .sidebar-npc-portrait { height: 120px; }
+
+  /* 所有入口都可见，不靠裁切或无提示的横滑隐藏按钮。 */
+  .topbar { height: auto; min-height: 0; flex-wrap: wrap; gap: 10px; padding: 14px 0; }
+  .breadcrumb { flex: 1 1 100%; font-size: 14px; }
+  .toolbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; gap: 6px; }
+  .toolbar > * { min-width: 0; }
+  .nz-mobile-ready .toolbar:not(.nz-tools-open) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nz-mobile-ready .toolbar:not(.nz-tools-open) > :not([data-action="settings"]):not(.nz-tools-toggle) { display: none; }
+  .toolbar .nz-tools-toggle { display: block; }
+  .toolbar.nz-tools-open .nz-tools-toggle { grid-column: 1 / -1; }
+  .breadcrumb { display: none; }
+  #nz-user { display: flex; flex-wrap: wrap; gap: 6px; grid-column: 1 / -1; margin: 0; }
+  #nz-user > b { flex: 1 1 100%; line-height: 1.65; }
+  #nz-user > button { flex: 1; }
+  .toolbar button.subtle, #nz-user button { padding: 9px 6px; border: 1px solid var(--line); border-radius: 6px; }
+  .toolbar .icon-button { width: 100%; height: auto; min-height: 44px; border-radius: 6px; }
+  .hero { min-height: 0; padding: 18px 0 20px; overflow: hidden; }
+  .hero-copy { min-width: 0; position: relative; z-index: 1; }
+  .hero h1 { font-size: clamp(25px, 7vw, 32px); line-height: 1.4; }
+  .hero p { font-size: 14px; line-height: 1.7; }
+  .hero-time { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .landscape { right: 0; width: 68%; opacity: .28; }
+  .world-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 16px; }
+  .world-stat { min-width: 0; padding: 0 10px; gap: 8px; }
+  .world-stat strong { font-size: 16px; }
+  .world-stat .symbol { font-size: 20px; }
+  .main-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; overflow: visible; mask-image: none; padding-bottom: 10px; }
+  .main-tabs button { padding: 9px 4px; font-size: 14px; line-height: 1.5; border: 1px solid var(--line); border-radius: 6px; }
+  .main-tabs button.active { background: #e5ebde; border-color: #7b9578; }
+  .main-tabs button::after { display: none; }
+  .main-tabs button span { display: none; }
   .main-tabs .tab-end { display: none; }
-  .subtabs { flex-wrap: wrap; }
+  .subtabs, .shop-tabs, .filters { flex-wrap: wrap; gap: 6px; }
+  .subtab, .shop-tabs button, .filters button { padding: 9px 10px; }
+  .workspace { padding-top: 16px; }
+  .section-head { flex-wrap: wrap; gap: 10px; }
+  .section-head h2 { font-size: 22px; line-height: 1.4; }
+  .section-head p { font-size: 14px; line-height: 1.7; }
+  .section-head .tag { display: inline-block; }
 
-  /* 侧栏人物卡：三列太挤，改两列 */
-  .player-stats { grid-template-columns: repeat(2, 1fr); }
-  .year-controls { max-width: 100%; }
-  .plan-options { grid-template-columns: repeat(2, 1fr); }
+  /* 内容卡片：固定列宽、数量控件、长说明都能自然换行。 */
+  .chronicle-layout, .map-layout, .friend-split { grid-template-columns: minmax(0, 1fr); }
+  .plan-panel { padding: 16px; }
+  .plan-options { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .plan-option { padding: 10px 8px; }
+  .plan-option > span { min-width: 0; }
+  .plan-option small { display: block; }
+  .year-controls { max-width: 100%; width: 100%; gap: 8px; }
+  .year-controls button { padding: 11px 8px; }
+  .speed { position: static; margin-top: 12px; flex-wrap: wrap; }
+  .speed label, .hint-box { display: block; }
+  .timeline { padding: 8px 12px 16px; max-height: none; }
+  .log-entry { grid-template-columns: 45px minmax(0, 1fr); gap: 8px; }
+  .log-content { padding-left: 12px; }
+  .log-content p { font-size: 15px; line-height: 1.8; }
+  .chronicle-top { padding: 15px; flex-wrap: wrap; gap: 8px; }
+  .people-grid, .world-grid, .craft-grid, .social-actions, .inventory-row { grid-template-columns: minmax(0, 1fr); }
+  .card, .person-card, .sect-card { padding: 15px; }
+  .person-head h3 { font-size: 19px; }
+  .people-controls { flex-wrap: wrap; }
+  .people-controls input { width: 100%; min-width: 0; }
+  .map-detail { grid-template-columns: minmax(0, 1fr); }
+  .map-detail .card:last-child { display: block; }
+  .shop-row { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 14px 0; }
+  .shop-row > :first-child { grid-column: 1 / -1; }
+  .shop-row .price { text-align: left; }
+  .shop-row .qty { justify-self: end; gap: 4px; }
+  .shop-row .qty button { width: 44px; height: 44px; flex: 0 0 44px; }
+  .shop-row .qty input { width: 48px; }
+  .shop-row .buy { grid-column: 1 / -1; width: 100%; }
+  .pill-row, .sr-head, .sr-btns, .save-slot > div:last-child, .arts-actions,
+  .modal-actions, .recipe-controls, .combat-flow, .combat-bottom, .roster-actions { flex-wrap: wrap; }
+  .roster-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .roster-row > * { min-width: 0; }
+  .roster-row .rr-actions, .roster-row .rr-right { flex-wrap: wrap; }
+  .friend-character { grid-template-columns: 74px minmax(0, 1fr); gap: 10px; }
+  .friend-detail-portrait { height: 120px; }
+  .fs-list { max-height: none; padding-right: 0; }
+  .form-line { flex-wrap: wrap; gap: 12px; }
+  .form-line > *, .field { min-width: 0; }
 
-  /* 建号面板：全屏化，操作栏不再遮挡天赋列表 */
-  .build-overlay { padding: 0; align-items: stretch; }
-  .build-panel { max-height: 100dvh; height: 100dvh; border-radius: 0; padding: 16px 14px 0; }
-  .build-points { flex-wrap: wrap; gap: 10px 16px; }
-  .build-innate { gap: 10px 16px; }
+  /* 地图只在图框内平移；缩放和地点目录都是 44px 触控入口。 */
+  .atlas-layout { grid-template-columns: minmax(0, 1fr); }
+  .atlas-map-heading { flex-wrap: wrap; padding: 10px; gap: 8px; }
+  .atlas-map-heading h3 { font-size: 18px; }
+  .atlas-controls { gap: 6px; }
+  .atlas-controls button { padding: 8px 10px; }
+  .atlas-viewport { width: 100%; max-width: 100%; max-height: min(55dvh, 420px); overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .atlas-canvas { max-width: none; }
+  .atlas-canvas .map-pin { min-width: 44px; min-height: 44px; padding: 6px; }
+  .atlas-canvas .map-pin.edge-bottom { flex-direction: column-reverse; transform: translate(-50%, calc(-100% + 10px)); }
+  .atlas-canvas .map-pin.edge-bottom.edge-right { transform: translate(calc(-100% + 10px), calc(-100% + 10px)); }
+  .atlas-canvas .map-pin.edge-bottom.edge-left { transform: translate(-10px, calc(-100% + 10px)); }
+  .atlas-canvas .pin-name { font-size: 14px; padding: 3px 5px; }
+  .atlas-canvas .pin-name small { font-size: 12px; }
+  .atlas-canvas .pin-dot { width: 14px; height: 14px; }
+  .atlas-dungeon-pin { display: none; }
+  .nz-mobile-dungeons { display: block; margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .nz-mobile-dungeons summary { padding: 8px; cursor: pointer; }
+  .nz-mobile-dungeons > div { display: grid; gap: 8px; }
+  .nz-mobile-dungeons button { text-align: left; padding: 10px; }
+  .nz-mobile-dungeons strong, .nz-mobile-dungeons small { display: block; }
+  .nz-mobile-dungeons small { margin-top: 4px; }
+  .atlas-search { flex-wrap: wrap; }
+  .atlas-search label { flex: 1 1 100%; }
+  .atlas-search select { width: 100%; max-width: none; }
+  .atlas-directory summary { flex-wrap: wrap; padding: 10px 0; }
+  .atlas-place-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .atlas-place { min-height: 64px; }
+  .atlas-legend { font-size: 14px; }
+  .atlas-legend > small { width: 100%; margin-left: 0; }
+  .atlas-destination { scroll-margin-top: 12px; }
+  .destination-body { padding: 14px; }
+  .destination-title h3 { font-size: 23px; }
+  .travel-start-actions { flex-wrap: wrap; }
+  .travel-start-actions button { flex: 1 1 125px; }
+  .location-service { align-items: flex-start; }
+  .location-service button { flex-shrink: 0; }
+  .dungeon-route-viewport { max-width: 100%; overscroll-behavior: contain; }
+  .dungeon-route-heading, .dungeon-run-heading, .dungeon-run-vitals { flex-wrap: wrap; }
+  .combat-field { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .combat-actor { padding: 10px; min-width: 0; }
+  .combat-hand { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .combat-hand .spell-card { padding-left: 10px; padding-right: 10px; }
+  .combat-flow .end-turn { width: 100%; margin-left: 0; }
+  .combat-hand-label { flex-wrap: wrap; }
+
+  /* 原生弹窗保持取消语义，内容区可滚动，关闭按钮不会被挤小。 */
+  dialog, #location-art-modal, dialog:has(.card-combat) {
+    width: calc(100% - 20px); min-width: 0; max-width: calc(100% - 20px);
+    max-height: calc(100vh - 20px); max-height: calc(100dvh - 20px);
+    margin: auto; padding: 0; overflow: auto; overscroll-behavior: contain;
+  }
+  .modal-inner, dialog:has(.card-combat) .modal-inner { padding: 16px; min-width: 0; }
+  .modal-heading { gap: 10px; align-items: flex-start; }
+  .modal-heading > div { min-width: 0; }
+  .modal-heading h2 { font-size: 23px; }
+  .close-modal, .location-art-heading > button { flex: 0 0 auto; min-width: 44px; min-height: 44px; }
+  .modal-actions { gap: 8px; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .modal-actions button { flex: 1 1 auto; padding: 10px 12px; }
+  table { display: block; width: 100%; max-width: 100%; overflow: auto; overscroll-behavior: contain; }
+  #leaderboard-modal .modal-body { max-height: none; }
+  .nz-lb { white-space: nowrap; }
+  .nz-fb-types { flex-wrap: wrap; }
+  .nz-fb-type { flex: 1 1 auto; padding: 8px !important; }
+  .nz-fb-count { flex-shrink: 0; margin-left: 8px; }
+  #nz-login { padding: 12px; overflow-y: auto; align-items: start; }
+  .nz-login-card { width: min(420px, 100%); min-width: 0; margin: auto; padding: 22px 16px; }
+  .nz-login-card input { width: 100%; }
+  .nz-login-card small { line-height: 1.7; }
+
+  /* 建号 / 剧情：单列与安全区，长内容及软键盘下仍可滚动。 */
+  .build-overlay { padding: 0; align-items: stretch; overflow: hidden; }
+  .build-panel { width: 100%; max-height: 100vh; max-height: 100dvh; height: 100vh; height: 100dvh;
+    border-radius: 0; padding: max(16px, env(safe-area-inset-top, 0px)) 14px 0; overscroll-behavior: contain; scroll-padding-bottom: 110px; }
+  .build-top { gap: 14px; }
+  .build-points { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .build-points div { text-align: left; }
+  .build-points strong { font-size: 26px; }
+  .build-innate { flex-wrap: wrap; gap: 12px; }
   .innate-seed { margin-left: 0; }
-  .talent-grid { grid-template-columns: 1fr; }
-  .alloc-row { grid-template-columns: 1fr; }
-  .build-actions { bottom: 0; gap: 8px; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); }
+  .build-section > h3 { flex-wrap: wrap; gap: 4px; }
+  .build-section > h3 > span { flex-basis: 100%; line-height: 1.7; }
+  .build-fields { gap: 8px; }
+  .build-fields input[type=text] { width: 100%; flex: 1 1 100%; }
+  .talent-grid { grid-template-columns: minmax(0, 1fr); }
+  .talent-card { padding: 13px; }
+  .alloc-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .alloc-ctl button { width: 44px; height: 44px; }
+  .build-actions { bottom: 0; gap: 8px; padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px)); background: #f1ecdf; }
   .build-actions .why:empty { display: none; }
   .build-actions .why { flex: 1 1 100%; }
-  .build-actions button { flex: 1 1 0; padding: 10px 8px; }
+  .build-actions button { flex: 1 1 90px; padding: 10px 6px; }
+  .story-overlay { padding: 10px; overflow-y: auto; }
+  .story-panel { max-height: calc(100dvh - 20px); overflow-y: auto; padding: 18px 14px; }
+  .story-choices { grid-template-columns: minmax(0, 1fr); }
+  .story-panel .s-foot { position: sticky; bottom: -14px; padding: 12px 0; background: #f2ecdf; }
+  .story-panel .s-foot button { width: 100%; }
+  .toast { max-width: calc(100% - 24px); white-space: normal; padding: 12px 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .page-footer { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); line-height: 1.7; }
+}
 
-  /* 表格、弹窗不撑破屏幕 */
-  table { display: block; max-width: 100%; overflow-x: auto; }
-  dialog { max-width: calc(100vw - 16px); }
-  img, svg, video { max-width: 100%; }
-  .landscape svg { max-width: none; }
+@media (max-width: 380px) {
+  .travel-job-actions > button { flex-basis: 100%; }
+  .combat-vital { gap: 5px; }
+  .combat-vital b { font-size: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-width: 690px) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+
+@media (max-width: 690px) {
+  body:has(dialog[open], .build-overlay, .story-overlay, #nz-login:not([hidden])) { overflow: hidden; }
+  .roster-row .racts, .roster-row .rrel { flex-wrap: wrap; }
+  .modal-heading { position: sticky; top: -16px; z-index: 2; margin: -16px -16px 16px; padding: 16px; background: #f5f1e7; border-bottom: 1px solid var(--line); }
+}
+
+/* 移动主循环：状态在上、行动在中、页面切换在拇指区。 */
+@media (max-width: 690px) {
+  body.nz-mobile-ready { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .nz-mobile-ready .sidebar { padding: max(8px, env(safe-area-inset-top, 0px)) 12px 8px; z-index: 25; }
+  .nz-mobile-ready .sidebar:not(.nz-character-open) { position: sticky; top: 0; }
+  .nz-mobile-ready .sidebar .brand { display: none; }
+  .nz-mobile-ready .hero, .nz-mobile-ready .world-strip { display: none; }
+  .nz-mobile-ready:has(.nz-character-open) .hero { display: flex; }
+  .nz-mobile-ready:has(.nz-character-open) .world-strip { display: grid; }
+  .nz-mobile-ready .workspace { scroll-margin-top: 112px; }
+  .nz-mobile-ready .main-tabs { display: none; position: fixed; z-index: 41; left: 10px; right: 10px;
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px)); max-height: 65dvh; overflow: auto;
+    padding: 12px; background: #f5f1e6; border: 1px solid #9cae91; border-radius: 12px; box-shadow: 0 -6px 30px #183c3730; }
+  .nz-mobile-ready.nz-nav-open .main-tabs { display: grid; }
+  .nz-mobile-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px;
+    position: fixed; z-index: 42; bottom: 0; left: 0; right: 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: #f5f1e7; border-top: 1px solid #a7b69b; box-shadow: 0 -3px 18px #183c3715; }
+  .nz-mobile-nav button { min-height: 48px; padding: 8px 4px; font-size: 15px; border: 1px solid transparent; background: transparent; border-radius: 7px; }
+  .nz-mobile-nav button.active { background: #254f43; color: #fff6e2; border-color: #254f43; }
+  body:has(dialog[open], .build-overlay, .story-overlay, #nz-login:not([hidden])) .nz-mobile-nav,
+  body:has(dialog[open], .build-overlay, .story-overlay, #nz-login:not([hidden])) .main-tabs { display: none; }
+  .toast { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  .nz-mobile-ready .page-footer { padding-bottom: 20px; }
+}
+
+@media (max-width: 690px) {
+  .nz-mobile-ready .toolbar:not(.nz-tools-open) #nz-user { display: none; }
+  .nz-mobile-ready .workspace, .nz-mobile-ready .atlas-destination, .nz-mobile-ready .atlas-frame { scroll-margin-top: calc(var(--nz-status-height, 100px) + 12px); }
+  .nz-map-return { display: block; width: 100%; margin: 0 0 12px; }
+  .year-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plan-option .plan-symbol { display: none; }
+  .plan-option > span { width: 100%; }
+  #workspace[data-page="chronicle"] .plan-panel:has(.plan-options) { display: flex; flex-direction: column; }
+  #workspace[data-page="chronicle"] .plan-panel:has(.plan-options) > h3 { order: 0; }
+  #workspace[data-page="chronicle"] .plan-panel:has(.plan-options) > .intro { order: 1; }
+  #workspace[data-page="chronicle"] .plan-panel:has(.plan-options) > .plan-options { order: 2; margin-top: 4px !important; }
+  #workspace[data-page="chronicle"] .plan-panel:has(.plan-options) > .year-controls { order: 3; }
+  #workspace[data-page="chronicle"] .plan-panel:has(.plan-options) > button { order: 4; }
+  #workspace[data-page="chronicle"] .plan-panel:has(.plan-options) > .hint-box { order: 5; }
+}
+
+.nz-time-secondary { display: contents; }
+@media (max-width: 690px) {
+  .nz-time-secondary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; order: 4; }
+  .nz-time-secondary button { margin-top: 8px !important; padding: 10px 6px; }
+  .nz-time-secondary [data-days="3600"] { order: 2; }
+}
+
+@media (max-width: 690px) {
+  .plan-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .plan-option { min-height: 48px; text-align: center; }
+  .plan-option.selected { grid-column: 1 / -1; order: -1; text-align: left; }
+  .plan-option:not(.selected) small { display: none; }
+  .plan-option.selected small { margin-top: 4px; }
+}
+@media (max-width: 690px) {
+  .roster-bar .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .roster-bar .seg button { white-space: nowrap; padding: 9px; }
+}
+
+.nz-plan-feedback { display: none; }
+@media (max-width: 690px) {
+  .nz-plan-feedback { display: block; order: 5; margin-top: 12px; padding: 10px; border-left: 3px solid #748c61; background: #e8edde; color: #345142; font-size: 14px; }
+  #workspace[data-page="chronicle"] .plan-panel:has(.plan-options) > .hint-box { order: 6; }
+}
+
+@media (max-width: 690px) {
+  .nz-map-hint { display: block; margin: 0; padding: 8px 12px 12px; font-size: 14px; line-height: 1.6; color: #526b4b; }
+  .atlas-viewport[data-zoom="0.75"] .map-pin:not(.focused):not(.here) .pin-name { display: none; }
 }
