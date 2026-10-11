@@ -31,6 +31,7 @@
 #include "core/http.h"
 #include "core/json.h"
 #include "core/save.h"
+#include "core/pwhash.h"
 
 namespace {
 
@@ -169,6 +170,9 @@ void loadSessions() {
         if (sid.size() != 64 || !validNickname(nick, why) || hexId(nick) != id) continue;
         const long long t = std::atoll(used.c_str());
         if (now - t > kSessionTtl) continue;
+        // 无密码时代发出的会话不再承认：老号需重新登录并设置密码
+        std::error_code pec;
+        if (!fs::exists(u8(g_dataDir + "/players/" + id + "/password.txt"), pec)) continue;
         g_sessions[sid] = SessionInfo{id, nick, t};
     }
 }
@@ -329,8 +333,100 @@ Response leaderboardResp(const Request& req) {
     return jsonResp(200, o);
 }
 
+// ---------------- 密码与登录限速 ----------------
+std::string pwPath(const std::string& id) { return g_dataDir + "/players/" + id + "/password.txt"; }
+
+bool readPwRecord(const std::string& id, std::string& rec) {
+    if (!readAll(pwPath(id), rec)) return false;
+    while (!rec.empty() && (rec.back() == '\n' || rec.back() == '\r')) rec.pop_back();
+    return !rec.empty();
+}
+
+bool writePwRecord(const std::string& id, const std::string& pass) {
+    std::error_code ec;
+    fs::create_directories(u8(g_dataDir + "/players/" + id), ec);
+    const bool ok = writeAtomic(pwPath(id), nz::pw::makeRecord(pass) + "\n");
+#ifndef _WIN32
+    if (ok) fs::permissions(u8(pwPath(id)), fs::perms::owner_read | fs::perms::owner_write, ec);
+#endif
+    return ok;
+}
+
+bool validPassword(const std::string& p, std::string& why) {
+    size_t chars = 0;
+    for (unsigned char c : p) if ((c & 0xC0) != 0x80) ++chars;
+    if (chars < 4) { why = "密码至少 4 位。"; return false; }
+    if (p.size() > 128) { why = "密码太长（最多 128 字节）。"; return false; }
+    return true;
+}
+
+// 按 IP+道号 计失败次数：10 分钟内失败 5 次即锁定到窗口结束
+struct FailInfo { int count = 0; long long first = 0; };
+std::map<std::string, FailInfo> g_fails;
+constexpr int kMaxFails = 5;
+constexpr long long kFailWindow = 600;
+
+long long lockedFor(const std::string& key) {
+    auto it = g_fails.find(key);
+    if (it == g_fails.end()) return 0;
+    const long long now = nowSec();
+    if (now - it->second.first >= kFailWindow) { g_fails.erase(it); return 0; }
+    return it->second.count >= kMaxFails ? kFailWindow - (now - it->second.first) : 0;
+}
+
+void noteFail(const std::string& key) {
+    const long long now = nowSec();
+    if (g_fails.size() > 50000) {
+        for (auto it = g_fails.begin(); it != g_fails.end();)
+            it = (now - it->second.first >= kFailWindow) ? g_fails.erase(it) : std::next(it);
+    }
+    auto& f = g_fails[key];
+    if (f.count == 0 || now - f.first >= kFailWindow) { f.count = 0; f.first = now; }
+    ++f.count;
+}
+
+void dropSessionsOf(const std::string& id, const std::string& keepSid) {
+    for (auto it = g_sessions.begin(); it != g_sessions.end();)
+        if (it->second.id == id && it->first != keepSid) { it = g_sessions.erase(it); g_sessionsDirty = true; }
+        else ++it;
+}
+
+std::string queryParam(const std::string& q, const std::string& key) {
+    size_t pos = 0;
+    while (pos <= q.size()) {
+        size_t amp = q.find('&', pos);
+        if (amp == std::string::npos) amp = q.size();
+        const std::string kv = q.substr(pos, amp - pos);
+        if (kv.rfind(key + "=", 0) == 0) {
+            std::string v = kv.substr(key.size() + 1), out;
+            for (size_t i = 0; i < v.size(); ++i) {
+                if (v[i] == '%' && i + 2 < v.size()) { out += (char)std::strtol(v.substr(i + 1, 2).c_str(), nullptr, 16); i += 2; }
+                else if (v[i] == '+') out += ' ';
+                else out += v[i];
+            }
+            return out;
+        }
+        pos = amp + 1;
+    }
+    return {};
+}
+
 Response handle(const Request& req) {
     const std::string& path = req.path;
+
+    // 查询道号是否已设密码（登录框据此提示“首次设置密码”）
+    if (path == "/api/nickinfo") {
+        const std::string nick = queryParam(req.query, "nickname");
+        std::string why, rec;
+        if (!validNickname(nick, why)) return errorResp(400, why);
+        const std::string id = hexId(nick);
+        std::error_code ec;
+        nz::json::Value o(nz::json::Object{});
+        o.set("ok", true);
+        o.set("exists", fs::exists(u8(g_dataDir + "/players/" + id), ec));
+        o.set("hasPassword", readPwRecord(id, rec));
+        return jsonResp(200, o);
+    }
 
     if (path == "/api/leaderboard") {
         if (req.method != "GET") return errorResp(405, "此操作需要 GET 请求。");
@@ -348,6 +444,21 @@ Response handle(const Request& req) {
         while (!nick.empty() && nick.front() == ' ') nick.erase(0, 1);
         std::string why;
         if (!validNickname(nick, why)) return errorResp(400, why);
+        const std::string pass = in["password"].isString() ? in["password"].asString() : std::string();
+        if (!validPassword(pass, why)) return errorResp(400, why);
+        const std::string uid = hexId(nick);
+        const std::string failKey = req.clientIp + "|" + uid;
+        if (const long long wait = lockedFor(failKey); wait > 0)
+            return errorResp(429, "密码错误次数过多，请 " + std::to_string((wait + 59) / 60) + " 分钟后再试。");
+        std::string rec;
+        bool firstSet = false;
+        if (readPwRecord(uid, rec)) {
+            if (!nz::pw::verifyRecord(rec, pass)) { noteFail(failKey); return errorResp(401, "道号或密码不对。"); }
+            g_fails.erase(failKey);
+        } else {
+            if (!writePwRecord(uid, pass)) return errorResp(500, "密码保存失败，请稍后再试。");
+            firstSet = true;
+        }
         if (g_sessions.size() >= kMaxSessions) {
             // 清掉最久未用的一半
             std::vector<std::pair<long long, std::string>> v;
@@ -357,6 +468,8 @@ Response handle(const Request& req) {
         }
         const std::string id = hexId(nick);
         const std::string sid = randomSid();
+        // 首次设密码：作废这个道号此前（无密码时代）发出的其他会话
+        if (firstSet) dropSessionsOf(id, "");
         g_sessions[sid] = SessionInfo{id, nick, nowSec()};
         g_sessionsDirty = true;
         Player& p = playerFor(id, nick);
@@ -364,6 +477,7 @@ Response handle(const Request& req) {
         o.set("ok", true);
         o.set("nickname", nick);
         o.set("hasGame", p.s.started);
+        o.set("passwordSet", firstSet);
         Response r = jsonResp(200, o);
         r.extraHeaders.push_back({"Set-Cookie",
             "nz_sid=" + sid + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax"});
@@ -392,6 +506,27 @@ Response handle(const Request& req) {
         o.set("ok", true);
         o.set("nickname", p.nickname);
         o.set("hasGame", p.s.started);
+        return jsonResp(200, o);
+    }
+
+    if (path == "/api/password") {
+        if (req.method != "POST") return errorResp(405, "此操作需要 POST 请求。");
+        std::string err, why, rec;
+        const nz::json::Value in = nz::json::Value::parse(req.body, &err);
+        if (!err.empty() || !in.isObject() || !in["old"].isString() || !in["new"].isString())
+            return errorResp(400, "请填写原密码和新密码。");
+        const std::string failKey = req.clientIp + "|" + p.id;
+        if (const long long wait = lockedFor(failKey); wait > 0)
+            return errorResp(429, "密码错误次数过多，请 " + std::to_string((wait + 59) / 60) + " 分钟后再试。");
+        if (readPwRecord(p.id, rec) && !nz::pw::verifyRecord(rec, in["old"].asString())) {
+            noteFail(failKey);
+            return errorResp(403, "原密码不对。");
+        }
+        if (!validPassword(in["new"].asString(), why)) return errorResp(400, why);
+        if (!writePwRecord(p.id, in["new"].asString())) return errorResp(500, "密码保存失败。");
+        dropSessionsOf(p.id, sid);   // 其他设备需用新密码重新登录
+        nz::json::Value o(nz::json::Object{});
+        o.set("ok", true);
         return jsonResp(200, o);
     }
 
