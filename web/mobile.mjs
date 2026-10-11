@@ -83,7 +83,18 @@ document.addEventListener('keydown', event => {
   }
 });
 
+// 叩关突破入口：手机端侧栏默认折叠、hero 隐藏，把可突破提示放到状态条下方常驻。
+const btQuick = document.createElement('button');
+btQuick.type = 'button'; btQuick.className = 'nz-bt-quick'; btQuick.dataset.action = 'goto-breakthrough';
+btQuick.textContent = '修为圆满 · 叩关突破 →'; btQuick.hidden = true;
+toggle.after(btQuick);
+function updateBreakthrough() {
+  const ready = !!document.querySelector('#progress-card .bt-cta, .hero .bt-chip');
+  if (btQuick.hidden === ready) btQuick.hidden = !ready;
+}
+
 function updateSummary() {
+  updateBreakthrough();
   const name = document.querySelector('#player-card .player-name')?.textContent.trim();
   const stats = [...document.querySelectorAll('#player-card .stat')];
   const value = label => stats.find(el => el.querySelector('label')?.textContent === label)?.querySelector('strong')?.textContent || '—';

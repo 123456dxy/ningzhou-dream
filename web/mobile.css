@@ -1,5 +1,5 @@
 /* 宁州一梦 · 手机端适配。独立覆盖层；桌面布局和游戏规则保持原样。 */
-.nz-character-toggle, .nz-tools-toggle, .nz-mobile-dungeons, .nz-mobile-nav, .nz-map-return, .nz-map-hint { display: none; }
+.nz-bt-quick, .nz-character-toggle, .nz-tools-toggle, .nz-mobile-dungeons, .nz-mobile-nav, .nz-map-return, .nz-map-hint { display: none; }
 
 @media (max-width: 690px) {
   html, body { overflow-x: clip; }
@@ -314,4 +314,10 @@
 @media (max-width: 690px) {
   .nz-map-hint { display: block; margin: 0; padding: 8px 12px 12px; font-size: 14px; line-height: 1.6; color: #526b4b; }
   .atlas-viewport[data-zoom="0.75"] .map-pin:not(.focused):not(.here) .pin-name { display: none; }
+}
+
+@media (max-width: 690px) {
+  .nz-bt-quick:not([hidden]) { display: block; width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid #c9a24f; background: #c9a24f; color: #1f3a32; font-size: 15px; font-weight: 700; }
+  .nz-character-open .nz-bt-quick { display: none; }
 }
