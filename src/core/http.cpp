@@ -276,9 +276,9 @@ void sendAll(int fd, const std::string& out) {
 
 void handleConnection(int fd, std::string ip, std::string staticDir, const Handler* api) {
 #ifdef _WIN32
-    const DWORD receiveTimeout = 1500, sendTimeout = 10000;
+    const DWORD receiveTimeout = 10000, sendTimeout = 15000;
 #else
-    const timeval receiveTimeout{1, 500000}, sendTimeout{10, 0};
+    const timeval receiveTimeout{10, 0}, sendTimeout{15, 0};
 #endif
     ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&receiveTimeout), sizeof(receiveTimeout));
     ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeout), sizeof(sendTimeout));
@@ -287,8 +287,12 @@ void handleConnection(int fd, std::string ip, std::string staticDir, const Handl
     char buf[8192];
     size_t contentLength = 0;
     bool headersDone = false, requestComplete = false, tooLarge = false;
-    const auto requestDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
-    while (std::chrono::steady_clock::now() < requestDeadline) {
+    // 每个连接独占一个线程，慢连接不会卡住别人；但仍限定总时长：
+    // 请求头 10 秒内收齐，正文（存档导入可达数 MB）90 秒内收齐，单次空闲 10 秒即断开。
+    const auto start = std::chrono::steady_clock::now();
+    for (;;) {
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        if (elapsed > std::chrono::seconds(headersDone ? 90 : 10)) break;
         const int n = static_cast<int>(::recv(fd, buf, sizeof(buf), 0));
         if (n <= 0) break;
         raw.append(buf, static_cast<size_t>(n));
