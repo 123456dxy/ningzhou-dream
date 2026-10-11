@@ -34,6 +34,8 @@ void ensureSociety(Game& g);
 bool storyRequiresMet(const Game& g, const data::StoryDef& s);
 // 返回空字符串表示可以触发；否则是拒绝原因
 string storyError(const Game& g, const data::StoryDef* s);
+// 选择本身的资源与重复结算检查；不满足时不得推进因缘记录。
+string storyChoiceError(const Game& g, const data::StoryDef& s, int optionIndex);
 
 // 完成一段支线并发放奖励。
 // optionIndex 为 0/1，对应两个选项。

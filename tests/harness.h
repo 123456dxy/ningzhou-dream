@@ -80,5 +80,8 @@ void runSectTrialTests();
 void runArtifactTests();
 void runRenownArtifactApiTests();
 void runRewardApiTests();
+void runEventRewardTests();
+void runNumericPreviewTests();
+void runSectCompletionTests();
 
 } // namespace nztest

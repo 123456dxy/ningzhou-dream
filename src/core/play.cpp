@@ -13,6 +13,7 @@
 #include "core/shop.h"
 #include "core/source_limits.h"
 #include "core/sim.h"
+#include "core/sect_trial.h"
 #include "core/sword.h"
 #include "data/reference_tables.h"
 
@@ -313,11 +314,8 @@ vector<SocialAction> socialActions(const Game& g, const string& npcId) {
         add("deep", "彻夜论道", "深谈一场，好感 +15、心境 +2", 5, 0);
     if (rel >= 60 && b.partner.empty())
         add("partner", "结为道侣", "确认道侣名分", 7, 0);
-    // 高境修士也要看你的名声（对应 renown::masterRequirement）
-    if (rel >= 40 && p.renown >= renown::masterRequirement() &&
-        b.master.empty() && !p.sect.empty() &&
-        n->sect == p.sect && n->stage > p.stage)
-        add("master", "拜师礼", "请对方收你为徒，需 20 灵石", 5, 20);
+    // 条件不满足时仍显示入口与准确原因，避免玩家误以为没有拜师系统。
+    add("master", "拜师礼", "拜本门高境修士为师：好感40、声望10，20灵石、5天", 5, 20);
     if (rel >= 30 && b.disciples.size() < 2 && p.stage >= 3 &&
         n->stage < p.stage &&
         std::find(b.disciples.begin(), b.disciples.end(), npcId) == b.disciples.end())
@@ -368,15 +366,16 @@ vector<SocialAction> socialActions(const Game& g, const string& npcId) {
                 a.reason = "境界相差超过 3 小境";
             }
         } else if (a.id == "master") {
-            if (g.player.stones < 20) {
-                a.enabled = false;
-                a.reason = "拜师礼需 20 灵石";
-            } else if (b.master == npcId) {
-                a.enabled = false;
-                a.reason = "此人已是你的师尊";
-            }
+            a.reason = sectMasterError(g, npcId);
+            a.enabled = a.reason.empty();
         } else if (a.id == "disciple") {
-            if (b.disciples.size() >= 2) {
+            if (b.master == npcId) {
+                a.enabled = false;
+                a.reason = "不能将现任师尊收为弟子";
+            } else if (b.partner == npcId) {
+                a.enabled = false;
+                a.reason = "道侣不能再结为师徒";
+            } else if (b.disciples.size() >= 2) {
                 a.enabled = false;
                 a.reason = "门下已满两人";
             }

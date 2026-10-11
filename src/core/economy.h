@@ -14,6 +14,10 @@ void ecoRefresh(Game& g);
 // 已得功法抄本同步（对应 ecoSyncBooks）
 void ecoSyncBooks(Game& g);
 
+// 取得的是可修习的功法抄本，不等于已学会；同步旧版两套书单。
+// 返回是否新增抄本；未知传承不会写入书单，重复持有不重复发放。
+bool ecoAcquireBook(Game& g, const string& id, const string& source);
+
 // 药材/法器价格
 int ecoSalePrice(const Game& g, const string& type, const string& id);
 

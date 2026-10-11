@@ -7,6 +7,7 @@ struct ArtifactAbility {
     bool valid = false;
     string gearId, shape, shapeName, desc;
     SpellDef spell;
+    Gear gear; // 原法宝：目录和炼器预览按真实装备、铭刻规则计算
 };
 string artifactShape(const Gear& gear);
 ArtifactAbility artifactAbility(const Gear& gear);

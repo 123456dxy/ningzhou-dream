@@ -1,4 +1,5 @@
 import { esc } from './shell.mjs';
+import { renderNumericPreview } from './numeric-preview.mjs';
 
 const kindLabel = { attack: '攻击', shield: '护盾', guard: '护盾', heal: '治疗', mana: '回灵',
   water: '蓄水', charge: '蓄势', poison: '施毒', fire: '灼烧', soul: '震荡', wave: '水势爆发',
@@ -8,7 +9,8 @@ export function renderArtifactAbility(ability, { compact = false } = {}) {
   if (!ability) return '';
   return `<div class="artifact-ability${compact ? ' compact' : ''}" data-artifact-ability="${esc(ability.id)}">`
     + `<div><strong>${esc(ability.name)}</strong><span>${esc(ability.dao)}道 · ${esc(kindLabel[ability.kind] || '法宝神通')}</span></div>`
-    + `<p>${esc(ability.description)}</p><small>耗灵力 ${esc(ability.cost)} · 冷却 ${esc(ability.cooldown)} 回合${ability.stageName ? ` · 需${esc(ability.stageName)}` : ''}</small></div>`;
+    + `<p>${esc(ability.description)}</p>` + renderNumericPreview(ability.preview, { compact })
+    + `<small>耗灵力 ${esc(ability.cost)} · 冷却 ${esc(ability.cooldown)} 回合${ability.stageName ? ` · 需${esc(ability.stageName)}` : ''}</small></div>`;
 }
 
 export function renderEquippedArtifacts(gears = []) {
@@ -43,7 +45,11 @@ export function renderForgePreview(preview) {
   if (!info || !info.valid) return `<div class="forge-preview"><p>${esc(info?.reason || preview.error || '当前配方无法推演。')}</p></div>`;
   return `<div class="forge-preview"><div class="forge-preview-heading"><strong>${esc(info.shapeName || '成器预览')}</strong><span>${esc(info.grade)}阶 · 成功率 ${Math.round(info.chance * 100)}%</span></div>`
     + `<p>${esc(info.mainName)} · ${esc(info.mainElement)}${esc(info.mainPolarity)} · 铸炼 ${esc(info.days)} 天 · ${esc(info.cost)} 灵石</p>`
+    + (info.passive?.text ? `<div class="forge-passive"><strong>装备数值变化</strong><p>${esc(info.passive.text)}</p></div>` : '')
     + renderArtifactAbility(info.ability)
+    + (info.inscribedAbility ? `<details class="forge-inscribed"><summary>铭刻后的数值</summary>`
+      + (info.inscribedPassive?.text ? `<p>${esc(info.inscribedPassive.text)}</p>` : '')
+      + renderArtifactAbility(info.inscribedAbility) + `</details>` : '')
     + (info.enabled === false ? `<p class="forge-preview-reason">${esc(info.reason)}</p>` : '')
     + `<p class="forge-preview-note">只推演配方；开炉后才消耗材料。成器装备后获得此法宝神通。</p></div>`;
 }

@@ -18,6 +18,7 @@
 #include <limits>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -44,6 +45,7 @@
 #include "core/legacy.h"
 #include "core/play.h"
 #include "core/renown.h"
+#include "core/reward_receipt.h"
 #include "core/roster.h"
 #include "core/save.h"
 #include "core/shop.h"
@@ -112,6 +114,74 @@ Value num(double v) { return Value(v); }
 Value num(long long v) { return Value(static_cast<double>(v)); }
 Value str(const std::string& s) { return Value(s); }
 Value str(const char* s) { return Value(std::string(s ? s : "")); }
+std::string decimal(double value) {
+    std::ostringstream out; out << std::fixed << std::setprecision(1) << value;
+    return out.str();
+}
+Value previewView(const Player& player, const SpellDef& spell) {
+    const Preview pv = battleReferencePreview(player, spell);
+    const Battle opening = battleReferenceState(player);
+    Value o(json::Object{});
+    o.set("valid", Value(pv.valid)); o.set("reference", Value(true));
+    o.set("context", str("按当前" + realmName(player.stage) + "、已装备功法/悟道/法器与开局准备计算；气血上限" +
+        std::to_string(opening.max) + "、开局灵力" + std::to_string(opening.mana) +
+        "；目标无护盾/减伤，无相生或额外蓄积状态。境界未满足时仅供参考。"));
+    o.set("damage", num(pv.damage)); o.set("shield", num(pv.shield));
+    o.set("heal", num(pv.heal)); o.set("healPotential", num(pv.healPotential));
+    o.set("cost", num(pv.cost)); o.set("energy", num(pv.energy)); o.set("manaGain", num(pv.manaGain));
+    o.set("qi", num(pv.qi)); o.set("draw", num(pv.draw)); o.set("drawNext", num(pv.drawNext));
+    o.set("hpMaxChange", num(pv.hpMaxChange)); o.set("manaRegenDelta", num(pv.manaRegenDelta));
+    o.set("storedMana", num(pv.storedMana)); o.set("damageBonusPct", num(pv.damageBonusPct));
+    o.set("reductionPct", num(pv.reductionPct)); o.set("guardPct", num(pv.guardPct));
+    o.set("text", str(pv.text)); o.set("conditions", str(battlePreviewConditions(player, spell)));
+    json::Array statuses;
+    for (const auto& effect : pv.statuses) {
+        Value item(json::Object{});
+        item.set("id", str(effect.id)); item.set("name", str(effect.name)); item.set("target", str(effect.target));
+        item.set("amount", num(effect.amount)); item.set("total", num(effect.total));
+        item.set("turns", num(effect.turns)); item.set("cap", num(effect.cap)); item.set("perTurn", num(effect.perTurn));
+        statuses.push_back(std::move(item));
+    }
+    o.set("statuses", Value(std::move(statuses)));
+    return o;
+}
+Player artifactProjectedPlayer(const Player& player, const Gear& gear) {
+    Player projected = player;
+    auto& inventory = projected.arts.gear;
+    auto existing = std::find_if(inventory.begin(), inventory.end(), [&](const Gear& item) { return item.id == gear.id; });
+    if (existing == inventory.end()) inventory.push_back(gear); else *existing = gear;
+    projected.arts.equipped[gear.slot] = gear.id;
+    return projected;
+}
+Value artifactPassiveView(const Player& player, const Gear& gear) {
+    Player projected = artifactProjectedPlayer(player, gear);
+    const ArtMods before = talentMods(player), after = talentMods(projected);
+    const double primary = gear.bonus * (artHas(player.arts, "器", 3) ? 1.2 : 1.0) * (gear.inscribed ? 1.12 : 1.0);
+    const double element = gear.bonus * 0.5;
+    const double polarity = gear.bonus * (gear.polarity == "天阳" ? 0.1 : 0.2);
+    const std::string primaryName = gear.slot == "weapon" ? "攻击倍率" : gear.slot == "armor" ? "气血倍率" : "灵力属性";
+    const double primaryValue = gear.slot == "accessory" ? jsRound(primary * 10) : primary * 100;
+    std::string text = "装备被动：" + primaryName + "+" + decimal(primaryValue) +
+        (gear.slot == "accessory" ? "点" : "个百分点") + "；";
+    if (daoIndex(gear.element) >= 0) text += gear.element + "系伤害倍率+" + decimal(element * 100) + "个百分点；";
+    text += (gear.polarity == "天阳" ? "攻击倍率+" : "护盾倍率+") + decimal(polarity * 100) + "个百分点。";
+    text += "替换当前同槽装备后：攻击倍率" + decimal((after.attack - before.attack) * 100) +
+        "个百分点、气血上限" + std::to_string(battleReferenceState(projected).max - battleReferenceState(player).max) +
+        "、每回合灵力" + std::to_string(battleEnergy(projected) - battleEnergy(player)) +
+        "（已计入属性上限；灵力属性每4点影响自然回复）。";
+    Value o(json::Object{});
+    o.set("text", str(text)); o.set("primaryStat", str(primaryName)); o.set("primaryValue", num(primaryValue));
+    o.set("elementBonusPct", num(daoIndex(gear.element) >= 0 ? element * 100 : 0));
+    o.set("polarityStat", str(gear.polarity == "天阳" ? "attack" : "shield")); o.set("polarityBonusPct", num(polarity * 100));
+    o.set("inscribed", Value(gear.inscribed));
+    Value delta(json::Object{});
+    delta.set("attackPct", num((after.attack - before.attack) * 100)); delta.set("hpPct", num((after.hp - before.hp) * 100));
+    delta.set("shieldPct", num((after.shield - before.shield) * 100)); delta.set("mana", num(after.mana - before.mana));
+    delta.set("hpMax", num(battleReferenceState(projected).max - battleReferenceState(player).max));
+    delta.set("manaRegen", num(battleEnergy(projected) - battleEnergy(player)));
+    const int ei = daoIndex(gear.element); delta.set("elementPct", num(ei >= 0 ? (after.elements[ei] - before.elements[ei]) * 100 : 0));
+    o.set("delta", std::move(delta)); return o;
+}
 Value artifactView(const Player& player, const ArtifactAbility& ability) {
     if (!ability.valid) return Value();
     const auto& sp = ability.spell;
@@ -121,6 +191,11 @@ Value artifactView(const Player& player, const ArtifactAbility& ability) {
     o.set("dao", str(sp.dao)); o.set("kind", str(sp.kind));
     o.set("description", str(ability.desc)); o.set("cost", num(battleCost(player, sp)));
     o.set("cooldown", num(sp.cooldown)); o.set("stage", num(sp.stage)); o.set("stageName", str(realmName(sp.stage)));
+    const Player projected = artifactProjectedPlayer(player, ability.gear);
+    o.set("preview", previewView(projected, sp));
+    o.set("passive", artifactPassiveView(player, ability.gear));
+    o.set("canEquip", Value(player.stage >= sp.stage));
+    o.set("inscribed", Value(ability.gear.inscribed));
     return o;
 }
 
@@ -369,6 +444,15 @@ Value buildState(const Game& g) {
             o.set("spells", Value(std::move(arr)));
         }
         o.set("spellSlots", num(battleSpellSlots(g.player)));
+        {
+            json::Array known, books;
+            for (const auto& id : a.knownSpells) known.push_back(str(id));
+            vector<string> ownedBooks = a.bookList;
+            for (const auto& id : g.economy.books)
+                if (std::find(ownedBooks.begin(), ownedBooks.end(), id) == ownedBooks.end()) ownedBooks.push_back(id);
+            for (const auto& id : ownedBooks) books.push_back(str(id));
+            o.set("knownSpells", Value(std::move(known))); o.set("bookList", Value(std::move(books)));
+        }
         o.set("manaRegen", num(battleEnergy(g.player)));
         {
             json::Array mandatory;
@@ -380,6 +464,7 @@ Value buildState(const Game& g) {
                 item.set("copies", num(5));
                 item.set("mandatory", Value(true));
                 item.set("description", str(sp ? battleSpellDescription(*sp) : ""));
+                if (sp) item.set("preview", previewView(g.player, *sp));
                 mandatory.push_back(std::move(item));
             }
             o.set("mandatorySpells", Value(std::move(mandatory)));
@@ -400,6 +485,7 @@ Value buildState(const Game& g) {
                 so.set("stage", num(sp ? sp->stage : 0));
                 so.set("stageName", str(sp ? realmName(sp->stage) : ""));
                 so.set("description", str(sp ? battleSpellDescription(*sp) : ""));
+                if (sp) so.set("preview", previewView(g.player, *sp));
                 arr.push_back(std::move(so));
             }
             o.set("spellList", Value(std::move(arr)));
@@ -897,6 +983,10 @@ Value buildState(const Game& g) {
             o.set("opening", str(st.opening));
             o.set("opt1Name", str(st.opt1Name));
             o.set("opt1Effect", str(st.opt1Effect));
+            const std::string firstError = err.empty() ? storyChoiceError(g, st, 0) : err;
+            const std::string secondError = err.empty() ? storyChoiceError(g, st, 1) : err;
+            o.set("opt1Enabled", Value(firstError.empty())); o.set("opt1Reason", str(firstError));
+            o.set("opt2Enabled", Value(secondError.empty())); o.set("opt2Reason", str(secondError));
             o.set("opt2Name", str(st.opt2Name));
             o.set("opt2Effect", str(st.opt2Effect));
             o.set("done", Value(g.bonds.stories.count(st.id) > 0));
@@ -1094,6 +1184,7 @@ Value buildState(const Game& g) {
             o.set("price", num(gr.price));
             o.set("element", str(gr.element)); o.set("polarity", str(gr.polarity));
             o.set("crafted", Value(gr.crafted)); o.set("shape", str(artifactShape(gr)));
+            o.set("inscribed", Value(gr.inscribed)); o.set("passive", artifactPassiveView(g.player, gr));
             const ArtifactAbility ability = artifactAbility(gr);
             o.set("shapeName", str(ability.shapeName)); o.set("ability", artifactView(g.player, ability));
             auto it = g.player.arts.equipped.find(gr.slot);
@@ -1208,6 +1299,19 @@ Value buildState(const Game& g) {
             arr.push_back(std::move(o));
         }
         s.set("furnaces", Value(std::move(arr)));
+    }
+    {
+        json::Array arr;
+        for (const auto& def : data::BaseManualDef_TABLE()) {
+            ManualInfo info;
+            if (!findManualInfo(def.id, info)) continue;
+            Value item(json::Object{});
+            item.set("id", str(info.id)); item.set("name", str(info.name)); item.set("dao", str(info.dao));
+            item.set("stage", num(info.stage)); item.set("stageName", str(realmName(info.stage)));
+            item.set("effect", str(info.effect));
+            arr.push_back(std::move(item));
+        }
+        s.set("manualCatalog", Value(std::move(arr)));
     }
     {
         json::Array arr;
@@ -1687,6 +1791,7 @@ http::Response handle(const http::Request& req) {
         } else {
             Player& p = g.player;
             const Pending ev = *g.pending;
+            const RewardReceipt receipt(g);
             if (ev.type == "sectInvitation") {
                 if (id == "join" && p.sect.empty()) {
                     logEvent(g, "sect",
@@ -1713,7 +1818,7 @@ http::Response handle(const http::Request& req) {
                         applyDamage(g, 16);
                         p.health = std::max(1, p.health);
                     }
-                    logEvent(g, "self", "你合力破阵，机缘入袋。", true);
+                    logEvent(g, "self", "你合力破阵，按灵药存量与同行道友结算收获。", true);
                 } else if (id == "take") {
                     const int found = std::min(5, g.world.herbs);
                     p.herbs += found;
@@ -1726,6 +1831,7 @@ http::Response handle(const http::Request& req) {
                     logEvent(g, "self", "你记下方位与阵纹，留待日后再访。");
                 }
             }
+            logEvent(g, "self", "「" + ev.title + "」实际结算：" + receipt.changes(g) + "。");
             g.pending.reset();
         }
         return jsonOk(okWithState(g));
@@ -1889,6 +1995,7 @@ http::Response handle(const http::Request& req) {
             so.set("stage", num(sp.stage));
             so.set("stageName", str(realmName(sp.stage)));
             so.set("description", str(battleSpellDescription(sp)));
+            so.set("preview", previewView(g.player, sp));
             so.set("requiresTarget", Value(battleNeedsTarget(sp)));
             const bool mandatory = sp.id == "strike" || sp.id == "defend";
             const bool carried = mandatory || std::find(g.player.arts.spells.begin(),
@@ -1898,6 +2005,11 @@ http::Response handle(const http::Request& req) {
             so.set("mandatory", Value(mandatory));
             const bool known = mandatory || std::find(g.player.arts.knownSpells.begin(), g.player.arts.knownSpells.end(), sp.id) != g.player.arts.knownSpells.end();
             so.set("known", Value(known));
+            so.set("learned", Value(known)); so.set("equipped", Value(carried));
+            so.set("learnable", Value(!known && g.player.stage >= sp.stage));
+            so.set("canEquip", Value(!mandatory && !carried && known && g.player.stage >= sp.stage &&
+                g.player.arts.spells.size() < static_cast<size_t>(battleSpellSlots(g.player))));
+            so.set("canUnequip", Value(!mandatory && carried));
             so.set("unlocked", Value(g.player.stage >= sp.stage));
             std::string reason;
             if (mandatory) reason = "普通招式固定携带，不占额外神通名额。";
@@ -1989,6 +2101,8 @@ http::Response handle(const http::Request& req) {
             if (st.id != id) continue;
             const std::string err = storyError(g, &st);
             if (!err.empty()) return jsonError(err);
+            const std::string choiceError = storyChoiceError(g, st, choice);
+            if (!choiceError.empty()) return jsonError(choiceError);
             storyComplete(g, st, choice);
             return jsonOk(okWithState(g));
         }
@@ -2305,6 +2419,26 @@ http::Response handle(const http::Request& req) {
             arr.push_back(std::move(so));
         }
         o.set("sects", Value(std::move(arr)));
+        o.set("masterRequirement", num(renown::masterRequirement()));
+        o.set("mentorAffinityNeed", num(40));
+        o.set("sectTaskUsed", num(sectTasksTakenThisMonth(g))); o.set("sectTaskLimit", num(3));
+        json::Array mentors;
+        for (const auto* npc : sectMentorCandidates(g)) {
+            Value item(json::Object{});
+            item.set("id", str(npc->id)); item.set("name", str(npc->name)); item.set("stage", num(npc->stage));
+            item.set("realmName", str(realmName(npc->stage))); item.set("location", str(npc->location));
+            const auto* location = findLoc(npc->location);
+            item.set("locationName", str(location ? location->name : npc->location));
+            const auto relation = g.player.relations.find(npc->id);
+            item.set("relation", num(relation == g.player.relations.end() ? 0 : relation->second));
+            item.set("isMaster", Value(g.bonds.master == npc->id));
+            const string reason = sectMasterError(g, npc->id);
+            item.set("enabled", Value(reason.empty())); item.set("reason", str(reason));
+            item.set("portrait", str(personPortrait(npc->gender, npc->sect)));
+            item.set("cost", num(20)); item.set("days", num(5));
+            mentors.push_back(std::move(item));
+        }
+        o.set("mentors", Value(std::move(mentors)));
         return jsonOk(o);
     }
 
@@ -2514,6 +2648,14 @@ http::Response handle(const http::Request& req) {
         projected.name = forge.mainName + forge.shapeName; projected.slot = forge.shapeSlot; projected.grade = forge.grade;
         projected.element = forge.mainElement; projected.polarity = forge.mainPolarity; projected.bonus = forge.bonus;
         o.set("ability", artifactView(g.player, artifactAbility(projected)));
+        if (forge.valid) {
+            o.set("passive", artifactPassiveView(g.player, projected));
+            projected.inscribed = true;
+            o.set("inscribedAbility", artifactView(g.player, artifactAbility(projected)));
+            o.set("inscribedPassive", artifactPassiveView(g.player, projected));
+            o.set("inscribeCost", num(30 * forge.grade));
+            o.set("inscribeRequirement", str("器道入门；成器后花费30×品阶灵石铭刻。"));
+        }
         result.set("ok", Value(true)); result.set("info", std::move(o)); return jsonOk(result);
     }
 
@@ -2594,8 +2736,8 @@ http::Response handle(const http::Request& req) {
         for (const char* ty : types) {
             const std::string type(ty);
             if (type == "task") {
-                // 四种宗门/城中差事（对应 economy.cpp 的 ecotasks 表）
-                for (const char* tid : {"errand", "escort", "inspect", "sect"}) {
+                // 城中差事及与 sectTaskDefs 共用定义的宗门差事。
+                for (const char* tid : {"errand", "escort", "inspect", "sect", "sect-patrol", "sect-records", "sect-array"}) {
                     const std::string err = ecoActionError(g, "task", tid);
                     const EcoActionInfo info = ecoActionInfo(g, "task", tid);
                     Value eo(json::Object{});
@@ -2610,6 +2752,18 @@ http::Response handle(const http::Request& req) {
                     eo.set("pay", num(info.fee));
                     eo.set("enabled", Value(err.empty()));
                     eo.set("reason", str(err));
+                    if (const auto* task = findSectTask(tid)) {
+                        eo.set("desc", str(task->desc)); eo.set("sect", Value(true));
+                        eo.set("contribution", num(task->contribution));
+                        const auto* sect = findSect(g.player.sect); eo.set("dao", str(sect ? sect->element : ""));
+                        Player rewardPreview = g.player;
+                        if (sect && task->daoExp > 0) artGain(rewardPreview, sect->element, task->daoExp);
+                        const auto expBefore = sect ? g.player.arts.exp.find(sect->element) : g.player.arts.exp.end();
+                        const double originalExp = expBefore == g.player.arts.exp.end() ? 0 : expBefore->second;
+                        eo.set("daoExp", num(sect ? jsRound(rewardPreview.arts.exp[sect->element] - originalExp) : 0));
+                        eo.set("daoPoints", num(rewardPreview.arts.points - g.player.arts.points));
+                        eo.set("monthlyUsed", num(sectTasksTakenThisMonth(g))); eo.set("monthlyLimit", num(3));
+                    }
                     arr.push_back(std::move(eo));
                 }
             } else if (type == "commission") {

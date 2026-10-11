@@ -16,8 +16,9 @@ import * as cards from '../web/cards.mjs';
 import * as dungeons from '../web/dungeons.mjs';
 import * as caveUI from '../web/cave-ui.mjs';
 import { renderEnding } from '../web/legacy.mjs';
-import { renderSectPicker, renderSectSpellLibrary } from '../web/sects.mjs';
+import { renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks } from '../web/sects.mjs';
 import * as artifacts from '../web/artifacts.mjs';
+import { renderNumericPreview } from '../web/numeric-preview.mjs';
 import { renderRenownSources } from '../web/renown.mjs';
 import { renderEconomy, forgeRequirements } from '../web/economy.mjs';
 
@@ -142,6 +143,29 @@ verify(dynamicSpells.includes('所需境界：金丹初期') && dynamicSpells.in
 const buildState = { ...dynamicState, artBuilds: [{ id: 'metal', name: '锐金弃牌', desc: '弃牌积累锐势，下一次直攻消耗锐势。', manuals: ['gold'], spells: ['one'], nodes: ['0-1'] }], arts: { ...dynamicState.arts, manualList: [{ id: 'gold', name: '金诀', isAux: true }] } };
 const buildHTML = renderArtBuilds(buildState, { spells: [{ id: 'one', name: '灵击' }] }, [{ id: '0-1', name: '锐势' }]);
 verify(buildHTML.includes('3 / 3 已具备') && buildHTML.includes('金诀') && buildHTML.includes('下一次直攻消耗锐势'), '流派组合解析组件与当前配装并显示真实触发条件');
+const preview = { valid: true, text: '伤害 24；灼烧 +2 层，每回合 6 点，持续 3 回合。', conditions: '每层剑气追加伤害；当前剑气为 0。', context: '按当前境界与已装备功法计算，目标无护盾。' };
+const learningState = { ...state, arts: { ...state.arts, knownSpells: ['known', 'blocked'] } };
+const learningPicker = renderSpellPicker({ spells: [
+  { id:'unknown', name:'未学神通', stage:0, kind:'fire', known:false, enabled:false, preview },
+  { id:'known', name:'已学神通', stage:0, known:true, enabled:true, preview },
+  { id:'blocked', name:'受限神通', stage:0, known:true, enabled:false, reason:'当前不可调整' },
+] }, learningState);
+verify(/class="card unlearned"[^>]*data-spell-id="unknown" disabled/.test(learningPicker)
+  && !learningPicker.includes('data-action="spell" data-id="unknown"') && learningPicker.includes('未学会'), '未学神通明确置灰标记且不提供携带动作');
+verify(learningPicker.includes('已学会 · 未携带') && learningPicker.includes('data-action="spell" data-id="known"')
+  && !learningPicker.includes('data-action="spell" data-id="blocked"'), '已学未携带与后端禁止调整分别展示，动作遵守核心可用状态');
+verify(learningPicker.includes('伤害 24') && learningPicker.includes('每回合 6 点') && learningPicker.includes('目标无护盾'), '非战斗神通显示实际数值与试算依据');
+const catalogBuild = renderArtBuilds({ ...state, manualCatalog:[{id:'hidden',name:'重元转轮诀'}], manualSources:[{id:'copied',name:'问心诀',owned:true}], artBuilds:[
+  {id:'copy',name:'功法进度',manuals:['hidden','copied'],spells:['unknown','known']}
+] }, { spells:[{id:'unknown',name:'灵击',known:false},{id:'known',name:'明心咒',known:true}] }, []);
+verify(catalogBuild.includes('重元转轮诀') && !catalogBuild.includes('>hidden<') && catalogBuild.includes('抄本已得 · 待修习')
+  && catalogBuild.includes('未学会') && catalogBuild.includes('已学会 · 未携带'), '组合由完整中文目录解析功法，并区分抄本、修习、学习与携带状态');
+verify(renderNumericPreview({valid:true,text:'<script>1</script>'}).includes('&lt;script&gt;')
+  && renderNumericPreview({valid:false,text:'错误数值'}) === '', '数值预览转义文本且不把无效推演当作正常数字');
+const numberedForge = artifacts.renderForgePreview({info:{valid:true,shapeName:'剑',grade:1,chance:.6,days:8,cost:33,
+  passive:{text:'攻击倍率 +12 个百分点；气血上限 +0。'},ability:{id:'test',name:'天阳剑',dao:'剑',kind:'attack',cost:2,cooldown:1,preview},
+  inscribedAbility:{id:'test',name:'铭刻天阳剑',dao:'剑',kind:'attack',preview:{valid:true,text:'伤害 27'}},inscribedPassive:{text:'攻击倍率 +13.4 个百分点。'}}});
+verify(numberedForge.includes('伤害 24') && numberedForge.includes('攻击倍率 +12') && numberedForge.includes('铭刻后的数值') && numberedForge.includes('伤害 27'), '炼器同时显示装备属性、主动技能数字和铭刻对照');
 const statusRows = cards.battleStatusRows({ buff: .3, reduction: -.2, effectiveReduction: .35, guard: .1,
   manaBonus: 2, manaPenalty: 1, carryMana: 3, carryCap: 4, drawNext: 2, lock: 2,
   weakened: 2, weakenedPenalty: .3, discardPower: .16, swordSequence: 3 });
@@ -202,7 +226,8 @@ const document = { querySelector: element, getElementById(id) { return element('
   querySelectorAll() { return []; }, addEventListener(type, fn) { handlers[type] = fn; },
   body: { setAttribute() {}, removeAttribute() {} } };
 const requests = [];
-const context = { ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
+const context = { ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
+  renderSectMentors, renderSectTasks,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
   fetch: async (path, options) => { requests.push({ path, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; } };
@@ -318,6 +343,18 @@ verify(accidentalEnding.includes('data-action="checkpoint-restore"') && accident
   && accidentalEnding.includes('手动存档位 2') && accidentalEnding.includes('第 2 年 2 月 1 日'), '意外陨落显示接受死亡或回档，以及真实保存日期与来源');
 verify(!renderEnding({...endingState,ending:{cause:'寿元耗尽',canRestore:false}},{milestones:[]}).includes('checkpoint-restore'), '自然寿尽不提供回档入口');
 verify(!renderEnding({...endingState,checkpoint:{enabled:false}},{milestones:[]}).includes('checkpoint-restore'), '没有可恢复存档时不提供回档入口');
+const memberState = {...state,player:{...state.player,sect:'jinhong',location:'jinhong'},bondActions:[{id:'lesson',enabled:false,reason:'本月已受业'}]};
+const mentorHTML = renderSectMentors({mentors:[{id:'elder',name:'同门长老',realmName:'筑基初期',relation:12,location:'jinhong',enabled:false,reason:'好感未达40'},
+  {id:'master',name:'师尊',realmName:'金丹初期',relation:60,location:'tianxing',isMaster:true}]},memberState);
+verify(mentorHTML.includes('好感未达40') && /data-id="master" disabled/.test(mentorHTML)
+  && mentorHTML.includes('data-action="sect-mentor-detail" data-npc="elder"') && mentorHTML.includes('data-action="sect-locate" data-id="tianxing"'), '师门页完整显示未满足拜师条件、当面往来入口和远处师尊所在');
+const sectJobsHTML = renderSectTasks(memberState,[{type:'task',id:'sect-patrol',name:'巡守山门',days:7,pay:25,contribution:12,dao:'金',daoExp:4,enabled:true},
+  {type:'task',id:'city',name:'城市差事',enabled:true}],{sectTaskUsed:1,sectTaskLimit:3});
+verify(sectJobsHTML.includes('本月已接 1 / 3') && sectJobsHTML.includes('贡献 +12') && sectJobsHTML.includes('金道经验 +4')
+  && !sectJobsHTML.includes('城市差事') && sectJobsHTML.includes('data-action="eco-run" data-type="task" data-id="sect-patrol"'), '宗门任务板只展示宗门任务，明示真实报酬和共享额度');
+const memberMap = renderAtlas(memberState,{focus:'jinhong'});
+verify(memberMap.includes('进入宗门') && memberMap.includes('data-sub="mentors"') && memberMap.includes('data-sub="jobs"')
+  && !renderAtlas(state,{focus:'jinhong'}).includes('data-action="sect-open"'), '地图抵达本宗后直达拜师、任务与藏经阁，远处宗门不能越过赶路');
 const sectsHTML = renderSectPicker({sects:[{id:'jinhong',name:'金虹剑派',enabled:false,reason:'需抵达金虹剑派山门',trial:{name:'金剑试炼',desc:'非致命的金剑连击考核',cost:10,days:3,stageName:'炼气初期'}}]},state.player);
 verify(sectsHTML.includes('金剑试炼') && sectsHTML.includes('10 灵石 · 3 天') && /data-action="join-sect"[^>]*disabled/.test(sectsHTML)
   && sectsHTML.includes('data-action="sect-locate" data-id="jinhong"'), '宗门卡片显示真实试炼费用与时间，异地不可报名且可在舆图定位山门');

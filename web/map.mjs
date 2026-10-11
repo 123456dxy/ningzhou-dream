@@ -71,6 +71,21 @@ function journeyPanel(state) {
     + `<p class="travel-paid">${job.cost > 0 ? `启程已付 ${job.cost} 灵石，中止不会返还。` : '本段赶路无需灵石。'}途中遇事会暂停。</p></section>`;
 }
 
+const JOINABLE_SECTS = new Set(['jinhong', 'xinghe', 'zhushan', 'lihuo', 'huachen']);
+
+export function renderSectEntrance(state, location, blocked = '') {
+  if (!JOINABLE_SECTS.has(location?.id)) return '';
+  const player = state.player || {};
+  const here = player.location === location.id;
+  const own = player.sect === location.id;
+  return `<section class="map-sect-entrance" data-sect-entrance="${esc(location.id)}"><h4>${own ? '本宗山门' : '山门入口'}</h4>`
+    + `<p>${own ? '入内可办理宗门差事、拜师受业与藏经阁传承。' : !player.sect ? '抵达后可报名实战考核，获胜才能正式拜入宗门。' : '已拜入另一宗门，可以查看这处山门的情况。'}</p>`
+    + (here ? `<button class="primary" data-action="${own ? 'sect-open' : 'sect-trial-open'}" data-id="${esc(location.id)}" data-sub="${own ? 'sect' : 'sect'}" ${blocked ? 'disabled' : ''}>${own ? '进入宗门' : !player.sect ? '山门报名与考核' : '查看山门'}</button>`
+        + (own ? `<div class="sect-entry-actions"><button data-action="sect-open" data-id="${esc(location.id)}" data-sub="mentors" ${blocked ? 'disabled' : ''}>拜师与受业</button><button data-action="sect-open" data-id="${esc(location.id)}" data-sub="jobs" ${blocked ? 'disabled' : ''}>宗门差事</button><button data-action="sect-open" data-id="${esc(location.id)}" data-sub="library" ${blocked ? 'disabled' : ''}>藏经阁</button></div>` : '')
+        + `${blocked ? `<small>${esc(blocked)}</small>` : ''}`
+      : '<small>需先完成下方赶路，抵达山门后才可进入。</small>') + '</section>';
+}
+
 function destinationPanel(state, focus, requestedMode) {
   if (!focus) return '<aside class="atlas-destination"><div class="empty">暂时没有可查看的地点。</div></aside>';
   const here = focus.id === state.player.location;
@@ -81,7 +96,7 @@ function destinationPanel(state, focus, requestedMode) {
     : state.job ? travelling ? '正在赶路，可在上方继续或中止当前行程' : '先完成或中止当前营生' : '';
   const available = !here && !blocked && !!option?.enabled;
   const options = focus.travel?.options || [];
-  const services = (focus.services || []).map(service => {
+  const services = (focus.services || []).filter(service => !(service.id === 'sect' && JOINABLE_SECTS.has(focus.id))).map(service => {
     const enabled = here && !blocked && service.enabled;
     const reason = !here ? '需先抵达此地' : blocked || service.reason;
     return `<div class="location-service"><div><strong>${esc(service.name)}</strong>`
@@ -96,6 +111,7 @@ function destinationPanel(state, focus, requestedMode) {
     + `<h3>${esc(focus.name)}</h3></div><span class="destination-danger${focus.danger >= 50 ? ' high' : ''}">${focus.danger ? `危险 ${focus.danger}` : '安宁'}</span></div>`
     + (art ? `<p class="destination-theme" data-location-theme><span>${art.illustrative ? '景观意象' : '景观'}</span>${esc(art.subtitle)}</p>` : '')
     + `<p class="destination-description">${esc(focus.desc)}</p>`
+    + renderSectEntrance(state, focus, blocked)
     + (here ? `<div class="destination-here">你正在${esc(focus.name)}。点舆图上的另一处地点，安排下一程。</div>`
       : `<div class="route-quote"><span>${esc(state.player.locationName)} → ${esc(focus.name)}</span>`
         + `<small>地图距离 ${esc(focus.travel?.distance ?? '—')}</small></div>`

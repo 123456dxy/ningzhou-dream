@@ -109,9 +109,24 @@ struct Preview {
     int heal = 0;
     int energy = 0;
     int qi = 0;
+    int healPotential = 0;  // 不受当前缺血限制的单次治疗量
+    int manaGain = 0;       // 扣费后恢复的灵力；energy 是最终净变化
+    int draw = 0, drawNext = 0;
+    int hpMaxChange = 0, manaRegenDelta = 0, storedMana = 0;
+    double damageBonusPct = 0, reductionPct = 0, guardPct = 0;
+    struct Status {
+        string id, name, target;
+        int amount = 0, total = 0, turns = 0, cap = 0, perTurn = 0;
+    };
+    vector<Status> statuses;
     string text;
 };
 Preview battlePreview(const Player& p, const Battle& b, const string& id);
+// 目录和炼器的参考环境与真实斗法使用相同的开局属性、结算函数。
+// 不抽牌、不生成对手、不消耗 RNG；参考手牌固定五张，仅用于说明换念。
+Battle battleReferenceState(const Player& p);
+Preview battleReferencePreview(const Player& p, const SpellDef& spell);
+string battlePreviewConditions(const Player& p, const SpellDef& spell);
 
 // 修士按已抽到的神通和灵力决定本回合连招；预览不改变牌堆或随机数。
 struct EnemyPreview {

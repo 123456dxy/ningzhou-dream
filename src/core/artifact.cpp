@@ -25,7 +25,7 @@ ArtifactAbility artifactAbility(const Gear& gear) {
     a.shape = artifactShape(gear);
     if (a.shape.empty()) return a;
     for (const auto& form : data::ShapeDef_TABLE()) if (form.id == a.shape) a.shapeName = form.name;
-    a.valid = true; a.gearId = gear.id;
+    a.valid = true; a.gearId = gear.id; a.gear = gear;
     auto& sp = a.spell;
     sp.id = "artifact:" + gear.id;
     sp.name = gear.name + "·催动";

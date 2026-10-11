@@ -1,6 +1,7 @@
 // 宁州一梦 · C++ 版 — 洞府道法实现（对应 JS 版 arts.mjs）
 #include "core/arts.h"
 #include "core/economy.h"
+#include "core/reward_receipt.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -1003,6 +1004,8 @@ string artQuestError(const Game& g, const data::QuestDef* q) {
 void artRewardQuest(Game& g, const data::QuestDef& q) {
     Player& p = g.player;
     Arts& a = p.arts;
+    if (a.quests.count(q.id)) return;
+    const RewardReceipt receipt(g);
     a.quests[q.id] = g.year;
     a.progress.quests++;
 
@@ -1029,9 +1032,7 @@ void artRewardQuest(Game& g, const data::QuestDef& q) {
         {"again", "array"}, {"traitor", "fire"}, {"demon", "zhou"}};
     for (const auto& [qid, mid] : manuals) {
         if (q.id != qid) continue;
-        if (std::find(a.bookList.begin(), a.bookList.end(), mid) ==
-            a.bookList.end())
-            a.bookList.push_back(mid);
+        ecoAcquireBook(g, mid, "机缘「" + q.name + "」");
     }
 
     if (q.id == "pair") a.points += 2;
@@ -1045,7 +1046,7 @@ void artRewardQuest(Game& g, const data::QuestDef& q) {
             if (r.name == pname) a.potions[r.id] = a.potions[r.id] + 1;
     }
 
-    logEvent(g, "self", "完成「" + q.name + "」：" + q.reward + "。", true);
+    logEvent(g, "self", "完成「" + q.name + "」：" + receipt.changes(g) + "。", true);
 }
 
 // ------------------------------------------------------------

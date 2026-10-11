@@ -137,20 +137,30 @@ void runPlayTests() {
         }
     }
 
-    // ---- 好感不够时，道侣/拜师不该出现 ----
+    // ---- 好感不够时道侣未解锁，拜师入口保留并写清缺少条件 ----
     {
         Game g = createGame(CreateOptions{});
         g.player.location = "wuling";
         for (auto& n : g.npcs) {
             if (!n.alive || n.location != "wuling") continue;
+            g.player.sect = n.sect = "jinhong";
+            g.player.renown = 10;
+            n.stage = g.player.stage + 1;
+            g.player.relations[n.id] = 0;
             const auto acts = play::socialActions(g, n.id);
-            bool hasPartner = false, hasMaster = false;
+            bool hasPartner = false, hasMaster = false, masterEnabled = false;
+            std::string masterReason;
             for (const auto& a : acts) {
                 if (a.id == "partner") hasPartner = true;
-                if (a.id == "master") hasMaster = true;
+                if (a.id == "master") {
+                    hasMaster = true;
+                    masterEnabled = a.enabled;
+                    masterReason = a.reason;
+                }
             }
             check(!hasPartner, "好感 0 时看不到「结为道侣」");
-            check(!hasMaster, "好感 0 时看不到「拜师礼」");
+            check(hasMaster && !masterEnabled && masterReason.find("好感不足40") != std::string::npos,
+                  "好感 0 时拜师入口可见但禁用，并说明好感门槛");
             break;
         }
     }

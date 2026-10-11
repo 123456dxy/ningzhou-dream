@@ -449,25 +449,47 @@ static void battleInitCards(Game& g, bool migrate) {
 // ------------------------------------------------------------
 // 开始斗法
 // ------------------------------------------------------------
+Battle battleReferenceState(const Player& p) {
+    const Arts& a = p.arts;
+    const ArtMods m = talentMods(p);
+    const auto prep = [&](const char* key) {
+        const auto it = a.combatPrep.find(key);
+        return it == a.combatPrep.end() ? 0.0 : it->second;
+    };
+    const int base = BATTLE_POWER[clampInt(p.stage, 0, 12)];
+    Battle b;
+    b.max = jsRound((110 + base * 2.4) * m.hp *
+                    (1.0 + cultivate::bodyHpBonus(p.body)));
+    b.hp = std::max(1, jsRound(b.max * p.health / 100.0));
+    b.shield = std::min(jsRound(b.max * 0.3),
+        jsRound(b.max * ((artHas(a, "阵", 1) ? 0.12 : 0.0) + m.openingShield + m.roundShield)) +
+        jsRound(b.max * prep("shield")));
+    b.swordQi = std::min(8, jsFloor(m.openingQi) +
+        (artHas(a, "剑", 2) ? 2 : 0) + jsFloor(prep("qi")));
+    b.buff = a.combatBuff;
+    b.reduction = prep("reduction");
+    b.speed = jsRound(prep("speed"));
+    b.maxMana = battleEnergy(p);
+    b.mana = std::min(battleManaCap(p), b.maxMana +
+        static_cast<int>(std::ceil((m.openingMana + prep("mana")) / 2.0)) +
+        (artHas(a, "气", 2) ? 1 : 0));
+    // 目标只有参考气血，不设护盾、减伤、功法和行动；不会接入真实战斗。
+    b.enemyHp = b.enemyMax = 1000000000;
+    return b;
+}
+
 void battleStart(Game& g, const EnemySpec& enemy) {
     Player& p = g.player;
     Arts& a = p.arts;
-    const ArtMods m = talentMods(p);
-
-    const int base = BATTLE_POWER[clampInt(p.stage, 0, 12)];
     const int enemyBase = BATTLE_POWER[clampInt(enemy.stage, 0, 12)];
-
-    // 体魄提供气血上限。软上限的规则写在 cultivate::bodyHpBonus ——
-    // 体魄还能从天赋叠加，纯线性会失控。
-    const int maxHp = jsRound((110 + base * 2.4) * m.hp *
-                              (1.0 + cultivate::bodyHpBonus(p.body)));
+    Battle b = battleReferenceState(p);
+    const int maxHp = b.max;
 
     // Demo07：对手气血额外 ×1.45
     const int enemyMaxHp = jsRound(
         (110 + enemyBase * 2.4) * 1.45 *
         (enemy.health ? std::max(0.5, enemy.health / 100.0) : 1.0));
 
-    Battle b;
     b.enemy = enemy.name;
     b.npcId = enemy.id;
     b.quest = enemy.quest;
@@ -516,17 +538,8 @@ void battleStart(Game& g, const EnemySpec& enemy) {
         }
     }
 
-    b.mana = 3;
-    b.maxMana = 3;
-    b.shield = jsRound(maxHp * ((artHas(a, "阵", 1) ? 0.12 : 0.0) +
-                                m.openingShield + m.roundShield));
     b.enemyShield = 0;
     b.burn = 0;
-    b.swordQi = std::min(8, jsFloor(m.openingQi) +
-                                (artHas(a, "剑", 2) ? 2 : 0));
-    b.buff = a.combatBuff;
-    b.reduction = 0;
-    b.speed = 0;
     b.guard = 0.0;
     b.attacked = false;
     b.played = 0;
@@ -546,13 +559,7 @@ void battleStart(Game& g, const EnemySpec& enemy) {
 
     a.battle = b;
 
-    // 起手准备只在本回合生效
     Battle& bb = *a.battle;
-    bb.shield = std::min(jsRound(maxHp * 0.3),
-                         bb.shield + jsRound(maxHp * a.combatPrep["shield"]));
-    bb.swordQi = std::min(8, bb.swordQi + jsFloor(a.combatPrep["qi"]));
-    bb.reduction = a.combatPrep["reduction"];
-    bb.speed = jsRound(a.combatPrep["speed"]);
     if (g.dungeons.run && bb.dungeonSite == g.dungeons.run->siteId)
         for (const auto& id : g.dungeons.run->relics)
             for (const auto& relic : dungeonRelics()) if (relic.id == id)
@@ -1374,12 +1381,9 @@ static void battleEnemyAct(Game& g) {
 // ------------------------------------------------------------
 // 出牌预览（对应 battlePreview）
 // ------------------------------------------------------------
-Preview battlePreview(const Player& p, const Battle& b, const string& id) {
+static Preview battlePreviewSpell(const Player& p, const Battle& b, const SpellDef& spell) {
     Preview out;
-    optional<ArtifactAbility> ability;
-    const SpellDef* spell = battleResolveSpell(p, id, ability);
-    if (!spell || p.stage < spell->stage) return out;
-
+    const string& id = spell.id;
     // 在副本上试算，真实状态不受影响
     Battle copy = b;
     for (auto it = copy.hand.begin(); it != copy.hand.end(); ++it) {
@@ -1390,18 +1394,97 @@ Preview battlePreview(const Player& p, const Battle& b, const string& id) {
     const ArtMods targetMods = b.enemyCards.enabled ? battleEnemyMods(b) : ArtMods{};
     const double reduction = b.enemyCards.enabled
         ? targetMods.reduction + b.enemyCards.reduction + b.enemyCards.guard : 0;
-    const string text = battleEffect(p, copy, *spell, reduction, targetMods.bodyCounter);
+    const string text = battleEffect(p, copy, spell, reduction, targetMods.bodyCounter);
 
     out.valid = true;
-    out.spellName = spell->name;
-    out.cost = battleCost(p, *spell);
+    out.spellName = spell.name;
+    out.cost = battleCost(p, spell);
     out.damage = std::max(0, b.enemyHp - copy.enemyHp);
     out.shield = copy.shield - b.shield;
     out.heal = copy.hp - b.hp;
     out.energy = copy.mana - b.mana;
     out.qi = copy.swordQi - b.swordQi;
+    out.manaGain = std::max(0, out.energy + out.cost);
+    out.draw = copy.pendingDraw;
+    out.drawNext = copy.drawNext - b.drawNext;
+    out.hpMaxChange = copy.max - b.max;
+    out.manaRegenDelta = (copy.manaBonus - copy.manaPenalty) - (b.manaBonus - b.manaPenalty);
+    out.storedMana = copy.carryMana;
+    out.damageBonusPct = (copy.buff - b.buff) * 100;
+    out.reductionPct = (copy.reduction - b.reduction) * 100;
+    out.guardPct = (copy.guard - b.guard) * 100;
+    out.healPotential = std::max(0, out.heal);
+    if (spell.kind == "heal") {
+        Battle wounded = b;
+        wounded.hp = 1;
+        battleEffect(p, wounded, spell, reduction, targetMods.bodyCounter);
+        out.healPotential = wounded.hp - 1;
+    }
+    const auto status = [&](const char* key, const char* name, const char* target,
+                            int before, int total, int turns, int cap, int tick = 0) {
+        if (total != before || turns > 0)
+            out.statuses.push_back({key, name, target, total - before, total, turns, cap, tick});
+    };
+    status("qi", "剑气", "self", b.swordQi, copy.swordQi, 0, 8);
+    status("charge", "蓄势", "self", b.charge, copy.charge, 0, 4);
+    status("water", "水势", "self", b.water, copy.water, 0, 6);
+    status("soul", "震荡", "self", b.soul, copy.soul, 0, 6);
+    const int base = BATTLE_POWER[clampInt(p.stage, 0, 12)];
+    status("poison", "毒", "enemy", b.poison, copy.poison, copy.poisonTurns,
+           BATTLE_POISON_CAP, copy.poisonTurns > 0 ? jsRound((base + 12) * 0.035 * copy.poison) : 0);
+    status("burn", "灼烧", "enemy", b.burn, copy.burn, copy.burnTurns,
+           BATTLE_BURN_CAP, copy.burnTurns > 0 ? copy.burn : 0);
     out.text = text;
     return out;
+}
+
+Preview battlePreview(const Player& p, const Battle& b, const string& id) {
+    optional<ArtifactAbility> ability;
+    const SpellDef* spell = battleResolveSpell(p, id, ability);
+    if (!spell || p.stage < spell->stage) return {};
+    return battlePreviewSpell(p, b, *spell);
+}
+
+Preview battleReferencePreview(const Player& p, const SpellDef& spell) {
+    Battle b = battleReferenceState(p);
+    // 示例出牌后其余四张手牌；不假定真实抽到的卡牌类型，不触发 RNG。
+    for (int i = 0; i < 4; ++i) b.hand.push_back("reference-" + std::to_string(i));
+    Preview out = battlePreviewSpell(p, b, spell);
+    // 实战 preview.text 保持与 battleEffect 日志一致。目录额外说明取自
+    // 同一试算的结构化结果，避免满血治疗量或持续伤害在场外不可见。
+    if (spell.kind == "heal")
+        out.text += "单次治疗量" + std::to_string(out.healPotential) + "，当前实际可回复" + std::to_string(std::max(0, out.heal)) + "。";
+    if (out.guardPct > 0) out.text += "本回合额外减伤+" + std::to_string(jsRound(out.guardPct)) + "% 。";
+    if (spell.kind == "poison")
+        for (const auto& status : out.statuses) if (status.id == "poison")
+            out.text += "当前毒每回合造成" + std::to_string(status.perTurn) + "伤害。";
+    return out;
+}
+
+string battlePreviewConditions(const Player& p, const SpellDef& sp) {
+    const ArtMods m = talentMods(p);
+    string text;
+    if (sp.kind == "sword" || sp.kind == "human")
+        text = "每层剑气伤害+7%，连续剑招每次额外+" + std::to_string(jsRound(m.swordCombo * 100)) + "%（最多50%）；每第三剑回复" + std::to_string(jsFloor(m.swordMana)) + "灵力。";
+    if (sp.kind == "heavy")
+        text = "每层蓄势伤害+12%，消耗所有蓄势；额外伤害为当前护盾×" + std::to_string(jsRound(m.shieldStrike * 100)) + "% 。";
+    if (sp.kind == "wave")
+        text = "每层水势伤害+" + std::to_string(jsRound((0.15 + std::min(0.1, m.water * 0.025)) * 100)) + "%；保留" + std::to_string(jsRound(std::min(0.50, m.waterKeep) * 100)) + "%水势（向下取整），返灵取决于消耗水势。";
+    if (sp.kind == "poisonBurst")
+        text = "毒爆追加伤害=(当前基础战力" + std::to_string(BATTLE_POWER[clampInt(p.stage, 0, 12)]) + "+12)×18%×毒层；所有毒层合计后四舍五入，消耗全部毒层。";
+    if (sp.kind == "fireBurst")
+        text = "引爆追加伤害＝现有灼烧每回合伤害×剩余回合×" + std::to_string(jsRound((1 + m.burnExplosion) * 100)) + "%；消耗全部灼烧。";
+    if (sp.kind == "soulBurst") text = "每层震荡伤害+15%，消耗全部震荡。";
+    if (sp.kind == "bodyBurst") text = "出牌前灵力至少3时伤害+15%，每层蓄势伤害+10%，消耗全部蓄势。";
+    if (sp.kind == "human") text += "消耗全部剑气与当前8%气血，气血最低保留1。";
+    if (sp.kind == "redraw") text = "数字以出牌后剩余4张手牌为示例；实际弃置和抽牌数随手牌变化。";
+    if (sp.kind == "draw" || sp.kind == "foresee" || sp.kind == "redraw" || sp.kind == "exhaust")
+        text += "抽牌还受手牌8张上限与本场牌组剩余数量限制。";
+    if (sp.kind == "store") text = "封存量随扣费后剩余灵力变化，本回合灵力清零。";
+    if (sp.kind == "heal") text = "单次治疗量受气血上限、治疗功法和悟道影响；实际回复不超过缺失气血。";
+    if (sp.dao == "金" || sp.dao == "水" || sp.dao == "木" || sp.dao == "火" || sp.dao == "土")
+        text += "符合五行相生时直伤倍率为" + std::to_string(jsRound((1.15 + std::min(0.15, m.combo)) * 100)) + "%；此处按未触发相生显示。";
+    return text;
 }
 
 // ------------------------------------------------------------

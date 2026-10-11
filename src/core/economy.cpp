@@ -9,6 +9,8 @@
 #include "core/battle.h"
 #include "core/sim.h"
 #include "core/source_limits.h"
+#include "core/sect_trial.h"
+#include "core/reward_receipt.h"
 #include "core/talents.h"
 #include "data/reference_tables.h"
 
@@ -114,14 +116,23 @@ void ecoSyncBooks(Game& g) {
         if (std::find(bookList.begin(), bookList.end(), id) == bookList.end()) bookList.push_back(id);
 }
 
-static void ecoAcquire(Game& g, const string& id, const string& source) {
-    Economy& e = g.economy;
-    if (std::find(e.books.begin(), e.books.end(), id) != e.books.end()) return;
-    e.books.push_back(id);
+bool ecoAcquireBook(Game& g, const string& id, const string& source) {
     ManualView m;
-    if (lookupManual(id, m))
-        logEvent(g, "self", "获得功法「" + m.name + "」，来源：" + source + "。",
-                 true);
+    if (!lookupManual(id, m)) {
+        logEvent(g, "self", source + "未能取得有效功法抄本，未发放该项奖励。");
+        return false;
+    }
+    ecoSyncBooks(g);
+    auto& books = g.economy.books;
+    if (std::find(books.begin(), books.end(), id) != books.end()) {
+        logEvent(g, "self", source + "：已持有「" + m.name + "」抄本，未重复发放。");
+        return false;
+    }
+    books.push_back(id);
+    g.player.arts.bookList.push_back(id);
+    logEvent(g, "self", "获得功法抄本「" + m.name + "」（需修习），来源：" + source +
+                         "；可在洞府道法 → 功法与洞府 → 已得功法抄本中修习。", true);
+    return true;
 }
 
 // ------------------------------------------------------------
@@ -321,6 +332,14 @@ EcoActionInfo ecoActionInfo(const Game& g, const string& type,
         return info;
     }
     if (type == "task") {
+        if (const auto* task = findSectTask(id)) {
+            info.valid = true;
+            info.name = task->name;
+            info.days = task->days;
+            info.fee = jsRound(task->fee * (1 + (p.stage / 3) * 0.35) *
+                             (1.0 + renown::stipendBonus(p.renown)));
+            return info;
+        }
         const TaskDef* t = findTask(id);
         if (!t) return info;
         info.valid = true;
@@ -447,6 +466,17 @@ string ecoActionError(const Game& g, const string& type, const string& id, int b
     }
     if (type == "forge") return artAnnualError(g, "forge", id);
     if (type == "task") {
+        if (const auto* task = findSectTask(id)) {
+            if (!findSect(p.sect) || p.location != p.sect)
+                return "请回所属山门接差事。";
+            if (p.stage < task->stage) return "境界不足。";
+            if (sectTasksTakenThisMonth(g) >= 3)
+                return "本月宗门差事已满三次（所有差事共用额度）。";
+            const auto sect = g.world.sects.find(p.sect);
+            if (sect == g.world.sects.end() || sect->second.treasury < info.fee)
+                return "宗门府库不足。";
+            return "";
+        }
         const TaskDef* t = findTask(id);
         if (!t) return "行动不存在。";
         if (t->sect) {
@@ -457,7 +487,7 @@ string ecoActionError(const Game& g, const string& type, const string& id, int b
         }
         if (p.stage < t->stage) return "境界不足。";
         auto it = e.taskCounts.find(t->id);
-        if (it != e.taskCounts.end() && it->second >= 3)
+        if (e.month == g.clock.days / 30 && it != e.taskCounts.end() && it->second >= 3)
             return "本月此任务已满三次。";
         if (t->sect) {
             auto s = g.world.sects.find(p.sect);
@@ -508,6 +538,7 @@ string ecoActionError(const Game& g, const string& type, const string& id, int b
 // ------------------------------------------------------------
 void ecoBegin(Game& g, const string& type, const string& id, int batch) {
     if (!ecoActionError(g, type, id, batch).empty()) return;
+    ecoRefresh(g);
     Player& p = g.player;
     Arts& a = p.arts;
     Economy& e = g.economy;
@@ -552,8 +583,11 @@ void ecoBegin(Game& g, const string& type, const string& id, int batch) {
         job.sect = b.shapeSlot;   // 暂存器型槽位
     } else if (type == "task") {
         e.taskCounts[id]++;
-        if (id == "sect" && !p.sect.empty())
+        if (findSectTask(id)) {
+            job.sect = p.sect;
+            job.origin = p.location;
             g.world.sects[p.sect].treasury -= info.fee;
+        }
     } else if (type == "commission") {
         e.orders[id]++;
         job.kind = id;
@@ -653,15 +687,24 @@ void ecoComplete(Game& g, const Job& job) {
                  job.name + "至第" + std::to_string(a.manuals[id]) + "层，用时" +
                      std::to_string(job.total) + "天。");
     } else if (type == "task") {
+        const RewardReceipt receipt(g);
+        const auto* sectTask = findSectTask(id);
+        if (sectTask) {
+            const bool legacy = id == "sect" && job.sect.empty() && job.origin.empty();
+            if (!findSect(p.sect) || p.location != p.sect ||
+                (!legacy && (job.sect != p.sect || job.origin != p.sect))) {
+                logEvent(g, "sect", "「" + job.name + "」未交付：已离开接单山门或改变所属宗门，未发放工钱、贡献或道法经验。");
+                return;
+            }
+            e.contribution += sectTask->contribution;
+            if (sectTask->daoExp > 0) artGain(p, findSect(p.sect)->element, sectTask->daoExp);
+        }
         p.stones += jsRound(static_cast<double>(job.fee));
         e.cityTasks++;
-        if (id == "sect") e.contribution += 15;
         if (id == "escort" && randomOf(g) < 0.15)
             p.health = std::max(1, p.health - 8);
         logEvent(g, "self",
-                 "完成" + job.name + "，工钱 " +
-                     std::to_string(jsRound(static_cast<double>(job.fee))) +
-                     " 灵石" + (id == "sect" ? "，贡献 +15" : "") + "。");
+                 "完成" + job.name + "：" + receipt.changes(g) + "。");
     } else if (type == "commission") {
         const bool win = randomOf(g) < job.chance;
         if (win) {
@@ -671,12 +714,12 @@ void ecoComplete(Game& g, const Job& job) {
                 p.alchemy = std::min(500, p.alchemy + 1);
                 artGain(p, "丹", 2);
                 if (e.commissionBrew >= 3)
-                    ecoAcquire(g, "pill", "工坊丹师授业");
+                    ecoAcquireBook(g, "pill", "工坊丹师授业");
             } else {
                 e.commissionForge++;
                 artGain(p, "器", 4);
                 if (e.commissionForge >= 3)
-                    ecoAcquire(g, "forge", "工坊器师授业");
+                    ecoAcquireBook(g, "forge", "工坊器师授业");
             }
         }
         logEvent(g, "self",
@@ -730,8 +773,8 @@ void ecoHuntEnd(Game& g, bool win) {
             logEvent(g, "self", "猎妖交付：赏金 +" + std::to_string(fee) +
                                     " 灵石，获得" + m->name + " ×2。");
         }
-        if (e.huntCounts >= 1) ecoAcquire(g, "bull", "猎妖任务堂奖励");
-        if (e.huntCounts >= 5) ecoAcquire(g, "longlife", "猎妖五胜传承");
+        if (e.huntCounts >= 1) ecoAcquireBook(g, "bull", "猎妖任务堂奖励");
+        if (e.huntCounts >= 5) ecoAcquireBook(g, "longlife", "猎妖五胜传承");
     } else {
         logEvent(g, "self", "猎妖未完成，未获得赏金。请养伤后再接单。");
     }

@@ -6,6 +6,7 @@
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/economy.h"
+#include "core/reward_receipt.h"
 #include "core/sim.h"
 #include "core/sword.h"
 #include "data/reference_tables.h"
@@ -111,6 +112,7 @@ void adventureBirth(Game& g) {
         if (std::find(a.bookList.begin(), a.bookList.end(), "forge") ==
             a.bookList.end())
             a.bookList.push_back("forge");
+        ecoSyncBooks(g);
     }
 
     // 丹鼎传家 / 丹宗遗脉：直接给高阶丹炉
@@ -153,7 +155,7 @@ static vector<ChoiceOption> advOptions(const Player& p, const AdvContext& d) {
                            std::to_string(d.grade) + "品法器",
                        p.arts.gear.size() >= 40 || p.health < 35});
         out.push_back({"book", "寻取功法抄本",
-                       "迎战守阵灵影；胜后获得未持有的适境功法",
+                       "迎战守阵灵影；胜后获得未持有的适境功法抄本（需修习）；全有则剑道经验+12",
                        p.health < 35});
         out.push_back({"leave", "记下阵势，暂且离开",
                        "阵道经验+4，不发生战斗", false});
@@ -161,10 +163,10 @@ static vector<ChoiceOption> advOptions(const Player& p, const AdvContext& d) {
     }
     if (d.kind == "heritage") {
         out.push_back({"book", "修补碑文，抄录功法",
-                       "消耗12灵石，获得一部未持有的适境功法；全有则剑道经验+12",
+                       "消耗12灵石，获得一部未持有的适境功法抄本（需修习）；全有则剑道经验+12",
                        p.stones < 12});
         out.push_back({"study", "只参悟残存道韵",
-                       "当前大道经验+8，剑意+1", false});
+                       "当前大道经验+8，剑道经验+1", false});
         out.push_back({"leave", "留下标记，不扰遗迹", "不取奖励", false});
         return out;
     }
@@ -180,7 +182,7 @@ static vector<ChoiceOption> advOptions(const Player& p, const AdvContext& d) {
 
     // 妖兽 / 劫修 / 行侠
     out.push_back({"fight", (d.kind == "justice") ? "出手相助" : "迎战",
-                   foeLabel + "对手；胜后得灵石、材料或声望，败退会受伤",
+                   foeLabel + "对手；胜后得灵石、材料或声望；生死斗失败会死亡，可选择回档",
                    p.health < 35});
     if (d.kind == "beast")
         out.push_back({"talk", "引开妖兽，绕路采药",
@@ -203,6 +205,7 @@ void adventureEvent(Game& g, const string& kindIn) {
     Adventure& d = g.adventure;
     const string kind = kindIn;
     const int group = p.stage / 3;
+    ecoSyncBooks(g);
 
     // 附近一位真实人物（行侠时可用）
     const Npc* npc = nullptr;
@@ -336,21 +339,12 @@ void adventureComplete(Game& g) { adventureEvent(g, "backhill"); }
 
 // 获得功法抄本（对应 adventureBook）
 static void adventureBook(Game& g, const string& id) {
-    if (!id.empty() &&
-        std::find(g.economy.books.begin(), g.economy.books.end(), id) ==
-            g.economy.books.end()) {
-        g.economy.books.push_back(id);
-        for (const auto& m : data::BaseManualDef_TABLE())
-            if (m.id == id)
-                logEvent(g, "self",
-                         "获得功法「" + m.name + "」，来源：游历遗藏。", true);
-        for (const auto& m : data::ManualDef_TABLE())
-            if (m.id == id)
-                logEvent(g, "self",
-                         "获得功法「" + m.name + "」，来源：游历遗藏。", true);
+    ManualInfo info;
+    if (!id.empty() && findManualInfo(id, info) && ecoAcquireBook(g, id, "游历遗藏")) {
+        // 抄录只新增抄本，修习仍需要时间、灵石与对应境界。
     } else {
         artGain(g.player, "剑", 12);
-        logEvent(g, "self", "已有此处传承，转为参悟剑道经验+12。");
+        logEvent(g, "self", "未找到可抄录的新传承，转为参悟剑道；实际经验见本次结算。");
     }
 }
 
@@ -403,6 +397,7 @@ bool adventureChoose(Game& g, const string& optionId) {
     }
 
     // ---- 非战斗选择 ----
+    const RewardReceipt receipt(g);
     if (data.kind == "heritage" && optionId == "book") {
         if (p.stones < 12) return true;
         p.stones -= 12;
@@ -441,8 +436,7 @@ bool adventureChoose(Game& g, const string& optionId) {
 
     logEvent(g, "self",
              "「" + ev.title + "」：" + optName + "。" +
-                 (optionId == "leave" ? "你记下沿途见闻，继续前行。"
-                                      : "所选报酬与代价已结算。"));
+                 receipt.changes(g) + "。");
     g.pending.reset();
     return true;
 }
@@ -454,6 +448,7 @@ void adventureBattleEnd(Game& g, const Battle& b) {
     if (b.advKind.empty()) return;
     Player& p = g.player;
     Arts& a = p.arts;
+    const RewardReceipt receipt(g);
 
     if (!b.won) {
         if (!b.retreat) {
@@ -482,17 +477,16 @@ void adventureBattleEnd(Game& g, const Battle& b) {
                           isSword ? "剑" : "土", "后山遗藏");
         }
         a.progress.quests++;
+        logEvent(g, "self", "后山遗藏结算：" + receipt.changes(g) + "。", true);
         return;
     }
 
     // 妖兽 / 劫修 / 行侠
     p.stones += b.advFee;
     const string mat = materialForStage(p.stage);
-    string extra;
     if (b.advKind == "beast") {
         a.materials[mat] = a.materials[mat] + 2;
         p.herbs += 2;
-        extra = "、矿材2份、未分类灵药2份";
     }
     if (b.advKind == "justice") {
         p.renown += 3;
@@ -503,11 +497,9 @@ void adventureBattleEnd(Game& g, const Battle& b) {
                 g.player.relations[n.id] = std::min(100, cur + 8);
             }
         }
-        extra = "、声望3";
     }
     logEvent(g, "self",
-             "游历斗法获胜，收获" + std::to_string(b.advFee) + "灵石" + extra +
-                 "。",
+             "游历斗法获胜：" + receipt.changes(g) + "。",
              true);
 }
 

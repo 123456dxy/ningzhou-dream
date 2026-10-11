@@ -39,6 +39,9 @@ int main() {
     nztest::runArtifactTests();
     nztest::runRenownArtifactApiTests();
     nztest::runRewardApiTests();
+    nztest::runEventRewardTests();
+    nztest::runNumericPreviewTests();
+    nztest::runSectCompletionTests();
 
     const int f = nztest::failures();
     std::printf("\n===== 结果: %s（%d 项失败）=====\n",

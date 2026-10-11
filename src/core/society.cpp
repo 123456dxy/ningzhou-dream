@@ -8,6 +8,7 @@
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/economy.h"
+#include "core/reward_receipt.h"
 #include "core/sim.h"
 #include "data/reference_tables.h"
 
@@ -191,23 +192,25 @@ string storyError(const Game& g, const data::StoryDef* s) {
     return "";
 }
 
+string storyChoiceError(const Game& g, const data::StoryDef& s, int optionIndex) {
+    if (optionIndex != 0 && optionIndex != 1) return "请选择有效的因缘选项。";
+    if (g.bonds.stories.count(s.id)) return "这段因缘已落笔。";
+    if (s.id == "rootecho" && optionIndex == 0 && g.player.stones < 40)
+        return "承接残碑需40灵石（当前" + std::to_string(g.player.stones) + "）。";
+    return "";
+}
+
 void storyComplete(Game& g, const data::StoryDef& s, int optionIndex) {
+    if (!storyChoiceError(g, s, optionIndex).empty()) return;
+    const RewardReceipt receipt(g);
     Player& p = g.player;
     Bonds& b = g.bonds;
     Arts& a = p.arts;
     b.stories[s.id] = g.year;
 
-    // 抄本发放的小工具：已持有则跳过
-    // 抄本记在两处：a.bookList（支线奖励）与 g.economy.books（修习门槛）。
-    // 之前只写前者，导致支线拿到的抄本无法用来修习功法 —— 两套书单脱节。
+    // 奖励为抄本，修习仍遵循境界、费用和用时。
     auto grantBook = [&](const char* id) {
-        const string bid(id);
-        if (std::find(a.bookList.begin(), a.bookList.end(), bid) ==
-            a.bookList.end())
-            a.bookList.push_back(bid);
-        if (std::find(g.economy.books.begin(), g.economy.books.end(), bid) ==
-            g.economy.books.end())
-            g.economy.books.push_back(bid);
+        ecoAcquireBook(g, id, "因缘「" + s.name + "」");
     };
 
 
@@ -229,7 +232,7 @@ void storyComplete(Game& g, const data::StoryDef& s, int optionIndex) {
     } else if (s.id == "rootecho") {
         if (optionIndex == 0) {          // 承接残碑：资质+3，消耗 40 灵石
             p.apt = std::min(APT_MAX, p.apt + 3);
-            p.stones -= std::min(40, p.stones);
+            p.stones -= 40;
         } else {                          // 悟其得失：气道经验+50
             artGain(p, "气", 50);
         }
@@ -276,7 +279,7 @@ void storyComplete(Game& g, const data::StoryDef& s, int optionIndex) {
 
     const string optName = (optionIndex == 0) ? s.opt1Name : s.opt2Name;
     logEvent(g, "self",
-             "「" + s.name + "」：" + optName + "。这段因缘已落笔。", true);
+             "「" + s.name + "」：" + optName + "。" + receipt.changes(g) + "。这段因缘已落笔。", true);
 }
 
 // ============================================================
@@ -489,6 +492,7 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
     Bonds& b = g.bonds;
     Arts& a = p.arts;
     const int month = g.clock.days / 30;
+    const RewardReceipt receipt(g);
 
     if (kind == "master" && npc) {
         b.master = npc->id;
@@ -502,14 +506,8 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
         artGain(p, a.focus, 10);
         a.heart += 1;
         // 第二次授业另传《胎息经》抄本
-        if (b.lessons == 2 &&
-            std::find(a.bookList.begin(), a.bookList.end(), "fetal") ==
-                a.bookList.end()) {
-            a.bookList.push_back("fetal");   // 胎息经
-            ecoSyncBooks(g);
-            logEvent(g, "self", "师尊第二次授业，另传《胎息经》抄本一卷。", true);
-        }
-        logEvent(g, "self", "受师尊指点，当前大道经验 +10，心境 +1。");
+        if (b.lessons == 2) ecoAcquireBook(g, "fetal", "师尊第二次授业");
+        logEvent(g, "self", "受师尊指点：" + receipt.changes(g) + "。");
     } else if (kind == "disciple" && npc) {
         b.disciples.push_back(npc->id);
         addRelation(g, npc->id, 10);
@@ -541,7 +539,7 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
         p.health = std::min(100, p.health + 4);
         if (!b.partner.empty()) addRelation(g, b.partner, 3);
         logEvent(g, "self",
-                 "与道侣相伴共修 10 天，大道经验 +6，心境 +2，气血 +4。");
+                 "与道侣相伴共修10天：" + receipt.changes(g) + "。");
     } else if (kind == "part") {
         if (!b.partner.empty()) addRelation(g, b.partner, -20);
         logEvent(g, "self", "你与道侣解除了约定。", true);

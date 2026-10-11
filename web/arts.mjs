@@ -11,6 +11,7 @@
 'use strict';
 
 import { cardKind, cardRule } from './cards.mjs';
+import { renderNumericPreview } from './numeric-preview.mjs';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -166,21 +167,27 @@ export function renderSpellPicker(data, state, options = {}) {
     + list.map(sp => {
         const mandatory = sp.mandatory || mandatoryIds.includes(sp.id);
         const isCarried = mandatory || carriedIds.includes(sp.id);
+        const learned = isCarried || sp.learned === true || sp.known === true
+          || (state.arts.knownSpells || []).includes(sp.id);
         const locked = stage < sp.stage;
         const full = !isCarried && carried >= max;
         const realms = ['炼气初期', '炼气中期', '炼气后期', '筑基初期', '筑基中期', '筑基后期', '金丹初期', '金丹中期', '金丹后期', '元婴初期', '元婴中期', '元婴后期', '化神初期', '化神中期', '化神后期'];
         const stageName = sp.stageName || realms[sp.stage] || '更高境界';
         const why = mandatory ? '固定常备，不占槽位'
           : locked ? `尚未达到${stageName}`
+          : !learned ? '尚未学会，可向熟悉此术的道友请教或在本门藏经阁兑换'
           : full ? `最多携带 ${max} 个，请先卸下一个`
-          : '';
-        return `<button class="card${isCarried ? ' selected' : ''}${mandatory ? ' mandatory' : ''}" `
-          + `${!mandatory && (isCarried || (!locked && !full))
+          : sp.reason || '';
+        const canEquip = learned && !locked && !full && sp.canEquip !== false && sp.enabled !== false;
+        return `<button class="card${isCarried ? ' selected' : ''}${mandatory ? ' mandatory' : ''}${learned ? ' learned' : ' unlearned'}" `
+          + `data-spell-id="${esc(sp.id)}" `
+          + `${!mandatory && (isCarried || canEquip)
               ? `data-action="spell" data-id="${sp.id}"` : 'disabled'}>`
           + `<div class="card-top"><span class="card-glyph">✦</span>`
           + `<strong>${esc(sp.name)}</strong>`
-          + `${mandatory ? '<span class="count">固定常备</span>' : isCarried ? '<span class="count">已携带 · 点击卸下</span>' : ''}</div>`
+          + `<span class="count">${mandatory ? '固定常备' : isCarried ? '已携带 · 点击卸下' : learned ? '已学会 · 未携带' : '未学会'}</span></div>`
           + `<p class="card-rule">${esc(cardRule(sp))}</p>`
+          + renderNumericPreview(sp.preview)
           + `<div class="card-foot">${esc(sp.dao)}系 · `
           + `${esc(cardKind(sp))} · 灵力 ${sp.actualCost ?? sp.cost}`
           + `${sp.cooldown ? ` · 冷却 ${sp.cooldown} 回合` : ''} · 所需境界：${esc(stageName)}`
@@ -198,29 +205,33 @@ export function renderArtBuilds(state, data, nodes, selected = 'all') {
     const definition = typeof ref === 'string' ? null : ref;
     if (kind === 'manual') {
       const m = (state.arts.manualList || []).find(x => x.id === id);
-      const name = definition?.name || m?.name || (state.manualSources || []).find(x => x.id === id)?.name || id;
-      return { name, ready: !!(m?.isMain || m?.isAux), note: m ? m.isMain || m.isAux ? '已生效' : '已修，需设主辅修' : '尚未修习' };
+      const source = (state.manualSources || []).find(x => x.id === id);
+      const copied = source?.owned || (state.arts.bookList || []).includes(id);
+      const name = definition?.name || m?.name || (state.manualCatalog || []).find(x => x.id === id)?.name || source?.name || '未知功法';
+      return { name, ready: !!(m?.isMain || m?.isAux), known: !!m || !!copied,
+        note: m ? m.isMain || m.isAux ? '已生效' : '已修习 · 未设主辅修' : copied ? '抄本已得 · 待修习' : '尚未获取抄本' };
     }
     if (kind === 'spell') {
       const sp = spells.find(x => x.id === id);
       const ready = (state.arts.spells || []).includes(id) || (state.arts.mandatorySpells || []).some(x => (typeof x === 'string' ? x : x.id) === id);
+      const known = ready || sp?.known || sp?.learned || (state.arts.knownSpells || []).includes(id);
       return { name: definition?.name || sp?.name || (state.arts.spellList || []).find(x => x.id === id)?.name || id,
-        ready, note: ready ? '已携带' : sp && state.player.stage < sp.stage ? `需${sp.stageName || '更高境界'}` : '待携带' };
+        ready, known, note: ready ? '已携带' : `${known ? '已学会 · 未携带' : '未学会'}${sp && state.player.stage < sp.stage ? ` · 需${sp.stageName || '更高境界'}` : ''}` };
     }
     const n = (nodes || []).find(x => x.id === id);
     const ready = (state.arts.nodes || []).includes(id);
-    return { name: definition?.name || n?.name || id, ready, note: ready ? '已领悟' : '待领悟' };
+    return { name: definition?.name || n?.name || id, ready, known: ready, note: ready ? '已领悟' : '待领悟' };
   };
   const group = (label, kind, refs) => {
     if (!refs?.length) return '';
     return `<div class="build-components"><b>${label}</b>` + refs.map(ref => {
       const item = resolve(kind, ref);
-      return `<span class="build-component ${item.ready ? 'ready' : ''}">${esc(item.name)}<small>${esc(item.note)}</small></span>`;
+      return `<span class="build-component ${item.ready ? 'ready' : item.known ? 'known' : 'missing'}">${esc(item.name)}<small>${esc(item.note)}</small></span>`;
     }).join('') + `</div>`;
   };
   return `<div class="art-build-controls"><label>流派组合 <select data-art-build-filter><option value="all">全部流派</option>`
     + builds.map(b => `<option value="${esc(b.id)}" ${b.id === selected ? 'selected' : ''}>${esc(b.name)}</option>`).join('')
-    + `</select></label><span>选择一组后，神通列表只显示它需要的神通与固定常备牌。</span></div>`
+    + `</select></label><span>绿色表示已生效的功法、已携带的神通或已领悟的道法。选择一组后，神通列表只显示它需要的神通与固定常备牌。</span></div>`
     + `<div class="art-builds">` + builds.filter(b => selected === 'all' || b.id === selected).map(b => {
       const refs = [...(b.manuals || []).map(x => resolve('manual', x)), ...(b.spells || []).map(x => resolve('spell', x)), ...(b.nodes || []).map(x => resolve('node', x))];
       const ready = refs.filter(x => x.ready).length;

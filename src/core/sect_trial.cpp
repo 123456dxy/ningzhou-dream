@@ -4,6 +4,7 @@
 #include <climits>
 
 #include "core/battle.h"
+#include "core/friendship.h"
 #include "core/renown.h"
 #include "core/sim.h"
 #include "core/society.h"
@@ -160,6 +161,71 @@ string sectTrialStateError(const Game& g) {
         !g.job->paid || g.job->sect != sect || g.job->origin != sect || g.job->cost != def.fee ||
         g.job->total != def.days || g.job->remaining != def.days || g.job->started != g.clock.days) return "入门考核费用或耗时记录无效。";
     return "";
+}
+
+vector<const Npc*> sectMentorCandidates(const Game& g) {
+    vector<const Npc*> mentors;
+    if (!findSect(g.player.sect)) return mentors;
+    for (const auto& npc : g.npcs) {
+        if (npc.beast || !npc.alive || npc.health <= 0 || npc.age >= npc.lifespan ||
+            npc.sect != g.player.sect) continue;
+        if (npc.stage > g.player.stage || npc.id == g.bonds.master) mentors.push_back(&npc);
+    }
+    std::sort(mentors.begin(), mentors.end(), [&](const Npc* a, const Npc* b) {
+        const bool aMaster = a->id == g.bonds.master, bMaster = b->id == g.bonds.master;
+        if (aMaster != bMaster) return aMaster;
+        const bool aHere = a->location == g.player.location, bHere = b->location == g.player.location;
+        if (aHere != bHere) return aHere;
+        if (relationOf(g, a->id) != relationOf(g, b->id)) return relationOf(g, a->id) > relationOf(g, b->id);
+        if (a->stage != b->stage) return a->stage > b->stage;
+        return a->id < b->id;
+    });
+    return mentors;
+}
+
+string sectMasterError(const Game& g, const string& npcId) {
+    if (const string error = friendship::interactionError(g, npcId); !error.empty()) return error;
+    const auto found = std::find_if(g.npcs.begin(), g.npcs.end(), [&](const Npc& npc) { return npc.id == npcId; });
+    if (found == g.npcs.end()) return "找不到这位师长。";
+    const auto& npc = *found;
+    if (g.player.sect.empty()) return "请先通过入门考核，正式拜入宗门。";
+    if (npc.sect != g.player.sect) return "只能拜本门境界更高的修士为师。";
+    if (npc.id == g.bonds.master) return "已拜此人为师；可在师门日常接受授业。";
+    if (!g.bonds.master.empty()) return "已经拜师，请先辞别现任师尊。";
+    if (npc.id == g.bonds.partner) return "道侣不能再结为师徒。";
+    if (std::find(g.bonds.disciples.begin(), g.bonds.disciples.end(), npcId) != g.bonds.disciples.end())
+        return "门下弟子不能再拜为师尊。";
+    if (npc.stage <= g.player.stage) return "师尊的境界须高于你的当前境界。";
+    if (relationOf(g, npcId) < 40) return "好感不足40（当前" + std::to_string(relationOf(g, npcId)) + "），请先见礼、往来或赠礼。";
+    const int required = renown::masterRequirement();
+    if (g.player.renown < required) return "拜师需声望" + std::to_string(required) + "（当前" + std::to_string(g.player.renown) + "）。";
+    if (g.player.stones < 20) return "拜师礼需20灵石（当前" + std::to_string(g.player.stones) + "）。";
+    return "";
+}
+
+const vector<SectTaskDef>& sectTaskDefs() {
+    static const vector<SectTaskDef> tasks = {
+        {"sect", "山门差事", "维护药田与山门；完成后获得灵石与贡献。", 10, 25, 0, 15, 0},
+        {"sect-patrol", "巡守山门", "巡视本门山道，熟悉本门道法；完成后获得灵石、贡献与本宗大道经验。", 7, 18, 0, 10, 4},
+        {"sect-records", "整理本门传承", "为藏经阁校录本门传承；完成后获得灵石、贡献与更多本宗大道经验。", 10, 22, 0, 12, 8},
+        {"sect-array", "维护护宗灵阵", "协助执事修缮护宗灵阵；筑基起可接，完成后获得灵石、较多贡献与本宗大道经验。", 12, 30, 3, 18, 6},
+    };
+    return tasks;
+}
+
+const SectTaskDef* findSectTask(const string& id) {
+    for (const auto& task : sectTaskDefs()) if (task.id == id) return &task;
+    return nullptr;
+}
+
+int sectTasksTakenThisMonth(const Game& g) {
+    if (g.economy.month != g.clock.days / 30) return 0;
+    long long total = 0;
+    for (const auto& task : sectTaskDefs()) {
+        const auto found = g.economy.taskCounts.find(task.id);
+        if (found != g.economy.taskCounts.end()) total += std::max(0, found->second);
+    }
+    return static_cast<int>(std::min<long long>(total, INT_MAX));
 }
 
 } // namespace nz

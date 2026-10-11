@@ -1,4 +1,4 @@
-param([string]$ReleaseName = '宁州一梦-单文件版-20261011-炼器修正版')
+param([string]$ReleaseName = '宁州一梦-单文件版-20261012-宗门修正版')
 $ErrorActionPreference = 'Stop'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $compilerRoot = 'C:/msys64/ucrt64/bin'
@@ -41,8 +41,8 @@ $resourceText = @'
 101 RCDATA "payload.bin"
 1 24 "app.manifest"
 1 VERSIONINFO
- FILEVERSION 5,2026,10,11
- PRODUCTVERSION 5,2026,10,11
+ FILEVERSION 6,2026,10,12
+ PRODUCTVERSION 6,2026,10,12
  FILEOS 0x40004
  FILETYPE 0x1
  BEGIN
@@ -52,7 +52,7 @@ $resourceText = @'
    BEGIN
     VALUE "FileDescription", "Ningzhou Dream - Single-file Game\0"
     VALUE "ProductName", "Ningzhou Dream\0"
-    VALUE "FileVersion", "5.2026.10.11\0"
+    VALUE "FileVersion", "6.2026.10.12\0"
     VALUE "OriginalFilename", "NingzhouDream.exe\0"
    END
   END
@@ -66,7 +66,7 @@ $resourceText = @'
 $appManifest = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
- <assemblyIdentity version="5.2026.10.11" processorArchitecture="amd64" name="NingzhouDream.Game" type="win32"/>
+ <assemblyIdentity version="6.2026.10.12" processorArchitecture="amd64" name="NingzhouDream.Game" type="win32"/>
  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges><requestedExecutionLevel level="asInvoker" uiAccess="false"/></requestedPrivileges></security></trustInfo>
  <application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings><dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware></windowsSettings></application>
  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1"><application><supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/></application></compatibility>

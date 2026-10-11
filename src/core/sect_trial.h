@@ -20,4 +20,17 @@ void sectTrialBattleComplete(Game& g, const Battle& battle, bool won, bool escap
 void sectTrialLegacyComplete(Game& g, const Job& job);
 string sectTrialStateError(const Game& g);
 
+// 师门入口与 NPC 往来共用同一份拜师条件；候选在外游历时仍可查看，必须当面拜师。
+vector<const Npc*> sectMentorCandidates(const Game& g);
+string sectMasterError(const Game& g, const string& npcId);
+
+struct SectTaskDef {
+    string id, name, desc;
+    int days = 0, fee = 0, stage = 0, contribution = 0, daoExp = 0;
+};
+const vector<SectTaskDef>& sectTaskDefs();
+const SectTaskDef* findSectTask(const string& id);
+// 新旧宗门差事共用每月三件额度；接下即占额度，中止不能重刷。
+int sectTasksTakenThisMonth(const Game& g);
+
 } // namespace nz

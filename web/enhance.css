@@ -6,6 +6,7 @@
 
 :root {
   --jade: var(--green);
+  --ink-2: var(--ink);
   --ink-3: var(--muted);
 }
 
@@ -1080,6 +1081,47 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 .build-component { font-size: 11px; padding: 4px 7px; border-radius: 5px; background: #efeee6; color: #777360; }
 .build-component small { display: block; font-size: 10px; opacity: .9; }
 .build-component.ready { background: #e5eddc; color: #47633e; }
+.build-component.known { border: 1px solid #d2dcc4; background: #f3f5ec; color: #526447; }
+.build-component.missing { color: #7c7e74; background: #e9e9e3; }
+.spell-picker > .card:disabled { opacity: 1; cursor: default; }
+.spell-picker > .card.unlearned { border-style: dashed; background: #f1f1eb; color: #73786d; }
+.spell-picker > .card.unlearned .card-glyph { color: #9b9f93; }
+.spell-picker .count { font-size: 11px; white-space: normal; }
+.spell-picker > .card.learned:not(.selected) .count { color: var(--green); }
+.numeric-preview { display: block; margin: 9px 0; padding: 9px 10px; border: 1px solid #d7dfcf; border-radius: 6px; background: #f3f6ef; line-height: 1.7; white-space: normal; overflow-wrap: anywhere; }
+.numeric-preview > b { color: #45613d; font-size: 11px; }
+.numeric-preview > p { color: #45613d; font-size: 12px; margin: 4px 0; }
+.numeric-preview > p.numeric-conditions { color: var(--muted); font-size: 11px; }
+.numeric-preview > small { display: block; color: var(--muted); font-size: 10px; }
+.numeric-preview.compact { padding: 6px 8px; }
+.artifact-ability > .numeric-preview { display: block; }
+.forge-passive { margin: 12px 0; padding: 10px 12px; border-left: 2px solid var(--green); background: rgba(72,110,75,.05); }
+.forge-passive strong { font-size: 12px; color: var(--green); }
+.forge-passive p, .forge-inscribed > p { font-size: 12px; line-height: 1.7; margin: 6px 0; overflow-wrap: anywhere; }
+.forge-inscribed { margin-top: 12px; }
+.forge-inscribed summary { font-size: 12px; color: var(--green); cursor: pointer; }
+.sect-mentor-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,290px),1fr)); gap: 14px; }
+.sect-mentor-card { border: 1px solid var(--line); padding: 16px; background: var(--surface); border-radius: 9px; min-width: 0; }
+.sect-mentor-card.current { border-color: var(--green); background: #f3f6ef; }
+.sect-mentor-head { display: flex; gap: 14px; align-items: center; }
+.sect-mentor-head > div { min-width: 0; flex: 1; }
+.sect-mentor-head strong { display: block; margin-bottom: 6px; }
+.sect-mentor-head p, .sect-mentor-head small { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 6px 0; }
+.sect-mentor-portrait { width: 80px; height: 110px; object-fit: contain; object-position: center bottom; border-radius: 6px; background: #e8ecdf; flex-shrink: 0; }
+.sect-mentor-reason, .sect-task-reason { font-size: 12px; line-height: 1.7; color: #806429; overflow-wrap: anywhere; }
+.sect-task-card { display: flex; gap: 16px; justify-content: space-between; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-top: 12px; background: var(--surface); }
+.sect-task-card > div { min-width: 0; flex: 1; }
+.sect-task-card h3 { font-size: 15px; margin: 0 0 6px; }
+.sect-task-card p { font-size: 12px; line-height: 1.7; margin: 6px 0; }
+.sect-task-card > button { flex-shrink: 0; }
+.sect-task-rewards, .sect-entry-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sect-task-rewards span { font-size: 12px; background: #e7eedf; color: var(--green); padding: 4px 7px; border-radius: 4px; }
+.sect-entry-actions button { font-size: 12px; padding: 8px 10px; white-space: normal; }
+.map-sect-entrance { margin: 14px 0; padding: 12px; background: #eff3e9; border: 1px solid #d5dfcb; border-radius: 8px; }
+.map-sect-entrance > strong { color: var(--green); font-size: 14px; }
+.map-sect-entrance > p { font-size: 12px; line-height: 1.7; margin: 8px 0; }
+.map-sect-entrance > button { width: 100%; }
+@media (max-width:480px) { .sect-task-card { align-items: stretch; flex-direction: column; } .sect-mentor-portrait { width: 65px; height: 90px; } }
 #battle-target-modal { width: min(680px, calc(100% - 24px)); }
 .removal-dialog .modal-heading { align-items: flex-start; gap: 12px; }
 .removal-dialog > p { color: #68745d; font-size: 12px; line-height: 1.8; }

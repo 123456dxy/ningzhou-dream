@@ -17,9 +17,10 @@ import { renderDaos, renderArtsAside, loadNodes, invalidateNodes,
          loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds } from './arts.mjs';
 import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL } from './economy.mjs';
 import { loadLegacy, invalidateLegacy, draftTalents, renderEnding, renderLegacyPanel, renderDraftPanel } from './legacy.mjs';
-import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderAchievements } from './sects.mjs';
+import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks, renderAchievements } from './sects.mjs';
 import { renderRenownPanel, renderRenownBar, renownChip } from './renown.mjs';
 import { cardKind, cardRule, cardNumbers, battleStatusRows } from './cards.mjs';
+import { renderNumericPreview } from './numeric-preview.mjs';
 import { renderAtlas, selectedTravelMode, travelFeedback, isTravelJob } from './map.mjs';
 import { renderLocationArt } from './location-art.mjs';
 import { renderPortrait, battleImpacts, animateBattleImpacts } from './portraits.mjs';
@@ -504,6 +505,7 @@ function spellCards() {
       </div>
       <div class="sc-dao">${escape(sp.dao)}系${sp.cooldown ? ` · 冷却 ${sp.cooldown} 回合` : ''} · 所需境界：${escape(sp.stageName || '炼气初期')}</div>
       <div class="sc-rule">${escape(cardRule(sp))}</div>
+      ${renderNumericPreview(sp.preview, { compact: true })}
     </div>`).join('') + `</div>`;
 }
 
@@ -577,6 +579,8 @@ function viewArts() {
         asideBlock('已携带神通', spells)
         + hintBox(['普通攻击与防御固定常备，各五张，不占额外槽。', `额外槽当前 ${slots} 个，每种神通进入牌组两张。`, '换神通后下一场斗法生效。']));
   return top + layout(panel('已修功法', '选择主修、辅修或继续修习', `<div style="padding:14px 22px 18px">${manuals}</div>`), renderArtsAside(S))
+    + panel('已得功法抄本', '事件、请教或兑换获得的抄本，修习后才能设置主辅修',
+      `<div style="padding:14px 22px 18px">${manualSourceRows((S.manualSources || []).filter(m => m.owned && !(S.arts.manuals?.[m.id] > 0)), 'learn') || '<div class="empty">暂无待修习的功法抄本。</div>'}</div>`)
     + renderSupplyPanel(S);
 }
 
@@ -693,7 +697,7 @@ function viewSociety() {
   + `<button class="primary" data-action="stipend">领取俸禄</button>`
   + `<button data-action="expedition">探访后山</button></div>`
   + hintBox(['好感度决定能做什么：', '30 解锁彻夜论道，40 可拜师，',
-             '60 可结为道侣。条件不够时选项不会出现。']);
+             '60 可结为道侣。拜师条件与不足项可在「拜师与受业」查看。']);
 
   // 五宗一览：拜入山门后可做差事、以贡献兑换藏经阁功法
   const sectPanel = `<div class="chronicle-layout" style="margin-top:22px">`
@@ -729,6 +733,7 @@ function viewSociety() {
     ? [
         ['sect', '本门概况'],
         ['members', '本门弟子', `${people.length} 人`],
+        ['mentors', '拜师与受业'],
         ['jobs', '山门差事'],
         ['library', '藏经阁', `${S.contribution ?? 0} 贡献`],
       ]
@@ -758,12 +763,16 @@ function viewSociety() {
   }
 
   // ---- 本门弟子 ----
+  if (sub === 'mentors') return head + tabs
+    + panel('同门师长', '查看拜师条件，增进好感后行礼；拜师后回山门受业',
+      `<div style="padding:14px 22px 18px">${sectData ? renderSectMentors(sectData, S) : '<div class="empty">正在读取师门信息……</div>'}</div>`);
+
   if (sub === 'members') {
     const right = sel
       ? renderFriendPanel(S, sel.id, friendBag, { materials: forgeOpts?.materials })
       : `<div class="empty">点左边任意一位同门，即可当面往来。<br><br>
            见礼只有第一次给好感；<br>
-           好感 30 解锁彻夜论道，40 可拜师，60 可结为道侣。</div>`;
+           好感 30 解锁彻夜论道；拜师还需同宗高境界、声望与拜师礼，可在「拜师与受业」查看。</div>`;
     return head + tabs
       + `<div class="friend-split">
            <div class="fs-list"><div class="people-grid">${cards}</div></div>
@@ -772,29 +781,10 @@ function viewSociety() {
   }
 
   // ---- 山门差事 ----
-  // 差事表的 type 是 task / commission / hunt / mine / arena / quest，
-  // 「山门差事」是其中 id=sect 的一条，与城中差事同属 task。
   if (sub === 'jobs') {
-    const all = ecoOpts || [];
-    const tasks = all.filter(o => o.type === 'task');
-    const commissions = all.filter(o => o.type === 'commission');
-    const hunts = all.filter(o => o.type === 'hunt' || o.type === 'mine' ||
-                                  o.type === 'arena');
-    const block = (title, list, note, first) => list.length
-      ? `<h3 style="margin-top:${first ? '0' : '18px'}">${escape(title)}`
-        + (note ? ` <span class="item-sub">${escape(note)}</span>` : '')
-        + `</h3>` + list.map(actionRow).join('')
-      : '';
-    const body = (tasks.length || commissions.length || hunts.length)
-      ? block('山门与城中差事', tasks, '积累宗门贡献', true)
-        + block('商会委托', commissions, '每月同类最多三件')
-        + block('猎妖 · 开采 · 演武', hunts, '需要气血充足')
-      : `<div class="empty">${inSect
-          ? '本门暂无差事。'
-          : '尚未拜入宗门，没有差事可接。'}</div>`;
     return head + tabs
-      + panel('可接差事', '接了就会占掉这段时间',
-              `<div style="padding:14px 22px 18px">${body}</div>`);
+      + panel('宗门任务板', '完成差事可得灵石、贡献与本宗大道经验',
+              `<div style="padding:14px 22px 18px">${renderSectTasks(S, ecoOpts, sectData)}</div>`);
   }
 
   // ---- 藏经阁 ----
@@ -1513,11 +1503,15 @@ function openStory(id) {
   if (!host || !s) return;
 
   const locName = (S.locations || []).find(l => l.id === s.location)?.name || s.location;
-  const choice = (name, effect, idx) =>
-    `<button data-story="${escape(s.id)}" data-choice="${idx}">
+  const choice = (name, effect, idx) => {
+    const enabled = s[`opt${idx + 1}Enabled`] !== false;
+    const reason = s[`opt${idx + 1}Reason`];
+    return `<button data-story="${escape(s.id)}" data-choice="${idx}" ${enabled ? '' : 'disabled'}>
        <strong>${escape(name)}</strong>
        <span>${escape(effect)}</span>
+       ${!enabled && reason ? `<small>${escape(reason)}</small>` : ''}
      </button>`;
+  };
 
   host.innerHTML = `<div class="story-overlay">
     <div class="story-panel">
@@ -1686,6 +1680,7 @@ document.addEventListener('click', async e => {
   // 剧情阅读器里的选择
   const sc = e.target.closest('[data-story]');
   if (sc) {
+    if (sc.disabled || requestBusy) return;
     const sid = sc.dataset.story;
     const choice = Number(sc.dataset.choice) || 0;
     closeStory();
@@ -2124,6 +2119,25 @@ document.addEventListener('click', async e => {
     case 'sect-locate':
       tab = 'map'; mapFocus = id; mapPanFocus = true; setSub('map', 'atlas'); render();
       break;
+    case 'sect-open':
+    case 'sect-trial-open':
+      if (!S.locations.some(location => location.id === id && location.type === 'sect')) break;
+      if (S.player.location !== id) {
+        tab = 'map'; mapFocus = id; mapPanFocus = true; setSub('map', 'atlas');
+      } else {
+        tab = 'society';
+        setSub('society', S.player.sect === id ? btn.dataset.sub || 'sect' : 'sect');
+      }
+      render();
+      break;
+    case 'sect-mentor-detail': {
+      const npcId = btn.dataset.npc;
+      if (!(S.nearby || []).some(npc => npc.id === npcId && npc.sect === S.player.sect)) break;
+      selectedNpc = npcId; friendBag = null; tab = 'society'; setSub('society', 'members'); render();
+      const bag = await loadNpcBag(npcId, true);
+      if (selectedNpc === npcId) { friendBag = bag; render(); }
+      break;
+    }
     case 'renown-source-open': {
       const source = (S.renownInfo?.sources || []).find(source => typeof source === 'object' && source.id === id);
       if (!source?.entry) break;
