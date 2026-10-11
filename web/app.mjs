@@ -131,7 +131,12 @@ async function call(path, body) {
     }
     if (data.report) lastReport = data.report;
     if (data.state) {
+      const wasReady = S?.breakthrough?.ready, wasStage = S?.player?.stage;
       S = data.state;
+      if (S.breakthrough?.ready && wasReady === false && wasStage === S.player?.stage) {
+        pushFeed(`修为圆满，可叩关「${S.breakthrough.next}」`, '点左侧「叩关突破 →」', 'good');
+        setTimeout(() => toast(`修为已圆满！点左侧金色「叩关突破 →」冲击「${S.breakthrough.next}」。`, 'good'), 2700);
+      }
       if (Number.isFinite(restoresBefore) && S.checkpoint?.restores > restoresBefore) {
         checkpointNotice = S.checkpoint.lastReason || '斗法败北，已恢复至最近存档。';
         pushFeed(checkpointNotice, '已回档', 'warn');
@@ -189,6 +194,15 @@ function stat(label, value, suffix, cls) {
        + (suffix ? `<span>${escape(suffix)}</span>` : '') + `</div>`;
 }
 
+// 突破按钮不可用的原因（与后端 /api/breakthrough 的检查一致，只用于显示）
+function breakthroughBlock() {
+  const bt = S.breakthrough, p = S.player;
+  if (!bt.ready) return '修为尚未圆满';
+  if (p.stones < bt.cost) return `灵石不足（需 ${bt.cost}，有 ${p.stones}）`;
+  if (p.health < 35) return `气血不足（需 35，现 ${p.health}）`;
+  return '';
+}
+
 function renderSidebar() {
   const p = S.player;
   $('#player-card').innerHTML =
@@ -227,14 +241,20 @@ function renderSidebar() {
   + `<p class="progress-note">修为 ${fmt(p.xp)} / ${fmt(p.xpNeed)}</p>`
   + `<div class="progress-meta">`
   + `<span>丹毒 ${S.arts.poison}</span><span>悟道点 ${S.arts.points}</span>`
-  + `</div></div>`;
+  + `</div>`
+  + (S.breakthrough?.ready
+      ? `<button class="bt-cta" data-action="goto-breakthrough">叩关突破 →`
+        + `<small>${escape(breakthroughBlock() || '目标「' + S.breakthrough.next + '」· 成功率 ' + Math.round(S.breakthrough.chance * 100) + '%')}</small></button>`
+      : '')
+  + `</div>`;
 
   const m = S.arts.mods;
   $('#hero-time').innerHTML =
     `<span class="year-chip">入道第 ${S.clock.year + 1} 年</span>`
   + `<span>${p.age} 岁</span>`
   + `<span>${S.clock.month} 月 ${S.clock.day} 日</span>`
-  + `<span>修炼 ×${m.cult.toFixed(2)}</span>`;
+  + `<span>修炼 ×${m.cult.toFixed(2)}</span>`
+  + (S.breakthrough?.ready ? `<button class="bt-chip" data-action="goto-breakthrough">修为圆满 · 叩关突破 →</button>` : '');
 
   $('#world-strip').innerHTML =
     `<div class="world-stat"><span class="symbol">山</span><div>`
@@ -307,7 +327,8 @@ function viewChronicle() {
       + `</div>`).join('')
     : `<div class="empty">这一世的动作会记在这里。</div>`;
 
-  const btPanel = panel('闭关叩关', `${pct(bt.chance, 0)} 成功率`,
+  const btBlock = breakthroughBlock();
+  const btPanel = `<div id="bt-panel">` + panel('突破境界 · 闭关叩关', `${pct(bt.chance, 0)} 成功率`,
     `<div style="padding:14px 22px 18px">`
   + `<div class="detail-list" style="border-top:0;padding-top:0">`
   + `<div><label>目标</label><strong>${escape(bt.next)}</strong></div>`
@@ -315,13 +336,13 @@ function viewChronicle() {
   + `<div><label>修为</label><strong>${fmt(p.xp)} / ${fmt(p.xpNeed)}</strong></div>`
   + `</div>`
   + `<div class="arts-actions" style="margin:0">`
-  + `<button class="primary" data-action="breakthrough" ${bt.ready ? '' : 'disabled'}>`
-  + `${bt.ready ? '开始闭关' : '修为尚未圆满'}</button>`
+  + `<button class="primary" data-action="breakthrough" ${btBlock ? 'disabled' : ''} title="${escape(btBlock)}">`
+  + `${btBlock ? escape(btBlock) : '开始闭关突破'}</button>`
   + `<button data-action="stipend">领俸禄（${S.bonds.stipendBalance}）</button>`
   + `<button data-action="save">保存</button>`
   + `<button data-action="export-save">导出行卷</button>`
   + `<button data-action="import-save">导回行卷</button>`
-  + `</div></div>`);
+  + `</div></div>`) + `</div>`;
 
   const feedPanel = asideBlock('当前动作',
     `<div class="action-feed">${feedHTML}</div>${poisonBox()}`);
@@ -2085,6 +2106,16 @@ document.addEventListener('click', async e => {
     case 'forge-run': {
       const g = k => document.querySelector(`[data-forge="${k}"]`)?.value || '';
       await call('forge', { main: g('main'), aux: g('aux'), core: g('core'), shape: g('shape') });
+      break;
+    }
+    case 'goto-breakthrough': {
+      tab = 'chronicle';
+      render();
+      const el = document.getElementById('bt-panel');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('bt-flash'); void el.offsetWidth; el.classList.add('bt-flash');
+      }
       break;
     }
     case 'goto-tab': {

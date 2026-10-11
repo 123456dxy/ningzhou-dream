@@ -150,6 +150,31 @@ check(s == 200, "改密码的会话仍有效")
 s, b, _ = call(client(), "/api/login", {"nickname": "Tester_B", "password": "newpw"})
 check(s == 200, "新密码可登录")
 
+# ---- 反馈箱 ----
+s, b, _ = call(client(), "/api/feedback", {"type": "bug", "text": "x"})
+check(s == 401, "未登录不能提交反馈")
+s, b, _ = call(a, "/api/feedback", {"type": "hack", "text": "x"})
+check(s == 400, "非法反馈类型被拒绝")
+s, b, _ = call(a, "/api/feedback", {"type": "bug", "text": "长" * 2001})
+check(s == 400, "超过 2000 字被拒绝")
+s, b, _ = call(a, "/api/feedback", {"type": "bug", "text": "   "})
+check(s == 400, "空反馈被拒绝")
+s, b, _ = call(a, "/api/feedback", {"type": "suggest", "text": "测试反馈\n第二行"})
+check(s == 200 and js(b).get("ok"), "登录后提交反馈成功")
+s, b, _ = call(a, "/api/feedback", {"type": "other", "text": "再来一条"})
+check(s == 429, "一分钟内第二条被限频")
+s, b, _ = call(bb, "/api/feedback", {"type": "other", "text": "乙也来一条"})
+check(s == 429, "同 IP 另一道号也受每分钟限频")
+s, b, _ = call(a, "/api/feedback")
+check(s in (401, 404, 405), f"没有公开读取反馈的接口 ({s})")
+FB = os.environ.get("NZ_FEEDBACK")
+if FB:
+    lines = open(os.path.join(FB, "feedback.jsonl"), encoding="utf-8").read().splitlines()
+    rec = json.loads(lines[-1]) if lines else {}
+    check(len(lines) == 1 and rec.get("nickname") == "测试甲" and rec.get("type") == "suggest"
+          and rec.get("text") == "测试反馈\n第二行" and rec.get("context", {}).get("realm") and rec.get("context", {}).get("gameDate"),
+          "反馈文件一行一条，含道号、类型、原文与境界/游戏日期上下文")
+
 s, b, h = call(a, "/api/logout", {})
 s, b, _ = call(a, "/api/state")
 check(s == 401, "退出后需重新登录")

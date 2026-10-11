@@ -1549,3 +1549,11 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 .nz-login-error { min-height: 1.2em; color: #a23b2a; font-size: 13px; }
 .nz-login-card small { color: #7a7f78; font-size: 12px; }
 #nz-user { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; font-size: 13px; }
+
+/* 突破入口：左侧金色按钮 + 面板高亮 */
+.progress-box button.bt-cta { background: linear-gradient(135deg, #e3c77d, #c9a457); color: #2a2412; font-weight: bold; letter-spacing: 2px; box-shadow: 0 0 0 1px #f1dc9e inset, 0 4px 14px #c9a45755; animation: bt-glow 2.2s ease-in-out infinite; }
+.progress-box button.bt-cta small { display: block; font-weight: normal; letter-spacing: 0; font-size: 10px; color: #4f4322; margin-top: 2px; }
+@keyframes bt-glow { 50% { box-shadow: 0 0 0 1px #f1dc9e inset, 0 4px 22px #e3c77daa; } }
+#bt-panel.bt-flash .chronicle-panel { animation: bt-flash 1.6s ease-out 2; }
+@keyframes bt-flash { 0% { box-shadow: 0 0 0 3px #d2b468; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.hero-time .bt-chip { border: 1px solid #c9a457; background: #f6ecd0; color: #7a5a1f; border-radius: 12px; padding: 2px 12px; font-size: 11px; animation: bt-glow 2.2s ease-in-out infinite; }

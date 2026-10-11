@@ -32,6 +32,8 @@
 #include "core/json.h"
 #include "core/save.h"
 #include "core/pwhash.h"
+#include "core/calendar.h"
+#include "core/model.h"
 
 namespace {
 
@@ -145,6 +147,7 @@ struct Player {
 struct SessionInfo { std::string id; std::string nickname; long long lastUsed = 0; };
 
 std::string g_dataDir = "saves";
+std::string g_feedbackDir = "feedback";
 long long g_idleSeconds = 30 * 60;
 std::map<std::string, std::unique_ptr<Player>> g_players;   // id -> player
 std::map<std::string, SessionInfo> g_sessions;              // sid -> info
@@ -331,6 +334,62 @@ Response leaderboardResp(const Request& req) {
     o.set("updatedAt", (double)g_boardAt);
     o.set("list", list);
     return jsonResp(200, o);
+}
+
+// ---------------- 反馈箱 ----------------
+// 追加写入 <feedback 目录>/feedback.jsonl；不提供读取接口（管理员通过面板读文件）。
+// 限频：每道号、每 IP 各自 每分钟 1 条、每天 30 条。
+struct RateBucket { long long lastAt = 0; long long dayStart = 0; int dayCount = 0; };
+std::map<std::string, RateBucket> g_fbRate;
+
+std::string fbRateCheck(const std::string& key, long long now) {
+    auto it = g_fbRate.find(key);
+    if (it == g_fbRate.end()) return {};
+    const RateBucket& b = it->second;
+    if (now - b.lastAt < 60) return "提交太频繁，请 " + std::to_string(60 - (now - b.lastAt)) + " 秒后再试。";
+    if (now - b.dayStart < 86400 && b.dayCount >= 30) return "今天的反馈已达 30 条上限，明天再来吧。";
+    return {};
+}
+
+void fbRateNote(const std::string& key, long long now) {
+    if (g_fbRate.size() > 50000) {
+        for (auto it = g_fbRate.begin(); it != g_fbRate.end();)
+            it = (now - it->second.dayStart >= 86400 && now - it->second.lastAt >= 60) ? g_fbRate.erase(it) : std::next(it);
+    }
+    RateBucket& b = g_fbRate[key];
+    if (now - b.dayStart >= 86400) { b.dayStart = now; b.dayCount = 0; }
+    b.lastAt = now;
+    ++b.dayCount;
+}
+
+size_t utf8Len(const std::string& s) {
+    size_t n = 0;
+    for (unsigned char c : s) if ((c & 0xC0) != 0x80) ++n;
+    return n;
+}
+
+bool validUtf8(const std::string& s) {
+    for (size_t i = 0; i < s.size();) {
+        const unsigned char c = s[i];
+        int len = c < 0x80 ? 1 : (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : (c & 0xF8) == 0xF0 ? 4 : 0;
+        if (!len || i + len > s.size()) return false;
+        for (int k = 1; k < len; ++k) if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80) return false;
+        i += len;
+    }
+    return true;
+}
+
+std::string isoNow() {
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char buf[40];
+    std::strftime(buf, sizeof buf, "%Y-%m-%d %H:%M:%S %z", &tm);
+    return buf;
 }
 
 // ---------------- 密码与登录限速 ----------------
@@ -530,6 +589,59 @@ Response handle(const Request& req) {
         return jsonResp(200, o);
     }
 
+    if (path == "/api/feedback") {
+        if (req.method != "POST") return errorResp(405, "此操作需要 POST 请求。");
+        std::string err;
+        const nz::json::Value in = nz::json::Value::parse(req.body, &err);
+        if (!err.empty() || !in.isObject() || !in["text"].isString()) return errorResp(400, "请填写反馈内容。");
+        const std::string type = in["type"].isString() ? in["type"].asString() : "";
+        if (type != "bug" && type != "suggest" && type != "other") return errorResp(400, "请选择反馈类型。");
+        std::string text = in["text"].asString();
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\n' || text.back() == '\r')) text.pop_back();
+        if (text.empty()) return errorResp(400, "请填写反馈内容。");
+        if (!validUtf8(text)) return errorResp(400, "反馈内容编码无效。");
+        if (utf8Len(text) > 2000) return errorResp(400, "反馈最多 2000 字。");
+        const long long now = nowSec();
+        const std::string kNick = "n|" + p.id, kIp = "i|" + req.clientIp;
+        if (std::string why = fbRateCheck(kNick, now); !why.empty()) return errorResp(429, why);
+        if (std::string why = fbRateCheck(kIp, now); !why.empty()) return errorResp(429, why);
+        nz::json::Value o(nz::json::Object{});
+        o.set("time", isoNow());
+        o.set("nickname", p.nickname);
+        o.set("ip", req.clientIp);
+        o.set("type", type);
+        o.set("text", text);
+        if (p.s.started) {
+            const nz::Game& g = p.s.g;
+            nz::json::Value c(nz::json::Object{});
+            c.set("character", g.player.name);
+            c.set("realm", nz::realmName(g.player.stage));
+            c.set("xp", (double)g.player.xp);
+            c.set("age", (double)g.player.age);
+            c.set("gameDate", nz::calendarLabel(g));
+            c.set("location", g.player.location);
+            c.set("ended", g.ended);
+            o.set("context", c);
+        }
+        const auto ua = req.headers.find("user-agent");
+        if (ua != req.headers.end()) o.set("userAgent", ua->second.substr(0, 200));
+        std::error_code ec;
+        fs::create_directories(u8(g_feedbackDir), ec);
+        std::string line = o.dump();
+        for (char& ch : line) if (ch == '\n' || ch == '\r') ch = ' ';
+        {
+            std::ofstream f(u8(g_feedbackDir + "/feedback.jsonl"), std::ios::binary | std::ios::app);
+            if (!f) return errorResp(500, "反馈保存失败，请稍后再试。");
+            f << line << '\n';
+            if (!f.good()) return errorResp(500, "反馈保存失败，请稍后再试。");
+        }
+        fbRateNote(kNick, now);
+        fbRateNote(kIp, now);
+        nz::json::Value r(nz::json::Object{});
+        r.set("ok", true);
+        return jsonResp(200, r);
+    }
+
     // 切到这个玩家的会话与存档目录，交给原有规则接口
     nz::api::bindSession(&p.s);
     nz::setSaveDirOverride(p.dir);
@@ -588,6 +700,7 @@ int main(int argc, char** argv) {
         else if (a == "--host" && i + 1 < argc) host = argv[++i];
         else if (a == "--web" && i + 1 < argc) webDir = argv[++i];
         else if (a == "--data" && i + 1 < argc) g_dataDir = argv[++i];
+        else if (a == "--feedback" && i + 1 < argc) g_feedbackDir = argv[++i];
         else if (a == "--idle-minutes" && i + 1 < argc) g_idleSeconds = std::max(1, std::atoi(argv[++i])) * 60LL;
         else if (a == "--no-open") openBrowser = false;
         else if (a == "--help" || a == "-h") {
@@ -598,6 +711,7 @@ int main(int argc, char** argv) {
                 "  --port N           监听端口（默认 8106）\n"
                 "  --web DIR          前端目录（默认可执行文件同级的 web/）\n"
                 "  --data DIR         玩家数据目录（默认 ./saves）\n"
+                "  --feedback DIR     反馈箱目录（默认 ./feedback）\n"
                 "  --idle-minutes N   玩家多久不操作后保存并释放内存（默认 30）\n"
                 "  --no-open          启动后不自动打开浏览器\n");
             return 0;
