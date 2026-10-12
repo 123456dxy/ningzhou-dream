@@ -19,6 +19,10 @@ const KIND_LABEL = {
   exhaust: '本场移除', redraw: '换手', empower: '增伤', ward: '减伤', fireBurst: '引爆',
 };
 
+// 用途：显示神通类型中文标签。
+// 流程：按kind查表，未知类型回退为神通。
+// 调用方式：神通卡面传入卡牌对象。
+// 返回值：中文类型字符串。
 export function cardKind(card) {
   return KIND_LABEL[card?.kind] || '神通';
 }
@@ -55,6 +59,10 @@ const KIND_RULE = {
   redraw: '弃掉其它手牌，再重抽相同数量 +1 张；弃牌仍会在牌堆重洗后出现。',
 };
 
+// 用途：显示神通规则说明。
+// 流程：优先读取权威description，再处理特殊牌与类型回退。
+// 调用方式：神通或战斗卡面传入卡牌对象。
+// 返回值：规则字符串。
 export function cardRule(card) {
   if (!card) return '';
   if (card.description) return card.description;
@@ -67,9 +75,21 @@ export function cardRule(card) {
 }
 
 // 将实际战斗状态连同持续范围显示出来；不据卡名推测是否已经生效。
+// 用途：解释当前已生效战斗状态。
+// 流程：只按真实战斗字段收集增益、代价、持续范围与状态数值。
+// 调用方式：战斗视图传入battle。
+// 返回值：状态条目数组。
 export function battleStatusRows(b) {
   const rows = [];
+  // 用途：收集一个战斗状态条目。
+  // 流程：把标签、数值、持续范围和色调加入rows。
+  // 调用方式：battleStatusRows按已生效字段调用。
+  // 返回值：数组push后的长度。
   const add = (label, value, scope, tone = 'good') => rows.push({ label, value, scope, tone });
+  // 用途：格式化战斗比例。
+  // 流程：把比例乘100并四舍五入。
+  // 调用方式：状态摘要传入value。
+  // 返回值：百分比字符串。
   const percent = value => `${Math.round(value * 100)}%`;
   if (b.swordQi > 0) add('剑气', `${b.swordQi} / 8 层`, '本场积累；部分剑击消耗');
   if (b.charge > 0) add('重势', `${b.charge} / 4 层`, '爆发神通消耗后清空');
@@ -93,6 +113,10 @@ export function battleStatusRows(b) {
 }
 
 // 卡面上要显示的伤害/护盾/治疗数字
+// 用途：显示卡牌直接数值。
+// 流程：收集正伤害、护盾、治疗和势值，并连接摘要。
+// 调用方式：战斗手牌传入实时卡牌。
+// 返回值：数值摘要字符串。
 export function cardNumbers(card) {
   const out = [];
   if (card.damage > 0) out.push(`伤 ${card.damage}`);

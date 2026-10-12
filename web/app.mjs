@@ -17,7 +17,7 @@ import { loadRoster, invalidateRoster, renderRoster, bindRoster } from './roster
 import { heading, panel, layout, asideBlock, timeline, yearControls, hintBox } from './shell.mjs';
 import { renderDaos, renderArtsAside, loadNodes, invalidateNodes,
          loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds } from './arts.mjs';
-import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL } from './economy.mjs';
+import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect } from './economy.mjs';
 import { loadLegacy, invalidateLegacy, draftTalents, renderEnding, renderLegacyPanel, renderDraftPanel } from './legacy.mjs';
 import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks, renderAchievements } from './sects.mjs';
 import { renderRenownPanel, renderRenownBar, renownChip } from './renown.mjs';
@@ -29,13 +29,16 @@ import { renderPortrait, battleImpacts, animateBattleImpacts } from './portraits
 import { renderDungeons } from './dungeons.mjs';
 import { caveSupplyAccess, renderCaveUpgrade, renderCaveSupplyLimits } from './cave-ui.mjs';
 import { renderArtifactAbility, renderEquippedArtifacts, renderBattleArtifacts, renderForgePreview } from './artifacts.mjs';
+import { renderInventoryPanel } from './inventory-panel.mjs';
+import { renderTaskPanel } from './task-panel.mjs';
+import { renderCraftSupply, renderSalvageQuote } from './workshop.mjs';
 import {
   renderFriendList, renderFriendPanel, loadNpcBag, invalidateFriendCache,
   renderTidePanel, renderBondActions,
 } from './friends.mjs';
 
 let S = null;            // 游戏状态（来自 C++）
-let tab = location.hash === '#tianji' ? 'tianji' : 'chronicle';   // 当前页签
+let tab = tabFromHash();   // 当前页签
 let selectedNpc = null;  // 选中的人
 let friendBag = null;    // 选中的人的可换物品（/api/npc-bag 结果）
 let mapFocus = null;     // 舆图上选中的地点
@@ -47,7 +50,19 @@ let mapPanFocus = false;
 // 子页签：把「一页拉到底」拆成几段，玩家不用滚半天。
 // key 是页签名，值是当前子页签 id。
 let subTab = {};
+const legacyHashParts = location.hash.slice(1).split(/[/?]/);
+if (['forge', 'brew', 'kit'].includes(legacyHashParts[0])) subTab.workshop = legacyHashParts[0];
+if (legacyHashParts[0] === 'market' && ['brew', 'kit'].includes(legacyHashParts[1])) subTab.workshop = legacyHashParts[1];
+if (legacyHashParts[0] === 'economy' && legacyHashParts[1] === 'forge') subTab.workshop = 'forge';
+// 用途：读取当前子页。
+// 流程：按页签键读取本地子页状态，缺省采用默认值。
+// 调用方式：页签视图传入键和默认子页。
+// 返回值：当前子页标识。
 function subOf(tabKey, def) { return subTab[tabKey] || def; }
+// 用途：切换本地子页。
+// 流程：写入subTab中指定页签的子页。
+// 调用方式：导航和点击处理传入页签与子页标识。
+// 返回值：无返回值。
 function setSub(tabKey, id) { subTab[tabKey] = id; }
 let shopKind = 'herb';   // 坊市当前分类
 let shopQty = {};        // 各货品的购买数量
@@ -70,6 +85,26 @@ let dungeonView = 'sites';
 let dungeonIntelKind = 'all';
 let dungeonIntelSearch = '';
 let checkpointNotice = '';
+let inventoryKind = 'all';
+if (legacyHashParts[0] === 'equipment') inventoryKind = 'gear';
+let inventoryGrade = 'all';
+let chronicleHeight = 360;
+try { chronicleHeight = Math.max(180, Math.min(900, Number(localStorage.getItem('nz-chronicle-height')) || 360)); } catch { /* 存储不可用时使用默认高度。 */ }
+let chronicleResizeObserver = null;
+let brewSupplyRecipeId = '';
+let craftSupplyQuote = null;
+
+// 用途：兼容旧页面链接，并解析新顶级页签的 hash。
+// 流程：读取 hash 主路径，将丹毒/装备/炼丹/炼器旧入口映射到新页面。
+// 调用方式：首次启动与浏览器历史切换时调用。
+// 返回值：合法顶级页签；未知 hash 回到岁月纪事。
+function tabFromHash() {
+  const [key, sub] = location.hash.slice(1).split(/[/?]/);
+  if ((key === 'market' && ['brew', 'kit'].includes(sub)) || (key === 'economy' && sub === 'forge')) return 'workshop';
+  const aliases = { poison: 'inventory', equipment: 'inventory', forge: 'workshop', brew: 'workshop', kit: 'workshop', tasks: 'economy' };
+  const next = aliases[key] || key;
+  return ['chronicle', 'map', 'arts', 'society', 'roster', 'quests', 'market', 'economy', 'workshop', 'inventory', 'tianji', 'dungeon'].includes(next) ? next : 'chronicle';
+}
 const tianji = createTianji({
   onChange: () => {
     if (S && tab === 'tianji' && !S.battle && !S.dungeons?.run && !S.ended) render();
@@ -77,29 +112,59 @@ const tianji = createTianji({
   },
   onSettled: () => { call('state'); },
 });
+// 用途：切换顶级页面并记录历史。
+// 流程：更新hash和当前tab，再调用主渲染。
+// 调用方式：导航按钮传入页面标识。
+// 返回值：无返回值。
 function navigateTab(next) {
-  if (next === 'tianji' && location.hash !== '#tianji') history.pushState({ nzTab: next }, '', '#tianji');
-  else if (next !== 'tianji' && location.hash === '#tianji') history.pushState({ nzTab: next }, '', location.pathname + location.search);
+  $('#toast').hidden = true;
+  clearTimeout($('#toast')._t);
+  if (location.hash !== '#' + next) history.pushState({ nzTab: next }, '', '#' + next);
   tab = next;
   render();
 }
 window.addEventListener('popstate', () => {
-  tab = location.hash === '#tianji' ? 'tianji' : history.state?.nzTab || 'chronicle';
+  tab = location.hash ? tabFromHash() : history.state?.nzTab || 'chronicle';
+  const [key, sub] = location.hash.slice(1).split(/[/?]/);
+  if (['forge', 'brew', 'kit'].includes(key)) setSub('workshop', key);
+  if (key === 'market' && ['brew', 'kit'].includes(sub)) setSub('workshop', sub);
+  if (key === 'economy' && sub === 'forge') setSub('workshop', 'forge');
+  if (key === 'equipment') { inventoryKind = 'gear'; setSub('inventory', 'items'); }
   if (S) render();
 });
 
 // ------------------------------------------------------------
 // 基础工具
 // ------------------------------------------------------------
+// 用途：读取桌面页面中的单个元素。
+// 流程：把调用者的选择器交给 document.querySelector。
+// 调用方式：页面渲染和动作处理传入 CSS 选择器。
+// 返回值：首个匹配元素或 null。
 const $ = sel => document.querySelector(sel);
 
+// 用途：转义页面文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：桌面渲染与提示内容传入文本。
+// 返回值：安全文本字符串。
 function escape(s) {
   return String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// 用途：显示中文分组数字。
+// 流程：为空值补零并按zh-CN格式化。
+// 调用方式：统计面板传入数值。
+// 返回值：格式化字符串。
 const fmt = n => (n ?? 0).toLocaleString('zh-CN');
+// 用途：显示百分比。
+// 流程：按函数参数指定的小数精度将比例乘100。
+// 调用方式：各数值面板传入比例。
+// 返回值：带百分号的字符串。
 const pct = (v, d = 0) => `${(v * 100).toFixed(d)}%`;
 
+// 用途：显示短时操作反馈。
+// 流程：更新toast内容和样式，重置隐藏计时器。
+// 调用方式：动作处理传入消息及反馈类别。
+// 返回值：无返回值。
 function toast(msg, kind) {
   const el = $('#toast');
   el.textContent = msg;
@@ -110,12 +175,20 @@ function toast(msg, kind) {
 }
 
 // 往动作流里推一条
+// 用途：记录会话动作反馈。
+// 流程：把文字和变化摘要放到动作流顶部，并限制长度。
+// 调用方式：API动作处理传入反馈内容。
+// 返回值：无返回值。
 function pushFeed(text, delta, kind) {
   feed.unshift({ text, delta, kind: kind || 'info', t: Date.now() });
   if (feed.length > 40) feed.pop();
 }
 
 // 所有请求都带上反馈
+// 用途：执行游戏动作并同步界面。
+// 流程：加请求锁，POST接口，处理错误、状态、缓存失效与反馈，最后释放锁。
+// 调用方式：事件处理传入不含/api/的路径及请求体。
+// 返回值：Promise，解析后的响应或连接失败时null。
 async function call(path, body) {
   if (requestBusy) return null;
   const battleBefore = path === 'battle/turn' && S?.battle ? { ...S.battle } : null;
@@ -164,6 +237,7 @@ async function call(path, body) {
       invalidateSpells(); spellsReady = false; spellsRevision++;
       invalidateEco(); economyReady = false;
       forgePreview = null; forgePreviewSerial++;
+      craftSupplyQuote = null;
       invalidateRoster(); rosterReady = false;
       invalidateSects(); sectData = null; achData = null;
       legCache = null;
@@ -175,7 +249,7 @@ async function call(path, body) {
         checkpointNotice = '';
         feed = []; lastReport = null;
       }
-      if (tab === 'economy' || tab === 'society') await refreshEconomy();
+      if (['economy', 'society', 'workshop', 'inventory'].includes(tab)) await refreshEconomy();
       render();
       animateBattleImpacts(battleImpacts(battleBefore, S.battle));
     }
@@ -194,6 +268,10 @@ async function call(path, body) {
 // 子页签组件
 // ------------------------------------------------------------
 // items: [[id, 标签, 角标], ...]
+// 用途：生成子页导航。
+// 流程：遍历子页定义并标注当前选项。
+// 调用方式：页面传入页签键、标签数组与当前子页。
+// 返回值：导航HTML字符串。
 function subTabs(tabKey, items, current) {
   return `<div class="subtabs">` + items.map(([id, label, badge]) =>
     `<button class="subtab ${id === current ? 'on' : ''}"
@@ -206,6 +284,10 @@ function subTabs(tabKey, items, current) {
 // 侧边栏
 
 // ------------------------------------------------------------
+// 用途：生成侧栏属性。
+// 流程：组合标签、数值、单位与可选样式。
+// 调用方式：角色面板传入显示字段。
+// 返回值：已转义的属性HTML。
 function stat(label, value, suffix, cls) {
   return `<div class="stat ${cls || ''}"><label>${escape(label)}</label>`
        + `<strong>${escape(value)}</strong>`
@@ -213,6 +295,10 @@ function stat(label, value, suffix, cls) {
 }
 
 // 突破按钮不可用的原因（与后端 /api/breakthrough 的检查一致，只用于显示）
+// 用途：显示突破条件缺口。
+// 流程：依次检查修为圆满、灵石与气血阈值。
+// 调用方式：突破按钮渲染时无参调用。
+// 返回值：阻止突破的文案；可突破时空字符串。
 function breakthroughBlock() {
   const bt = S.breakthrough, p = S.player;
   if (!bt.ready) return '修为尚未圆满';
@@ -221,9 +307,17 @@ function breakthroughBlock() {
   return '';
 }
 
+// 用途：更新天机大比提醒。
+// 流程：合并状态与天机当前遭遇标识，写入提醒宿主。
+// 调用方式：侧栏刷新或天机状态变化时调用。
+// 返回值：无返回值。
 function updateTianjiReminder() {
   $('#tianji-reminder').innerHTML = renderTianjiReminder(S.tianji ? { ...S.tianji, hasEncounter: tianji.status ? tianji.status.encounter?.state === 'active' : S.tianji.hasEncounter } : null);
 }
+// 用途：刷新人物和天下摘要。
+// 流程：读取当前S并重绘人物、眼前道友、进度、日期及天下概况。
+// 调用方式：主渲染与结局渲染无参调用。
+// 返回值：无返回值；修改对应DOM。
 function renderSidebar() {
   updateTianjiReminder();
   const p = S.player;
@@ -233,6 +327,7 @@ function renderSidebar() {
   + `<p class="player-identity">${escape(p.gender)} · `
   + `${escape(p.sectName || '宁州散修')} · ${escape(p.realmName)}</p>`
   + `<p class="location-line"><span>⌾</span> 现居 ${escape(p.locationName)}</p>`
+  + `<div class="innate-stats"><span>资质 <b>${p.apt}</b></span><span>悟性 <b>${p.insight}</b></span><span>福缘 <b>${p.luck}</b></span></div>`
   // 还没拜入宗门时给一条明确指引 —— 之前「怎么入宗」完全没有入口提示，
   // 五宗一览埋在宗门页第 4 屏，玩家根本找不到
   + (!p.sect
@@ -247,7 +342,7 @@ function renderSidebar() {
   + stat('灵石', fmt(p.stones), '枚')
   + stat('气血', p.health, '/ 100', 'health')
   + stat('遁速', p.escapeSpeed ?? '—', '赶路 / 先手 / 脱身')
-  + `</div>` + renderEquippedArtifacts(S.gears);
+  + `</div><button class="wide-btn" data-action="goto-tab" data-tab="inventory">行囊与人物面板 →</button>`;
 
   const npc = (S.nearby || []).find(n => n.id === selectedNpc);
   const npcCard = $('#npc-card');
@@ -296,6 +391,10 @@ function renderSidebar() {
 // 页签：岁月纪事
 // 结构照原版：section-head → chronicle-layout(section + aside.plan-panel)
 // ------------------------------------------------------------
+// 用途：展示岁月纪事和当前安排。
+// 流程：筛选近期日志，组合拖动行卷、紧凑计划、推进报告与突破面板。
+// 调用方式：主渲染选择chronicle时调用。
+// 返回值：页面HTML字符串。
 function viewChronicle() {
   const p = S.player;
   const m = S.arts.mods;
@@ -310,22 +409,21 @@ function viewChronicle() {
         `<button data-logfilter="${k}" class="${logFilter === k ? 'active' : ''}">${n}</button>`)
       .join('')
   + `</div>`
-  + `<div class="timeline">${timeline(filteredLogs(logs), e => e.age ?? Math.max(16, p.age - S.clock.year + e.year))}</div>`
+  + `<div class="timeline chronicle-resizable" data-chronicle-resize style="height:${chronicleHeight}px">${timeline(filteredLogs(logs), e => e.age ?? Math.max(16, p.age - S.clock.year + e.year))}</div>`
   + `<div class="timeline-bottom"><span>共 ${logs.length} 则</span>`
   + `<span>第 ${S.clock.year + 1} 年 · ${S.clock.month} 月</span></div>`;
 
   // 右侧：本月打算
-  const planOpts = S.plans.map(pl =>
-    `<button class="plan-option ${pl.id === S.plan ? 'selected' : ''}" `
-  + `data-action="plan" data-id="${pl.id}">`
-  + `<span class="plan-symbol">${escape(pl.icon || '◈')}</span>`
-  + `<span><strong>${escape(pl.name)}</strong>`
-  + `<small>${escape(pl.desc)}</small>`
-  + (pl.preview ? `<small class="plan-preview">${escape(pl.preview)}</small>` : '')
-  + `</span></button>`).join('');
+  const selectedPlan = S.plans.find(pl => pl.id === S.plan);
+  const planOpts = `<label class="compact-plan">日常安排<select data-plan-select aria-label="选择本月唯一计划">`
+    + S.plans.map(pl => `<option value="${escape(pl.id)}" ${pl.id === S.plan ? 'selected' : ''}>${escape(pl.name)}</option>`).join('')
+    + `</select></label><p class="plan-description">${escape(selectedPlan?.desc || '')}</p>`
+    + (selectedPlan?.preview ? `<p class="plan-preview">${escape(selectedPlan.preview)}</p>` : '');
 
   const jobLine = S.job
-    ? `<p class="intro">在途：${escape(S.job.name)}（剩 ${S.job.remaining}/${S.job.total} 天）</p>`
+    ? `<p class="intro">进行中：${escape(S.job.name)}（剩 ${S.job.remaining}/${S.job.total} 天）</p>`
+      + (S.job.type === 'brew' ? renderPillEffect(S, S.job.to) : '')
+      + (S.job.type === 'forge' ? '<button data-action="goto-workshop-forge">查看本炉法宝实际效果 →</button>' : '')
     : `<p class="intro">本月尚余 ${S.clock.left} 天；短工作结束后可另作安排。</p>`;
 
   const bt = S.breakthrough;
@@ -367,7 +465,7 @@ function viewChronicle() {
   + `</div></div>`) + `</div>`;
 
   const feedPanel = asideBlock('当前动作',
-    `<div class="action-feed">${feedHTML}</div>${poisonBox()}`);
+    `<div class="action-feed">${feedHTML}</div>`);
 
   // 兽潮是全图大事：起了就摆在最上面，玩家一眼看到
   const tideBlock = (S.tide && S.tide.active)
@@ -385,6 +483,10 @@ function viewChronicle() {
 
 // 纪事筛选
 let logFilter = 'all';
+// 用途：筛选纪事类别。
+// 流程：依当前logFilter选择全部、大事或指定category。
+// 调用方式：纪事视图传入日志数组。
+// 返回值：筛选后的数组；全部时原数组。
 function filteredLogs(logs) {
   if (logFilter === 'all') return logs;
   if (logFilter === 'important') return logs.filter(e => e.important);
@@ -392,6 +494,10 @@ function filteredLogs(logs) {
 }
 
 // 推进报告
+// 用途：显示最近推进结果。
+// 流程：按暂停原因读取说明，列出实际推进天数与重点。
+// 调用方式：纪事视图无参调用。
+// 返回值：报告HTML；没有报告时空字符串。
 function lastReportHTML() {
   if (!lastReport) return '';
   const hl = lastReport.highlights || [];
@@ -410,6 +516,10 @@ function lastReportHTML() {
 }
 
 // 丹毒面板
+// 用途：显示当前丹毒和修炼影响。
+// 流程：读取服务端丹毒预览，组合进度条、阈值与倍率。
+// 调用方式：行囊侧栏无参调用。
+// 返回值：丹毒面板HTML字符串。
 function poisonBox() {
   const pi = S.poison || { current: 0, threshold: 20, affecting: false,
                            cultPenalty: 1, summary: '' };
@@ -426,6 +536,10 @@ function poisonBox() {
 // ------------------------------------------------------------
 // 页签：宁州舆图
 // ------------------------------------------------------------
+// 用途：展示舆图与同道。
+// 流程：按地图子页选择地图、地点信息或知交面板。
+// 调用方式：主渲染选择map时调用。
+// 返回值：页面HTML字符串。
 function viewMap() {
   const p = S.player;
   if (!S.locations.some(location => location.id === mapFocus))
@@ -463,6 +577,10 @@ function viewMap() {
   return head + tabs + renderAtlas(S, { focus: mapFocus, search: mapSearch, filter: mapFilter, mode: mapModes[mapFocus], zoom: mapZoom });
 }
 
+// 用途：反馈赶路结果。
+// 流程：按旅途实际状态解释抵达、暂停或失败，并写入反馈。
+// 调用方式：赶路动作传入响应与目的地。
+// 返回值：无返回值。
 function showTravelResult(result, to) {
   if (!result || result.error) return;
   const feedback = travelFeedback(S, to, result);
@@ -486,6 +604,10 @@ let spellsRevision = 0;
 // 之前这里只显示 "tuna Lv.1" 这种原始 id，
 // 玩家根本看不出自己会什么，还以为开局什么都没给。
 // ------------------------------------------------------------
+// 用途：展示已修功法。
+// 流程：读取主辅修、层数、来源与当前效果，生成管理按钮。
+// 调用方式：洞府道法页面无参调用。
+// 返回值：功法列表HTML字符串。
 function manualCards() {
   const list = S.arts.manualList || [];
   if (!list.length) return `<div class="empty">还没有修习任何功法。</div>`;
@@ -513,6 +635,10 @@ function manualCards() {
     </div>`).join('') + `</div>`;
 }
 
+// 用途：展示功法获取与修习条件。
+// 流程：逐项判断拥有、层数和权威条件，生成买书、兑换或修习按钮。
+// 调用方式：功法来源面板传入条目与动作路径。
+// 返回值：列表HTML字符串。
 function manualSourceRows(list, action) {
   return list.map(m => {
     const owned = !!m.owned;
@@ -537,6 +663,10 @@ function manualSourceRows(list, action) {
 // ------------------------------------------------------------
 // 携带神通：名称 / 灵力 / 类型 / 规则说明
 // ------------------------------------------------------------
+// 用途：展示当前携带神通。
+// 流程：列出消耗、境界、规则和服务端实际数值预览。
+// 调用方式：洞府神通侧栏无参调用。
+// 返回值：神通列表HTML或空状态HTML。
 function spellCards() {
   const list = S.arts.spellList || [];
   if (!list.length) return `<div class="empty">还没有携带任何神通。</div>`;
@@ -553,6 +683,10 @@ function spellCards() {
     </div>`).join('') + `</div>`;
 }
 
+// 用途：展示洞府道法与构筑。
+// 流程：异步加载节点和神通目录，按子页组合功法、神通、流派与道法。
+// 调用方式：主渲染选择arts时调用。
+// 返回值：页面HTML字符串，未加载时占位HTML。
 function viewArts() {
   const a = S.arts;
 
@@ -631,6 +765,10 @@ function viewArts() {
 // ------------------------------------------------------------
 // 洞府与配给：修炼速度是怎么来的，以及每月要花多少灵石
 // ------------------------------------------------------------
+// 用途：展示洞府配给与修炼来源。
+// 流程：读取服务端供应档位、权限和修炼拆解，生成单选档位按钮。
+// 调用方式：洞府页传入当前state。
+// 返回值：配给面板HTML字符串。
 function renderSupplyPanel(st) {
   const sup = (st.player && st.player.supply) || {};
   const cul = (st.player && st.player.cultivation) || {};
@@ -638,6 +776,10 @@ function renderSupplyPanel(st) {
 
   // 没安府就不能设灵气配给：灵气只存在于洞府，府都没有谈何引气
   const hasCave = !!(st.player && st.player.cave);
+  // 用途：生成一类配给档位。
+  // 流程：根据权威权限生成档位按钮并说明成本与实际作用。
+  // 调用方式：renderSupplyPanel传入当前配给信息。
+  // 返回值：配给行HTML字符串。
   const row = (kind, label, level, cost, name, desc, note) => {
     const locked = (kind === 'qi' && !hasCave);
     const btns = [];
@@ -659,6 +801,10 @@ function renderSupplyPanel(st) {
     </div>`;
   };
 
+  // 用途：显示修炼倍率的简短数值。
+  // 流程：空值显示占位，其他数值四舍五入到两位小数。
+  // 调用方式：配给来源说明传入倍率。
+  // 返回值：数值或占位字符串。
   const f = (v) => (v == null ? '—' : (Math.round(v * 100) / 100));
 
   return `<div class="chronicle-layout" style="margin-top:22px">`
@@ -698,6 +844,10 @@ function renderSupplyPanel(st) {
 }
 // 页签：宗门知交
 // ------------------------------------------------------------
+// 用途：展示宗门与知交。
+// 流程：依据当前子页组织入宗、俸禄、师徒、知交与藏经阁条件。
+// 调用方式：主渲染选择society时调用。
+// 返回值：页面HTML字符串。
 function viewSociety() {
   const b = S.bonds;
   // 宗门页只列本宗门的人 —— 当地仙友属于「地点」，已挪到地图页
@@ -836,6 +986,10 @@ function viewSociety() {
     const manuals = (S.manualSources || []);
     const sectBooks = manuals.filter(m => m.sect === S.player.sect);
     const cityBooks = manuals.filter(m => m.city);
+    // 用途：显示藏经阁功法列表或空状态。
+    // 流程：有条目时调用统一来源行，否则显示暂无可兑换说明。
+    // 调用方式：藏经阁传入列表与动作路径；label 参数当前未使用。
+    // 返回值：功法来源 HTML 字符串。
     const rows = (list, act, label) => list.length
       ? manualSourceRows(list, act)
       : `<div class="empty">暂无可兑换的功法。</div>`;
@@ -876,6 +1030,10 @@ function viewSociety() {
 // 名单数据由 roster.mjs 管理（筛选/排序/缓存都在那边），
 // 这里只负责取数、出 HTML，并把交互绑回去。
 // ------------------------------------------------------------
+// 用途：展示好友通讯录。
+// 流程：缓存未加载时异步读取，加载后委托通讯录渲染。
+// 调用方式：主渲染选择roster时调用。
+// 返回值：通讯录HTML或加载占位HTML。
 function viewRoster() {
   // 名单还没拉到就先拉一次，拉完重绘
   if (!rosterReady) {
@@ -888,6 +1046,10 @@ function viewRoster() {
 }
 
 // 绑定名单页的筛选、排序与传讯/邀请/当面往来
+// 用途：连接通讯录动作。
+// 流程：将传讯、邀约、见面和重绘回调交给通讯录事件绑定。
+// 调用方式：通讯录DOM插入后无参调用。
+// 返回值：无返回值。
 function bindRosterTab() {
   const root = $('#workspace');
   if (!root) return;
@@ -916,6 +1078,10 @@ function bindRosterTab() {
     },
   });
 }
+// 用途：展示探索进度与成就。
+// 流程：读取游历统计和成就目录，按子页组织探索与成就。
+// 调用方式：主渲染选择quests时调用。
+// 返回值：页面HTML字符串。
 function viewQuests() {
   const adv = S.adventure;
   const p = S.player;
@@ -999,21 +1165,17 @@ function viewQuests() {
 
   const sub = subOf('quests', 'travel');
   const tabs = subTabs('quests', [
-    ['travel', '游历与剑道'],
-    ['wild', '悬赏与支线', `${(S.wildTasks || []).length} 项`],
-    ['renown', '声望与成就'],
+    ['travel', '游历探索'],
+    ['renown', '成就'],
   ], sub);
-  const head = heading('机缘成就', '游历、悬赏、剑道、成就与本世档案。', '');
+  const head = heading('机缘成就', '查看游历进度与本世成就。', '');
 
   if (sub === 'wild') {
     return head + tabs
       + `<div style="display:grid;gap:22px">${wildPanel}${storyPanel}</div>`;
   }
   if (sub === 'renown') {
-    return head + tabs
-      + `<div class="chronicle-layout">`
-      + filePanel + `<aside class="plan-panel">${achPanel}</aside></div>`
-      + `<div style="margin-top:22px">${renownPanel}</div>`;
+    return head + tabs + achPanel;
   }
   return head + tabs
        + layout(`<div style="display:grid;gap:22px">${advPanel}${speedPanel}</div>`,
@@ -1027,7 +1189,19 @@ function viewQuests() {
 let ecoOpts = [];
 let forgeOpts = { materials: [], shapes: [] };
 
+// 用途：展示集中任务入口。
+// 流程：把state、营生清单、宗门目录和当前分类交给任务模块。
+// 调用方式：主渲染选择economy时调用。
+// 返回值：任务页面HTML字符串。
 function viewEconomy() {
+  return renderTaskPanel(S, ecoOpts, sectData, subOf('economy', 'city'));
+}
+
+// 用途：展示独立工坊的炼器配方与权威成品推演。
+// 流程：复用材料条件表与 forge-preview，并保留当前安排及暂停后的继续入口。
+// 调用方式：工坊选择“炼器”时由 viewMarket 调用。
+// 返回值：炼器子页 HTML；不改成功率、产出、时间和材料消耗。
+function viewForgeWorkshop() {
   const p = S.player;
   const r = renderEconomy(S, ecoOpts, forgeOpts, forgeSelection, forgePreview);
 
@@ -1043,20 +1217,15 @@ function viewEconomy() {
              '商会委托每月同类最多三件，做满三件有额外授业。',
              '限时机缘有时间窗，错过就要等下一年。']);
 
-  return heading('任务与工坊', '接差事、领委托、开炉铸炼。',
-                 S.inCity ? '在城中' : '不在城中')
-       + layout(panel('可接行动', '', `<div style="padding:14px 22px 18px">`
-           + (r.body || '<div class="empty">此地没有可接的行动。</div>')
-           + `</div>`), aside)
-       + `<div class="chronicle-layout" style="margin-top:22px">`
-       + panel('铸炼法器', '主料 4 · 辅料 3 · 灵核 3',
-               `<div style="padding:14px 22px 18px">${r.forge}${renderForgePreview(forgePreview)}</div>`)
-       + `<aside class="plan-panel">`
-       + asideBlock('限时机缘', r.quests || '<div class="empty">今年没有可参与的机缘。</div>')
-       + `</aside></div>`;
+  return layout(panel('铸炼法器', '主料 4 · 辅料 3 · 灵核 3',
+    `<div style="padding:14px 22px 18px">${S.job?.type === 'forge' ? `<p class="choice-banner">正在铸炼：${escape(S.job.name)}，尚余 ${S.job.remaining} 天。下方为本炉配方成器后的效果。</p>` : ''}${r.forge}${renderForgePreview(forgePreview)}${renderCraftSupply(craftSupplyQuote?.key === JSON.stringify({ kind: 'forge', ...forgeSelection }) ? craftSupplyQuote.quote : null, { kind: 'forge', ...forgeSelection })}</div>`), aside);
 }
 
 // 切到该页时把行动清单拉回来
+// 用途：刷新营生与配料目录。
+// 流程：并行读取两个只读目录，校准选中配料，再刷新成器推演。
+// 调用方式：相关页面首次打开或动作改变状态时调用。
+// 返回值：Promise；更新缓存，无显式返回值。
 async function refreshEconomy() {
   if (economyLoading) return economyLoading;
   economyLoading = (async () => {
@@ -1064,6 +1233,10 @@ async function refreshEconomy() {
     ecoOpts = o;
     forgeOpts = f;
     const defaults = { main: 'iron', aux: 'jade', core: 'wood', shape: f.shapes?.[0]?.id };
+    if (S.job?.type === 'forge') {
+      const [main, aux, core, shape] = (S.job.to || '').split('|');
+      if (main && aux && core && shape) forgeSelection = { main, aux, core, shape };
+    }
     for (const key of ['main', 'aux', 'core', 'shape']) {
       const options = key === 'shape' ? f.shapes : f.materials;
       if (!(options || []).some(option => option.id === forgeSelection[key]))
@@ -1075,21 +1248,29 @@ async function refreshEconomy() {
   try { await economyLoading; }
   finally { economyLoading = null; }
 }
+// 用途：读取所选配方的权威效果。
+// 流程：生成请求序号，POST只读预览，丢弃过期响应并重绘工坊。
+// 调用方式：配方选择变化或目录刷新后调用。
+// 返回值：Promise；更新forgePreview，无显式返回值。
 async function refreshForgePreview() {
   const serial = ++forgePreviewSerial;
   forgePreview = null;
-  if (tab === 'economy' && economyReady) render();
+  if (tab === 'workshop' && economyReady) render();
   const response = await fetch('/api/forge-preview', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(forgeSelection),
   }).then(response => response.json()).catch(() => ({ error: '配方推演暂未加载。' }));
   if (serial !== forgePreviewSerial) return;
   forgePreview = response;
-  if (tab === 'economy') render();
+  if (tab === 'workshop') render();
 }
 // ------------------------------------------------------------
 // 页签：坊市行囊
 // 买卖 / 炼丹 / 服用 / 装备 / 出售 / 修炉换炉 / 书坊藏经阁
 // ------------------------------------------------------------
+// 用途：展示坊市或工坊子页。
+// 流程：读取真实交易、丹方与丹炉数据，按顶级页和子页选择交易或炼制。
+// 调用方式：主渲染选择market或workshop时调用。
+// 返回值：页面HTML字符串。
 function viewMarket() {
   const p = S.player;
   const a = S.arts;
@@ -1156,28 +1337,34 @@ function viewMarket() {
 
   // ---- 炼丹 ----
   const recipes = (S.brewOptions || []).filter(o => !brewSearch || `${o.name} ${o.desc} ${o.reason}`.includes(brewSearch.trim()));
-  const brew = recipes.filter(o => o.enabled);
-  const brewCards = brew.map(o =>
-    `<button class="craft-card" data-action="craft" data-id="${o.id}">`
+  const quotedRecipes = recipes.map(o => ({ ...o, batchQuote: brewRequirements(S, o, brewBatch) }));
+  if (!recipes.some(recipe => recipe.id === brewSupplyRecipeId)) brewSupplyRecipeId = recipes[0]?.id || '';
+  const brew = quotedRecipes.filter(o => o.batchQuote.enabled);
+  const brewCards = quotedRecipes.map(o =>
+    `<button class="craft-card${o.batchQuote.enabled ? '' : ' card-disabled'}" data-action="craft" data-id="${o.id}" ${o.batchQuote.enabled ? '' : 'disabled'}>`
   + `<div class="craft-top"><strong>${escape(o.name)}</strong>`
   + `<span class="rate ${o.chance < 0.4 ? 'low' : ''}">成丹 ${pct(o.chance)}</span></div>`
   + `<div class="craft-cost">开炉 ${o.stoneCost} 灵石 · ${o.days} 天</div>`
+  + `<div class="craft-cost">整批 ${brewBatch} 炉：${o.batchQuote.cost} 灵石 · ${o.batchQuote.days} 天 · 每炉成丹 ${o.output} 枚</div>`
   + `<p class="craft-desc">${escape(o.desc)}</p>`
+  + renderPillEffect(S, o.id)
+  + (o.batchQuote.rows.length ? `<p class="craft-materials">${o.batchQuote.rows.map(item => `${escape(item.name)}：需 ${item.required}，有 ${item.owned}${item.missing ? `，缺 ${item.missing}` : ''}`).join('；')}</p>` : '')
+  + (o.batchQuote.reason ? `<p class="card-why">${escape(o.batchQuote.reason)}</p>` : '')
   + `</button>`).join('')
     || `<div class="empty">材料或灵石不足，暂时无法开炉。</div>`;
 
-  const blocked = recipes.filter(o => !o.enabled);
+  const blocked = quotedRecipes.filter(o => !o.batchQuote.enabled);
   const blockedList = blocked.map(o =>
-    `<div class="feed-item bad">${escape(o.name)}：${escape(o.reason)}</div>`).join('');
+    `<div class="feed-item bad">${escape(o.name)}：${escape(o.batchQuote.reason)}</div>`).join('');
 
   // ---- 丹药（服用 / 出售）----
   const potionRows = Object.entries(a.potions || {}).filter(([, n]) => n > 0).map(([id, n]) => {
-    const opt = (S.market || []).find(m => m.kind === 'potion' && m.id === id)
+    const opt = (S.pillCatalog || []).find(m => m.id === id) || (S.market || []).find(m => m.kind === 'potion' && m.id === id)
       || (S.brewOptions || []).find(m => m.id === id);
     const used = (a.used || {})[id] || 0;
     return `<div class="pill-row">
       <span>${escape(opt ? opt.name : id)} ×${n}`
-    + ` <span class="item-sub">已服 ${used}</span></span>
+    + ` <span class="item-sub">已服 ${used}</span>${renderPillEffect(S, id)}</span>
       <span style="display:flex;gap:6px">
       <button data-action="use-pill" data-id="${id}">服用</button>
       <button data-action="sell" data-kind="potion" data-id="${id}" ${S.inCity ? '' : 'disabled'}>${S.inCity ? '出售' : '城中可售'}</button>
@@ -1228,10 +1415,6 @@ function viewMarket() {
       : '')
   + `<div><label>宗门贡献</label><strong>${S.contribution ?? 0}</strong></div>`
   + `<div><label>灵核 / 凝元丹</label><strong>${p.cores ?? 0} / ${p.pills ?? 0}</strong></div>`
-  + `<div><label>丹炉耐久</label><strong>${a.durability} / 40</strong></div>`
-  + `</div>`
-  + `<div class="year-controls" style="margin-top:10px">`
-  + `<button data-action="furnace/repair">修炉（20 灵石）</button>`
   + `</div>`
   + hintBox(['本地出产的药材便宜两成。',
              '炼丹会花费时间；遇事暂停后，可回岁月纪事继续推进。',
@@ -1239,14 +1422,16 @@ function viewMarket() {
 
   // 子页签：买卖 / 炼丹 / 丹炉法器。
   // 之前这一页是「坊市 + 炼丹 + 丹炉 + 书坊 + 藏经阁」一路拉到底。
-  const sub = subOf('market', 'shop');
-  const mTabs = subTabs('market', [
-    ['shop', '坊市买卖'],
+  const sub = tab === 'workshop' ? subOf('workshop', 'brew') : 'shop';
+  const mTabs = tab === 'workshop' ? subTabs('workshop', [
     ['brew', '开炉炼丹', `${brew.length} 可炼`],
-    ['kit', '丹炉与法器'],
-  ], sub);
-  const mHead = heading('坊市行囊', '买卖、炼丹、服用、装备。',
+    ['forge', '铸炼法器'],
+    ['kit', '丹炉管理'],
+  ], sub) : '';
+  const mHead = heading(tab === 'workshop' ? '工坊' : '坊市', tab === 'workshop' ? '选择丹方与配料，开炉前查看投入和实际效果。' : '买卖药材、材料、丹药与法宝。',
                         S.inCity ? '在城中' : '不在城中');
+
+  if (sub === 'forge') return mHead + mTabs + viewForgeWorkshop();
 
   if (sub === 'brew') {
     return mHead + mTabs
@@ -1254,30 +1439,35 @@ function viewMarket() {
           <div class="recipe-controls"><label>查丹方 <input data-brew-search type="search" placeholder="丹方名称、效果或药材" value="${escape(brewSearch)}"></label>
           <label>开炉次数 <select data-brew-batch>${[1, 3, 5, 10].map(n => `<option value="${n}" ${n === brewBatch ? 'selected' : ''}>${n} 炉</option>`).join('')}</select></label></div>
           <p class="panel-note">下方灵石、耗时为每炉投入；批量炼制会逐炉扣料，遇事暂停。</p>
+          <div class="recipe-controls"><label>一键补料丹方 <select data-brew-supply-recipe>${recipes.map(recipe => `<option value="${escape(recipe.id)}" ${recipe.id === brewSupplyRecipeId ? 'selected' : ''}>${escape(recipe.name)}</option>`).join('')}</select></label></div>
+          ${renderCraftSupply(craftSupplyQuote?.key === JSON.stringify({ kind: 'brew', id: brewSupplyRecipeId, batch: brewBatch }) ? craftSupplyQuote.quote : null, { kind: 'brew', id: brewSupplyRecipeId, batch: brewBatch })}
           <div class="craft-grid">${brewCards}</div>`
           + (blockedList ? `<details class="blocked-recipes"><summary>暂不可炼 ${blocked.length} 张 · 查看缺料与条件</summary>${blockedList}</details>` : '')
           + `</div>`),
         asideBlock('丹药行囊', potionRows)
+          + (S.job?.type === 'brew' ? asideBlock('正在炼制', `<p>${escape(S.job.name)} · 尚余 ${S.job.remaining} 天</p>${renderPillEffect(S, S.job.to)}`) : '')
           + hintBox([S.job ? `${S.job.name}尚余 ${S.job.remaining} 天，请在岁月纪事推进。` : '没有进行中的安排。']));
   }
   if (sub === 'kit') {
     return mHead + mTabs
-      + `<div class="chronicle-layout">`
-      + panel('法器行囊', '装备、铭刻、分解与出售',
-              `<div style="padding:14px 22px 18px">${gearRows}</div>`)
-      + `<aside class="plan-panel">`
-      + asideBlock('丹炉', furnaces)
-      + `<button data-action="furnace/repair">修炉（20 灵石）</button>`
-      + `</aside></div>`
-      + `<div style="margin-top:18px">${panel('书坊与功法抄本', '购入后需修习才能生效', `<div style="padding:14px 22px 18px">${bookRows || '<div class="empty">暂无可购入的功法。</div>'}</div>`)}</div>`;
+      + panel('丹炉', `当前耐久 ${a.durability} / 40`, `<div class="task-content">${furnaces}<button data-action="furnace/repair">修炉（20 灵石）</button></div>`);
   }
   return mHead + mTabs
        + layout(panel('坊市', '', `<div style="padding:14px 22px 0">
-           <div class="shop-tabs">${tabs}</div><p class="market-material-note">普通坊市只供应一、二阶材料；高阶材料可在天机阁购买秘境位置，通关取得 ×10。</p></div>${shopBody}${stock}`), aside);
+           <div class="shop-tabs">${tabs}</div><p class="market-material-note">普通坊市只供应一、二阶材料；高阶材料可在天机阁购买秘境位置，通关取得 ×10。</p></div>${shopBody}${stock}`), aside)
+       + `<div style="margin-top:18px">${panel('书坊', '购入抄本后可到洞府修习', `<div class="task-content">${bookRows || '<div class="empty">此地暂无功法抄本交易。</div>'}</div>`)}</div>`;
 }
 // ------------------------------------------------------------
+// 用途：展示实时斗法信息。
+// 流程：读取战斗预览生成敌我状态、手牌、法宝、灵力、冷却和风险文案。
+// 调用方式：有战斗状态时由主渲染调用。
+// 返回值：战斗HTML字符串。
 function viewBattle() {
   const b = S.battle;
+  // 用途：计算气血条可见宽度。
+  // 流程：限制当前值与上限之比在0至100%。
+  // 调用方式：战斗人物渲染传入v与m。
+  // 返回值：CSS宽度字符串。
   const bar = (v, m) => `${Math.max(0, Math.min(100, (v / m) * 100))}%`;
   const npc = (S.nearby || []).find(n => n.id === b.npcId);
   const enemy = { ...(npc || {}), name: b.enemy, portrait: b.enemyPortrait || npc?.portrait, stage: b.enemyStage };
@@ -1294,6 +1484,10 @@ function viewBattle() {
   if (b.burn > 0) enemyBadges.push(`灼烧：每回合 ${b.burn} 点${b.burnTurns ? ` · 剩 ${b.burnTurns} 回合` : ''}`);
   if (b.soul > 0) enemyBadges.push(`震荡 ${b.soul} / 6 层 · 神识爆发消耗`);
 
+  // 用途：生成一侧战斗人物区。
+  // 流程：按敌我选择立绘、气血、护盾、遁速与状态标签。
+  // 调用方式：viewBattle传入人物名与当前数值。
+  // 返回值：人物区HTML字符串。
   const actor = (name, hp, max, shield, isEnemy) =>
     `<section class="combat-actor${isEnemy ? ' combat-enemy' : ''}" data-combat-actor="${isEnemy ? 'enemy' : 'player'}">`
   + `<span class="combat-label">${isEnemy ? '对手' : '自身'} · ${escape(isEnemy ? enemyRealm : S.player.realmName)}</span>`
@@ -1343,7 +1537,7 @@ function viewBattle() {
     ? `<div class="cooldown-line">冷却中：`
       + cooldowns.map(([id, n]) => {
           const card = b.hand.find(c => c.id === id);
-          const definition = card || (S.arts.spellList || []).find(c => c.id === id)
+          const definition = (b.artifacts || []).find(c => c.id === id) || card || (S.arts.spellList || []).find(c => c.id === id)
             || (spellData?.spells || []).find(c => c.id === id);
           return `${escape(definition?.name || id)}（${n}）`;
         }).join(' · ') + `</div>`
@@ -1353,11 +1547,11 @@ function viewBattle() {
     + `<header class="combat-round">`
     + `<span>${b.lethal
         ? '<b class="lethal-tag">生死斗法</b>'
-        : '切磋 / 考核'} · 第 <b>${b.turn + 1}</b> / 24 回合</span>`
+        : S.dungeons?.run ? '秘境斗法' : '切磋 / 考核'} · 第 <b>${b.turn + 1}</b> / 24 回合</span>`
     + `<span>月历暂停 · 出牌阶段${b.playerFirst != null ? ` · ${b.playerFirst ? '你方先手' : '敌方先手'}` : ''}</span></header>`
     + (b.lethal
         ? `<div class="lethal-warn">${S.checkpoint?.enabled ? '战败会陨落。意外死亡后可选择接受结局，或回到最近存档；回档会撤回保存之后的进度。' : '战败会陨落并结束这一世，请留意双方气血与敌方意图。'}</div>`
-        : '')
+        : S.dungeons?.run ? '<p class="panel-note">本场不致死。战败或斗法撤离会结束探索，只带回一半已得物资；未通关入口消失，临时神通与遗物离境后消散。</p>' : '')
 
     + `<div class="combat-field">`
     + actor(S.player.name, b.hp, b.max, b.shield, false)
@@ -1370,7 +1564,7 @@ function viewBattle() {
 
     + `<div class="combat-flow">`
     + `<div class="energy-orb"><b>${b.mana}</b><span>灵力</span></div>`
-    + `<p>${b.nextMana != null ? `下回合实际回复 <b>${b.nextMana}</b> 点灵力` : `基础每回合回复 <b>${b.maxMana}</b> 点灵力`} · 上限 ${b.manaCap ?? 8}<br>`
+    + `<p>${b.nextMana != null ? `下回合灵力恢复到 <b>${b.nextMana}</b> 点` : `下回合基础灵力恢复到 <b>${b.maxMana}</b> 点`} · 上限 ${b.manaCap ?? 8}<br>`
     + `<small>基础灵力 ${b.maxMana} · 每回合抽 5 张${b.drawNext ? `，下回合额外抽 ${b.drawNext} 张` : ''}<br>`
     + `神通与法宝可连续施展，敌方在结束回合后行动`
     + ` · 本回合施术 ${b.played} / 24 次<br>`
@@ -1394,16 +1588,28 @@ function viewBattle() {
     + `</div>`;
 }
 
+// 用途：取得可移除目标。
+// 流程：按当前战斗与出牌规则筛选移除目标。
+// 调用方式：忘机类出牌弹窗传入当前牌。
+// 返回值：可移除神通条目数组。
 function removalOptions(card) {
   return (S?.battle?.removalOptions || []).filter(sp => sp.id !== card.id && sp.copies > 0);
 }
 
+// 用途：关闭本场移除选择。
+// 流程：清空选择状态并关闭目标dialog。
+// 调用方式：取消、战斗结束或状态变化时调用。
+// 返回值：无返回值。
 function closeRemoval() {
   removalSelection = null;
   const dlg = $('#battle-target-modal');
   if (dlg?.open) dlg.close();
 }
 
+// 用途：展示本场移除确认。
+// 流程：核实出牌及目标仍合法，列出目标与副本数，选择后允许确认。
+// 调用方式：主渲染或目标选择变化后调用。
+// 返回值：无返回值；更新或关闭目标dialog。
 function renderRemoval() {
   if (!removalSelection) return;
   const card = S?.battle?.hand?.find(c => c.uid === removalSelection.uid);
@@ -1428,6 +1634,10 @@ function renderRemoval() {
 
 // 抉择弹窗
 // ------------------------------------------------------------
+// 用途：展示强制剧情抉择。
+// 流程：没有pending时关闭dialog，否则按权威选项生成按钮并打开dialog。
+// 调用方式：主渲染无参调用。
+// 返回值：无返回值；更新抉择DOM。
 function renderPending() {
   const p = S.pending;
   const dlg = $('#modal');
@@ -1458,6 +1668,10 @@ let buildSeed = 20261004;
 let draftRoll = 0;
 const pickedTalents = new Set();
 
+// 用途：展示结局和传承。
+// 流程：读取传承档案，取消导航选中，刷新侧栏并插入结局内容。
+// 调用方式：状态结束或结算完成后调用。
+// 返回值：Promise；更新页面，无显式返回值。
 async function renderEndingScreen() {
   if (!legCache) legCache = await loadLegacy(true);
   document.querySelectorAll('.main-tabs button').forEach(b => b.classList.remove('active'));
@@ -1467,6 +1681,10 @@ async function renderEndingScreen() {
 // ------------------------------------------------------------
 // 关系条（知交页与通讯录都用）
 // ------------------------------------------------------------
+// 用途：生成好感进度。
+// 流程：限制可见进度宽度并生成进度条。
+// 调用方式：人物或通讯录渲染传入好感值。
+// 返回值：进度条HTML字符串。
 function relBar(v) {
   // 交情是 −100..100，映射到 0..100% 的宽度
   const w = Math.max(0, Math.min(100, (v + 100) / 2));
@@ -1487,6 +1705,10 @@ function relBar(v) {
 // ------------------------------------------------------------
 let buildPanel = null;
 
+// 用途：打开新人生构筑。
+// 流程：卸载旧面板并挂载建号模块，成功后通过new提交并关闭。
+// 调用方式：开局与再写一世动作调用。
+// 返回值：无返回值；启动异步面板加载。
 function openBuildPanel(opts = {}) {
   const host = document.getElementById('build-host');
   if (!host) return;
@@ -1508,6 +1730,10 @@ function openBuildPanel(opts = {}) {
   buildPanel.mount(host);
 }
 
+// 用途：关闭人物构筑。
+// 流程：卸载面板并清空宿主，尚未建号时显示欢迎说明。
+// 调用方式：开始成功或用户返回时调用。
+// 返回值：无返回值。
 function closeBuildPanel() {
   buildPanel?.unmount();
   const host = document.getElementById('build-host');
@@ -1516,6 +1742,10 @@ function closeBuildPanel() {
   if (!S) renderWelcome();
 }
 
+// 用途：展示未建号入口。
+// 流程：在workspace插入开辟人生与读取存档按钮。
+// 调用方式：退出首次构筑时无参调用。
+// 返回值：无返回值；修改DOM。
 function renderWelcome() {
   $('#workspace').innerHTML = panel('开始宁州一梦', '存档保存在本机',
     `<div class="welcome-actions"><p>先建立道号、挑选天赋与属性，或读取之前的存档。</p>`
@@ -1523,6 +1753,10 @@ function renderWelcome() {
     + `<button data-action="settings">读取存档</button></div>`);
 }
 
+// 用途：显示存档与传承设置。
+// 流程：读取存档槽和传承，列出保存读取与导入导出入口。
+// 调用方式：设置按钮无参调用。
+// 返回值：Promise；更新并打开设置dialog。
 async function openSettings() {
   const d = await fetch('/api/slots').then(r => r.json()).catch(() => null);
   if (!d?.slots) { toast('读取存档列表失败，请确认服务还在运行', 'bad'); return; }
@@ -1542,12 +1776,20 @@ async function openSettings() {
   if (!dlg.open) dlg.showModal();
 }
 
+// 用途：打开支线阅读和分支。
+// 流程：根据支线id找到正文，显示权威可选状态与费用，并等待玩家选择。
+// 调用方式：任务支线卡片传入id。
+// 返回值：无返回值；更新story-host。
 function openStory(id) {
   const s = (S.stories || []).find(x => x.id === id);
   const host = document.getElementById('story-host');
   if (!host || !s) return;
 
   const locName = (S.locations || []).find(l => l.id === s.location)?.name || s.location;
+  // 用途：生成支线单个分支按钮。
+  // 流程：读取该分支enabled与reason，组合名称和结果说明。
+  // 调用方式：openStory传入名称、效果和分支索引。
+  // 返回值：分支按钮HTML字符串。
   const choice = (name, effect, idx) => {
     const enabled = s[`opt${idx + 1}Enabled`] !== false;
     const reason = s[`opt${idx + 1}Reason`];
@@ -1576,6 +1818,10 @@ function openStory(id) {
     </div></div>`;
 }
 
+// 用途：收起支线阅读器。
+// 流程：清空story-host宿主内容。
+// 调用方式：取消阅读或提交分支时调用。
+// 返回值：无返回值。
 function closeStory() {
   const host = document.getElementById('story-host');
   if (host) host.innerHTML = '';
@@ -1584,12 +1830,20 @@ function closeStory() {
 // ------------------------------------------------------------
 // 五宗与成就数据（宗门知交页、机缘成就页共用）
 // ------------------------------------------------------------
+// 用途：更新宗门和成就目录。
+// 流程：并行加载两类只读数据并保存本地缓存。
+// 调用方式：宗门、任务或成就页需要数据时调用。
+// 返回值：Promise；无显式返回值。
 async function refreshSects() {
   [sectData, achData] = await Promise.all([loadSects(true), loadAchievements(true)]);
 }
 // ------------------------------------------------------------
 // 主渲染
 // ------------------------------------------------------------
+// 用途：按当前游戏状态重绘桌面。
+// 流程：优先处理结局、秘境与战斗，再渲染页签，绑定局部事件与纪事高度观察。
+// 调用方式：导航、API响应和本地筛选变化时无参调用。
+// 返回值：无返回值；更新DOM。
 function render() {
   if (!S) return;
   tianji.setVisible(tab === 'tianji' && !S.battle && !S.dungeons?.run && !S.ended);
@@ -1617,7 +1871,8 @@ function render() {
     const views = {
       chronicle: viewChronicle, map: viewMap, arts: viewArts,
       society: viewSociety, roster: viewRoster, quests: viewQuests,
-      market: viewMarket, economy: viewEconomy, tianji: () => tianji.render(),
+      market: viewMarket, workshop: viewMarket, economy: viewEconomy,
+      inventory: () => renderInventoryPanel(S, { kind: inventoryKind, grade: inventoryGrade, sub: subOf('inventory', 'items'), materials: forgeOpts.materials, poisonHTML: poisonBox() }), tianji: () => tianji.render(),
       dungeon: () => renderDungeons(S, { mode: dungeonView, intelKind: dungeonIntelKind, intelSearch: dungeonIntelSearch }),
     };
     $('#workspace').innerHTML = (views[tab] || viewChronicle)();
@@ -1638,15 +1893,15 @@ function render() {
 
     // 选中的人要带上可做的动作（从 state 里拿）
     // 任务与工坊要先把行动清单拉回来再画
-    if ((tab === 'society' || tab === 'quests') && !sectData) {
-      refreshSects().then(() => { if (tab === 'society' || tab === 'quests') render(); });
+    if (['society', 'quests', 'economy'].includes(tab) && !sectData) {
+      refreshSects().then(() => { if (['society', 'quests', 'economy'].includes(tab)) render(); });
     }
     // 宗门页的「山门差事」也要用 ecoOpts，进页时一并拉回来
     if (tab === 'society' && !economyReady) {
       refreshEconomy().then(() => { if (tab === 'society') render(); });
     }
-    if (tab === 'economy' && !economyReady) {
-      refreshEconomy().then(() => { if (tab === 'economy') render(); });
+    if (['economy', 'workshop', 'inventory'].includes(tab) && !economyReady) {
+      refreshEconomy().then(() => { if (['economy', 'workshop', 'inventory'].includes(tab)) render(); });
     }
     if ((tab === 'society' || (tab === 'map' && subOf('map', 'atlas') === 'friends')) && selectedNpc) {
       loadSocialActions(selectedNpc);
@@ -1660,9 +1915,23 @@ function render() {
   if (checkpointNotice) $('#workspace').insertAdjacentHTML('afterbegin', `<div class="checkpoint-restored" role="alert"><div><strong>已恢复最近存档</strong><p>${escape(checkpointNotice)}</p></div><button class="subtle" data-action="checkpoint-dismiss">知道了</button></div>`);
   renderPending();
   renderRemoval();
+  chronicleResizeObserver?.disconnect();
+  const resizable = document.querySelector('[data-chronicle-resize]');
+  if (resizable && globalThis.ResizeObserver) {
+    // 保存用户拖动后的纪事高度；重绘或重开页面仍使用相同高度。
+    chronicleResizeObserver = new ResizeObserver(entries => {
+      chronicleHeight = Math.max(180, Math.min(900, Math.round(entries[0].target.offsetHeight)));
+      try { localStorage.setItem('nz-chronicle-height', String(chronicleHeight)); } catch { /* 存储不可用时保留本会话高度。 */ }
+    });
+    chronicleResizeObserver.observe(resizable);
+  }
 }
 
 // 往来动作不在 state 里（数量多），单独拉一次
+// 用途：加载选中道友的可做动作。
+// 流程：读取social-actions并检查仍选中同一人物，生成操作按钮。
+// 调用方式：知交或地图详情传入npcId。
+// 返回值：Promise；更新局部DOM，无显式返回值。
 async function loadSocialActions(npcId) {
   const host = document.querySelector('.social-actions');
   if (!host || host.dataset.loaded === npcId) return;
@@ -1697,11 +1966,19 @@ async function loadSocialActions(npcId) {
 }
 
 // 险地判定（与后端 conflict::isWildLocation 保持一致）
+// 用途：判断是否为野外地点。
+// 流程：读取地点类型判断当前地区性质。
+// 调用方式：冲突区域渲染传入地点标识。
+// 返回值：布尔值。
 function isWild(loc) {
   return S?.locations?.find(location => location.id === loc)?.type === 'wild';
 }
 
 // 拉取对方的反应预告，让玩家下手前就知道后果
+// 用途：展示道友冲突预估。
+// 流程：POST只读冲突推演并在当前宿主显示财物和反应。
+// 调用方式：野外人物详情传入npcId。
+// 返回值：Promise；更新局部DOM，无显式返回值。
 async function loadConflictPreview(npcId) {
   const host = document.querySelector(`[data-conflict-note="${npcId}"]`);
   if (!host) return;
@@ -1718,6 +1995,10 @@ async function loadConflictPreview(npcId) {
 // ------------------------------------------------------------
 // 事件
 // ------------------------------------------------------------
+// 用途：委托桌面页面所有主要点击动作。
+// 流程：先处理导航与本地筛选，再校验按钮和请求锁，将真正动作提交对应接口。
+// 调用方式：由 document 的 click 事件自动调用，接收鼠标或键盘触发的事件。
+// 返回值：Promise；只更新界面与动作状态，没有业务数据返回。
 document.addEventListener('click', async e => {
   if (e.target.closest('[data-tianji]')) { await tianji.handleClick(e); return; }
   // 页签
@@ -1830,6 +2111,12 @@ document.addEventListener('click', async e => {
   const shopTab = e.target.closest('[data-shop]');
   if (shopTab) { shopKind = shopTab.dataset.shop; render(); return; }
 
+  // 分类筛选只更新本地纪事视图，不请求服务端或推进时间。
+  const logTab = e.target.closest('[data-logfilter]');
+  if (logTab) { logFilter = logTab.dataset.logfilter; render(); return; }
+  const inventoryFilter = e.target.closest('[data-inventory-kind]');
+  if (inventoryFilter) { inventoryKind = inventoryFilter.dataset.inventoryKind; render(); return; }
+
   // 数量加减
   const qtyBtn = e.target.closest('[data-qty]');
   if (qtyBtn) {
@@ -1843,6 +2130,8 @@ document.addEventListener('click', async e => {
   // 子页签切换
   const st = e.target.closest('[data-subtab]');
   if (st) {
+    $('#toast').hidden = true;
+    clearTimeout($('#toast')._t);
     setSub(st.dataset.subtab, st.dataset.sub);
     render();
     return;
@@ -1856,6 +2145,33 @@ document.addEventListener('click', async e => {
   const id = btn.dataset.id;
 
   switch (a) {
+    case 'goto-workshop-forge':
+      setSub('workshop', 'forge'); navigateTab('workshop');
+      break;
+    case 'craft-supply-quote': {
+      const payload = JSON.parse(btn.dataset.payload || '{}');
+      const response = await fetch('/api/craft/materials/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(result => result.json()).catch(() => ({ error: '暂时无法读取补料报价。' }));
+      craftSupplyQuote = { kind: payload.kind, key: JSON.stringify(payload), quote: response.quote || response };
+      render();
+      break;
+    }
+    case 'craft-supply-buy':
+      await call('craft/materials/buy', { ...JSON.parse(btn.dataset.payload || '{}'), expectedCost: craftSupplyQuote?.quote?.totalCost });
+      break;
+    case 'gear-salvage-preview': {
+      const gear = S.gears.find(item => item.id === id);
+      if (!gear) break;
+      $('#modal-content').innerHTML = renderSalvageQuote(gear, gear.salvage || { error: '材料回收报价暂未加载。' });
+      if (!$('#modal').open) $('#modal').showModal();
+      break;
+    }
+    case 'gear-salvage-confirm':
+      $('#modal').close();
+      await call('gear/salvage', { id });
+      break;
+    case 'preview-close':
+      $('#modal').close();
+      break;
     case 'artifact-play': {
       const ability = S?.battle?.artifacts?.find(ability => ability.id === id);
       if (!ability?.playable) break;
@@ -1863,7 +2179,7 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'goto-equipment':
-      tab = 'market'; setSub('market', 'kit'); render();
+      tab = 'inventory'; setSub('inventory', 'items'); inventoryKind = 'gear'; render();
       break;
     case 'checkpoint-dismiss':
       checkpointNotice = ''; render();
@@ -2130,6 +2446,10 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'forge-run': {
+      // 用途：读取炼器选料框当前值。
+      // 流程：按字段键在DOM中查select，缺少时返回空串。
+      // 调用方式：forge-run动作传入字段键。
+      // 返回值：当前选中材料或器型标识。
       const g = k => document.querySelector(`[data-forge="${k}"]`)?.value || '';
       await call('forge', { main: g('main'), aux: g('aux'), core: g('core'), shape: g('shape') });
       break;
@@ -2387,6 +2707,10 @@ document.addEventListener('click', async e => {
 });
 
 // 数量输入框
+// 用途：处理选择框与数量输入的最终变更。
+// 流程：更新单选计划、行囊筛选、炼制炉数或配方，必要时重取权威预览。
+// 调用方式：由 document 的 change 事件自动调用。
+// 返回值：Promise；无显式返回值。
 document.addEventListener('change', async e => {
   const inp = e.target.closest('[data-qtyinput]');
   if (inp) {
@@ -2394,9 +2718,13 @@ document.addEventListener('change', async e => {
     shopQty[id] = Math.max(1, Math.min(99, Number(inp.value) || 1));
     render();
   }
-  if (e.target.matches('[data-brew-batch]')) brewBatch = Number(e.target.value) || 1;
+  if (e.target.matches('[data-plan-select]')) { await call('plan', { id: e.target.value }); return; }
+  if (e.target.matches('[data-inventory-grade]')) { inventoryGrade = e.target.value; render(); return; }
+  if (e.target.matches('[data-brew-supply-recipe]')) { brewSupplyRecipeId = e.target.value; craftSupplyQuote = null; render(); return; }
+  if (e.target.matches('[data-brew-batch]')) { brewBatch = Number(e.target.value) || 1; craftSupplyQuote = null; render(); }
   if (e.target.matches('[data-forge]')) {
     forgeSelection[e.target.dataset.forge] = e.target.value;
+    craftSupplyQuote = null;
     await refreshForgePreview();
   }
   if (e.target.matches('[data-spell-dao]')) { spellDaoFilter = e.target.value; render(); }
@@ -2404,6 +2732,10 @@ document.addEventListener('change', async e => {
   if (e.target.matches('[data-map-filter]')) { mapFilter = e.target.value; render(); }
 });
 
+// 用途：即时应用地图、情报和丹方的搜索条件。
+// 流程：更新本地关键词、重绘相应视图，再恢复输入焦点与光标位置。
+// 调用方式：由 document 的 input 事件自动调用。
+// 返回值：无返回值；不修改游戏规则或推进时间。
 document.addEventListener('input', e => {
   if (e.target.matches('[data-dungeon-intel-search]')) {
     dungeonIntelSearch = e.target.value;
@@ -2430,6 +2762,10 @@ document.addEventListener('input', e => {
 });
 
 // 快捷键
+// 用途：提供页面切换、推进与退出人物选择快捷键。
+// 流程：先避开输入、弹窗与锁定状态，再处理空格、数字和 Escape。
+// 调用方式：由 document 的 keydown 事件自动调用。
+// 返回值：无返回值；需要推进时异步调用统一动作函数。
 document.addEventListener('keydown', e => {
   if (document.querySelector('dialog[open]') || tab === 'tianji' || tianji.status?.encounter?.state === 'active' || buildPanel || $('#story-host').hasChildNodes() || requestBusy || !S || S.ended) return;
   if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
@@ -2456,6 +2792,10 @@ $('#battle-target-modal').addEventListener('close', () => { removalSelection = n
 // ------------------------------------------------------------
 // 启动
 // ------------------------------------------------------------
+// 用途：初始化桌面游戏。
+// 流程：先完成登录，再读状态；有存档直接显示，否则打开建号面板。
+// 调用方式：模块加载时由立即执行函数自动调用。
+// 返回值：Promise；无显式返回值。
 (async function boot() {
   await ensureLogin();
   const res = await fetch('/api/state').then(r => r.json()).catch(() => null);

@@ -1,5 +1,7 @@
 # 宁州一梦 · C++ 版
 
+当前源码版本：**2026.10.12-desktop-refactor.1**。下载后可直接打开 [visual-studio/ningzhou.sln](visual-studio/ningzhou.sln)，项目内的 Backend / Web UI 分组对应实际模块目录；环境要求与同步方式见 [VS 打开说明](visual-studio/README.md)。本次更新和验证范围见 [版本说明](docs/reviews/2026-10-12-version-delivery.md)。
+
 > 在 VS Code 里打开本目录即可获得完整的跳转、补全与 F5 调试（.vscode/ 已配好）。
 > 调试前先跑 .\build.ps1 -Debug 生成带符号的可执行文件。
 

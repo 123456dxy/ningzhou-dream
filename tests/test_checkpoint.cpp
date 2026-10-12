@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <chrono>
 
 #include "core/api.h"
 #include "core/battle.h"
@@ -88,6 +89,17 @@ struct CheckpointSlotBackup {
 }
 
 void runCheckpointTests() {
+    // 用途：隔离账号传承；流程：死亡恢复回归；用法：组内栈对象；返回：无，析构恢复原目录。
+    struct CheckpointArchiveScope {
+        string previous = defaultSaveDir();
+        CheckpointArchiveScope() {
+            const auto directory = std::filesystem::temp_directory_path() / ("nz-checkpoint-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::filesystem::create_directories(directory);
+            const auto utf8 = directory.u8string();
+            setSaveDirOverride(string(reinterpret_cast<const char*>(utf8.data()), utf8.size()));
+        }
+        ~CheckpointArchiveScope() { setSaveDirOverride(previous); }
+    } archiveScope;
     std::printf("\n===== 最近存档与十年自动恢复回归 =====\n");
     // 实际API响应会写自动槽位，整个测试期间都保留运行前的原始字节。
     CheckpointSlotBackup slotBackup;

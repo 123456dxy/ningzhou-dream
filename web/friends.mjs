@@ -15,11 +15,19 @@ import { renderPortrait } from './portraits.mjs';
 // ------------------------------------------------------------
 let bagCache = new Map();      // npcId -> /api/npc-bag 的结果
 
+// 用途：清除指定道友缓存。
+// 流程：按npcId移除缓存与更新时间。
+// 调用方式：道友库存或交情改变后调用。
+// 返回值：无返回值。
 export function invalidateFriendCache(npcId) {
   if (npcId) bagCache.delete(npcId);
   else bagCache.clear();
 }
 
+// 用途：读取道友可交换物品。
+// 流程：根据npcId与有效期复用缓存，必要时POST npc-bag。
+// 调用方式：选中道友或交易后可传force。
+// 返回值：Promise，道友背包对象或失败时null。
 export async function loadNpcBag(npcId, force) {
   if (!force && bagCache.has(npcId)) return bagCache.get(npcId);
   const r = await fetch('/api/npc-bag', {
@@ -31,14 +39,26 @@ export async function loadNpcBag(npcId, force) {
   return r;
 }
 
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
 const STAGE_NAMES = ['炼气初期', '炼气中期', '炼气后期', '筑基初期', '筑基中期', '筑基后期', '金丹初期', '金丹中期', '金丹后期', '元婴初期', '元婴中期', '元婴后期', '化神初期', '化神中期', '化神后期'];
 
+// 用途：展示道友传授功法与神通。
+// 流程：读取learning条目，标注境界、交情、花费及学习状态。
+// 调用方式：道友详情传入npc。
+// 返回值：学习区域HTML字符串。
 export function renderNpcLearning(npc) {
   const learning = npc.learning || [];
   if (!learning.length) return '';
+  // 用途：生成一类营生清单。
+  // 流程：读取groups中的行动并调用actionRow。
+  // 调用方式：renderEconomy传入type。
+  // 返回值：行动分组HTML；无条目时空字符串。
   const section = (kind, label) => {
     const list = learning.filter(item => item.kind === kind);
     if (!list.length) return '';
@@ -54,6 +74,10 @@ export function renderNpcLearning(npc) {
     + section('spell', '对方所知神通') + section('manual', '对方所知功法') + `</details>`;
 }
 
+// 用途：展示道友当前构筑。
+// 流程：列出道友携带神通与修习功法及权威详情。
+// 调用方式：道友详情传入npc。
+// 返回值：构筑区域HTML字符串。
 export function renderNpcLoadout(npc) {
   const loadout = npc.loadout;
   if (!loadout) return '';
@@ -70,6 +94,10 @@ export function renderNpcLoadout(npc) {
 // ------------------------------------------------------------
 // 好感度 / 交情 的小条
 // ------------------------------------------------------------
+// 用途：显示道友好感刻度。
+// 流程：将好感映射为可见进度并选择状态样式。
+// 调用方式：知交面板传入rel。
+// 返回值：好感条HTML字符串。
 export function affinityBar(rel) {
   // 好感 -100..100 → 0..100%
   const pct = Math.max(0, Math.min(100, (rel + 100) / 2));
@@ -84,6 +112,10 @@ export function affinityBar(rel) {
  * @param {object} state 完整 state
  * @param {object} opts  { scope: 'local' | 'sect', selected, emptyHint }
  */
+// 用途：显示附近同道名单。
+// 流程：按选中人物与筛选参数列出姓名、境界和交情。
+// 调用方式：地图或宗门页传入state与opts。
+// 返回值：人物列表HTML字符串。
 export function renderFriendList(state, opts = {}) {
   const scope = opts.scope || 'local';
   const p = state.player || {};
@@ -137,6 +169,10 @@ export function renderFriendList(state, opts = {}) {
 // ------------------------------------------------------------
 // 交互面板：打招呼 / 送礼 / 讨要
 // ------------------------------------------------------------
+// 用途：显示道友详情和赠礼。
+// 流程：核对附近人物，列出中文库存、交换条件、学习、往来和冲突宿主。
+// 调用方式：地图或宗门页传入state、npcId、bag与opts。
+// 返回值：人物详情HTML；无人物时空状态HTML。
 export function renderFriendPanel(state, npcId, bag, opts = {}) {
   const npc = (state.nearby || []).find(n => n.id === npcId);
   if (!npc) return `<div class="empty">请先选一个人。</div>`;
@@ -151,6 +187,10 @@ export function renderFriendPanel(state, npcId, bag, opts = {}) {
   const materials = Object.entries(state.arts?.materials || {}).filter(([, v]) => v > 0);
   const gears = (state.gears || []).filter(g => !g.equipped);
 
+  // 用途：生成一项实际赠礼按钮。
+  // 流程：把中文物品名、库存和NPC标识附在按钮上。
+  // 调用方式：道友面板传入kind、id、label、count和disabled。
+  // 返回值：赠礼按钮HTML字符串。
   const giftBtn = (kind, id, label, count, disabled = false) =>
     `<button class="gift-item" data-faction="gift" data-kind="${kind}" `
   + `data-id="${esc(id)}" data-npc="${esc(npcId)}" ${disabled ? 'disabled' : ''}>`
@@ -158,8 +198,10 @@ export function renderFriendPanel(state, npcId, bag, opts = {}) {
 
   const giftList = [
     ...potions.map(([id, c]) => {
-      const m = (state.arts?.potionList || []).find(x => x.id === id);
-      return giftBtn('potion', id, m?.name || id, c);
+      const m = (state.pillCatalog || []).find(x => x.id === id)
+        || (state.arts?.potionList || []).find(x => x.id === id)
+        || (state.brewOptions || []).find(x => x.id === id);
+      return giftBtn('potion', id, m?.name || '丹药名称待加载', c, !m?.name);
     }),
     ...herbs.map(([id, c]) => giftBtn('herb', id, id, c)),
     ...materials.map(([id, c]) => {
@@ -238,6 +280,10 @@ export function renderFriendPanel(state, npcId, bag, opts = {}) {
   </div>`;
 }
 
+// 用途：显示师徒道侣日常动作。
+// 流程：从权威bondActions筛选指定类别并生成按钮。
+// 调用方式：宗门知交传入state和kinds。
+// 返回值：动作区HTML字符串。
 export function renderBondActions(state, kinds) {
   const list = (state.bondActions || []).filter(a => !kinds || kinds.includes(a.id));
   if (!list.length) return '';
@@ -252,6 +298,10 @@ export function renderBondActions(state, kinds) {
 // ------------------------------------------------------------
 // 兽潮：全图事件面板
 // ------------------------------------------------------------
+// 用途：展示兽潮和风险。
+// 流程：读取兽潮强度、战况与检查点，给出响应入口和失败提示。
+// 调用方式：纪事页传入tide与checkpoint。
+// 返回值：兽潮HTML字符串。
 export function renderTidePanel(tide, checkpoint) {
   if (!tide) return '';
   if (!tide.active) {

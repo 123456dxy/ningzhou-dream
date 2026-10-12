@@ -9,6 +9,10 @@
 
 'use strict';
 
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -16,6 +20,10 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g,
 let optCache = null;
 let forgeCache = null;
 
+// 用途：读取营生活动目录。
+// 流程：优先使用缓存，必要时POST eco-options并缓存options。
+// 调用方式：任务与宗门页面可传force。
+// 返回值：Promise，行动数组。
 export async function loadEcoOptions(force) {
   if (optCache && !force) return optCache;
   const r = await fetch('/api/eco-options', {
@@ -27,6 +35,10 @@ export async function loadEcoOptions(force) {
   return optCache;
 }
 
+// 用途：读取炼器材料与器型目录。
+// 流程：优先使用缓存，必要时POST forge-options并缓存结果。
+// 调用方式：工坊和行囊可传force。
+// 返回值：Promise，材料与器型对象。
 export async function loadForgeOptions(force) {
   if (forgeCache && !force) return forgeCache;
   const r = await fetch('/api/forge-options', {
@@ -38,7 +50,49 @@ export async function loadForgeOptions(force) {
   return forgeCache;
 }
 
+// 用途：清除营生和炼器目录缓存。
+// 流程：同时置空optCache与forgeCache。
+// 调用方式：游戏动作改变状态后调用。
+// 返回值：无返回值。
 export function invalidateEco() { optCache = null; forgeCache = null; }
+
+// 用途：按已选炉数预检服务端提供的单炉材料、灵石与耐久条件。
+// 流程：将权威单炉用量乘以炉数，对照当前库存，收集全部缺口并合并原有禁用原因。
+// 调用方式：炼丹页与开炉点击处理传入当前状态、丹方选项和所选炉数。
+// 返回值：包含整批材料明细、投入、耗时、缺口文案和 enabled 的对象；不修改状态。
+export function brewRequirements(state, recipe, batch = 1) {
+  const count = Math.max(1, Math.floor(Number(batch) || 1));
+  const rows = (recipe.ingredients || []).map(item => {
+    const required = Number(item.required) * count;
+    const owned = Number(item.owned ?? state.arts?.herbs?.[item.name]) || 0;
+    return { ...item, required, owned, missing: Math.max(0, required - owned) };
+  });
+  const cost = Number(recipe.stoneCost) * count;
+  const days = Number(recipe.days) * count;
+  const stonesMissing = Math.max(0, cost - (Number(state.player?.stones) || 0));
+  const durabilityRequired = Number(recipe.durabilityCost || 0) * count;
+  const durabilityMissing = Math.max(0, durabilityRequired - (Number(state.arts?.durability) || 0));
+  const blockers = rows.filter(item => item.missing > 0).map(item => `${item.name}需 ${item.required} 份，已有 ${item.owned}，缺 ${item.missing} 份`);
+  if (stonesMissing) blockers.push(`灵石需 ${cost} 枚，缺 ${stonesMissing} 枚`);
+  if (durabilityMissing) blockers.push(`丹炉耐久需 ${durabilityRequired}，缺 ${durabilityMissing}`);
+  if (!recipe.enabled && recipe.reason) blockers.push(recipe.reason);
+  if (state.job) blockers.push('请先完成或中止当前安排');
+  return { rows, cost, days, count, durabilityRequired, blockers,
+    reason: [...new Set(blockers)].join('；'), enabled: recipe.enabled === true && !state.job && !blockers.length };
+}
+
+// 用途：展示炼成丹药在当前角色身上的真实服用效果。
+// 流程：按丹方编号读取服务端 pillCatalog，依次显示实际效果、使用限制和丹毒变化。
+// 调用方式：炼丹卡片、进行中的炼丹安排或丹药行囊调用此纯渲染函数。
+// 返回值：已转义的效果 HTML；没有权威条目时返回空字符串。
+export function renderPillEffect(state, id) {
+  const pill = (state.pillCatalog || []).find(item => item.id === id);
+  if (!pill) return '';
+  return `<div class="pill-effect" data-pill-effect="${esc(id)}"><strong>当前服用效果</strong><p>${esc(pill.effect || pill.baseEffect)}</p>`
+    + (pill.usage ? `<small>${esc(pill.usage)}</small>` : '')
+    + `<small>服用后丹毒 ${esc(pill.poisonAfter)}（本次 ${pill.poisonDelta >= 0 ? '+' : ''}${esc(pill.poisonDelta)}）</small>`
+    + (pill.reason ? `<small>${esc(pill.reason)}</small>` : '') + `</div>`;
+}
 
 export const TYPE_LABEL = {
   task: '城中差事', commission: '商会委托', hunt: '猎妖委托',
@@ -46,6 +100,10 @@ export const TYPE_LABEL = {
 };
 
 // 一行行动
+// 用途：显示单项营生条件。
+// 流程：组合说明、实际报酬成本及耗时，按enabled生成按钮。
+// 调用方式：任务列表传入行动对象。
+// 返回值：行动行HTML字符串。
 export function actionRow(o) {
   const pay = o.pay ? ` · 报酬 ${o.pay}` : '';
   const cost = o.cost ? ` · 投入 ${o.cost}` : '';
@@ -60,6 +118,10 @@ export function actionRow(o) {
     </button></div>`;
 }
 
+// 用途：显示炼器材料与灵石缺口。
+// 流程：优先消费预览材料及blockers，缺少预览时整理所选材料，综合安排条件。
+// 调用方式：工坊传入state、目录、配料与预览。
+// 返回值：资源明细及enabled/reason对象。
 export function forgeRequirements(state, materials, selected, preview) {
   const info = preview?.info;
   const amounts = new Map();
@@ -90,14 +152,26 @@ export function forgeRequirements(state, materials, selected, preview) {
   return { rows, cost, stones, stonesMissing, reason, enabled: !state.job && info?.valid === true && info.enabled === true && !missing.length };
 }
 
+// 用途：生成炼器资源条件表。
+// 流程：按明细显示所需、已有、缺少，足料与缺料采用不同样式。
+// 调用方式：renderEconomy传入资源预检对象。
+// 返回值：材料及灵石表格HTML字符串。
 function renderForgeRequirements(requirements) {
   const roleLabels = { main: '主料', aux: '辅料', core: '灵核' };
+  // 用途：显示资源缺口单元格。
+  // 流程：根据missing选择缺料或足料样式，并追加单位说明。
+  // 调用方式：renderForgeRequirements传入missing与unit。
+  // 返回值：td元素HTML字符串。
   const amount = (missing, unit) => `<td class="${missing > 0 ? 'missing' : 'sufficient'}">${esc(missing)}${unit}${missing > 0 ? '' : '<small>已备齐</small>'}</td>`;
   return `<table class="forge-costs" aria-label="本次炼器所需材料与灵石"><thead><tr><th>材料 / 用途</th><th>所需</th><th>已有</th><th>缺少</th></tr></thead><tbody>`
     + requirements.rows.map(item => `<tr data-forge-material="${esc(item.id)}"><td>${esc(item.name)}<small>${esc((item.roles || []).map(role => roleLabels[role] || role).join('、'))}</small></td><td>${esc(item.required)}份</td><td>${esc(item.owned)}份</td>${amount(item.missing, '份')}</tr>`).join('')
     + `<tr data-forge-stones><td>灵石</td><td>${requirements.cost === null ? '待推演' : esc(requirements.cost) + '枚'}</td><td>${esc(requirements.stones)}枚</td>${requirements.cost === null ? '<td>待推演</td>' : amount(requirements.stonesMissing, '枚')}</tr></tbody></table>`;
 }
 
+// 用途：组织营生与炼器子区。
+// 流程：按type分组行动，生成炼器选料、资源表、开炉和当前安排。
+// 调用方式：桌面传入state、行动目录、材料目录、配料与预览。
+// 返回值：含body、quests、forge、job的HTML片段对象。
 export function renderEconomy(state, opts, forge, selected = {}, preview = null) {
   const p = state.player;
 
@@ -105,6 +179,10 @@ export function renderEconomy(state, opts, forge, selected = {}, preview = null)
   const groups = {};
   for (const o of (opts || [])) (groups[o.type] ||= []).push(o);
 
+  // 用途：生成一类营生清单。
+  // 流程：读取groups中的行动并调用actionRow。
+  // 调用方式：renderEconomy传入type。
+  // 返回值：行动分组HTML；无条目时空字符串。
   const section = (type) => {
     const list = groups[type] || [];
     if (!list.length) return '';
@@ -116,6 +194,10 @@ export function renderEconomy(state, opts, forge, selected = {}, preview = null)
   const mats = (forge?.materials || []);
   const shapes = (forge?.shapes || []);
   const requirements = forgeRequirements(state, mats, selected, preview);
+  // 用途：生成炼器材料下拉项。
+  // 流程：遍历权威材料目录并显示品阶、属性和库存。
+  // 调用方式：工坊为每个选料框传入sel。
+  // 返回值：option元素HTML字符串。
   const matOptions = (sel) => mats.map(m =>
     `<option value="${esc(m.id)}" ${sel === m.id ? 'selected' : ''}>`
   + `${esc(m.name)}（${m.grade} 阶 · ${esc(m.element)}${m.polarity} · 有 ${m.owned}）`
@@ -123,10 +205,10 @@ export function renderEconomy(state, opts, forge, selected = {}, preview = null)
 
   const forgePanel = mats.length && shapes.length
     ? `<div class="forge-grid">
-        <label>主料<select data-forge="main">${matOptions(selected.main || 'iron')}</select></label>
-        <label>辅料<select data-forge="aux">${matOptions(selected.aux || 'jade')}</select></label>
-        <label>灵核<select data-forge="core">${matOptions(selected.core || 'wood')}</select></label>
-        <label>器型<select data-forge="shape">
+        <label>主料<select data-forge="main" ${state.job?.type === 'forge' ? 'disabled' : ''}>${matOptions(selected.main || 'iron')}</select></label>
+        <label>辅料<select data-forge="aux" ${state.job?.type === 'forge' ? 'disabled' : ''}>${matOptions(selected.aux || 'jade')}</select></label>
+        <label>灵核<select data-forge="core" ${state.job?.type === 'forge' ? 'disabled' : ''}>${matOptions(selected.core || 'wood')}</select></label>
+        <label>器型<select data-forge="shape" ${state.job?.type === 'forge' ? 'disabled' : ''}>
           ${shapes.map(s => `<option value="${esc(s.id)}" ${s.id === selected.shape ? 'selected' : ''}>${esc(s.name)}（${esc({ weapon: '武器', armor: '防具', accessory: '佩饰' }[s.slot] || s.slot)}）</option>`).join('')}
         </select></label>
       </div>

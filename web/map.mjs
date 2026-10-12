@@ -2,13 +2,25 @@
 import { locationArt } from './location-art.mjs';
 import { visibleDungeonSites, renderDungeonEntrances } from './dungeons.mjs';
 
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = value => String(value ?? '').replace(/[&<>"']/g,
   ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const TYPES = { city: '城池', sect: '宗门', wild: '险地' };
 const MODES = { walk: '步行', boat: '乘船', flight: '御器' };
 
+// 用途：识别真实赶路安排。
+// 流程：检查job.type是否为travel。
+// 调用方式：地图、快捷键与取消安排传入job。
+// 返回值：布尔值。
 export function isTravelJob(job) { return job?.type === 'travel'; }
 
+// 用途：选择可用交通方式。
+// 流程：优先请求的方式，再选可用灵舟或其他可用方式。
+// 调用方式：地图传入location与requestedId。
+// 返回值：交通方式对象或null。
 export function selectedTravelMode(location, requestedId = '') {
   const options = location?.travel?.options || [];
   return options.find(option => option.id === requestedId)
@@ -16,6 +28,10 @@ export function selectedTravelMode(location, requestedId = '') {
     || options.find(option => option.enabled) || options[0] || null;
 }
 
+// 用途：解释赶路动作结果。
+// 流程：依据响应和state.job判断是否抵达或遇事暂停，补充目的地名称。
+// 调用方式：赶路反馈传入state、to与result。
+// 返回值：反馈对象。
 export function travelFeedback(state, to, result = {}) {
   if (result.error) return { text: result.error, kind: 'bad', arrived: false };
   if (state.ended) return { text: '此世已终，行程止于途中。', kind: 'warn', arrived: false };
@@ -33,6 +49,10 @@ export function travelFeedback(state, to, result = {}) {
   return { text: result.text || '行程尚未完成，请查看岁月纪事。', kind: 'info', arrived: false };
 }
 
+// 用途：绘制当前赶路路线。
+// 流程：从起终点坐标生成连线并显示实际进度位置。
+// 调用方式：地图传入from、to与progress。
+// 返回值：SVG路线片段字符串。
 function routeDrawing(from, to, progress = 0) {
   if (!from || !to || from.id === to.id) return '';
   const x1 = Number(from.x) * 10, y1 = Number(from.y) * 6.25;
@@ -48,10 +68,18 @@ function routeDrawing(from, to, progress = 0) {
     + `${progress > 0 ? `<circle class="route-traveller" cx="${px}" cy="${py}" r="7"/>` : ''}</svg>`;
 }
 
+// 用途：显示进行中的旅程。
+// 流程：核实travel安排，解析起终点及剩余天数，显示推进或中止入口。
+// 调用方式：地图传入state。
+// 返回值：旅程HTML；不在赶路时空字符串。
 function journeyPanel(state) {
   const job = state.job;
   if (!isTravelJob(job)) return '';
   const places = state.locations || [];
+  // 用途：解析旅途地点中文名。
+  // 流程：在places中查找地点，缺少目录时回退标识。
+  // 调用方式：journeyPanel传入地点id。
+  // 返回值：地点名称字符串。
   const name = id => places.find(location => location.id === id)?.name || id;
   const total = Math.max(1, Number(job.total ?? job.days) || 1);
   const remaining = Math.max(0, Number(job.remaining) || 0);
@@ -73,6 +101,10 @@ function journeyPanel(state) {
 
 const JOINABLE_SECTS = new Set(['jinhong', 'xinghe', 'zhushan', 'lihuo', 'huachen']);
 
+// 用途：显示地点山门入口。
+// 流程：读取宗门和当前人物身份，区分入宗考核或返回宗门。
+// 调用方式：地点详情传入state、location与blocked。
+// 返回值：山门入口HTML字符串。
 export function renderSectEntrance(state, location, blocked = '') {
   if (!JOINABLE_SECTS.has(location?.id)) return '';
   const player = state.player || {};
@@ -86,6 +118,10 @@ export function renderSectEntrance(state, location, blocked = '') {
       : '<small>需先完成下方赶路，抵达山门后才可进入。</small>') + '</section>';
 }
 
+// 用途：显示舆图选中地点详情。
+// 流程：读取地点服务、交通报价、秘境入口与插画，生成行动区。
+// 调用方式：舆图传入state、focus与requestedMode。
+// 返回值：地点详情HTML字符串。
 function destinationPanel(state, focus, requestedMode) {
   if (!focus) return '<aside class="atlas-destination"><div class="empty">暂时没有可查看的地点。</div></aside>';
   const here = focus.id === state.player.location;
@@ -129,6 +165,10 @@ function destinationPanel(state, focus, requestedMode) {
     + `</div></aside>`;
 }
 
+// 用途：显示宁州舆图。
+// 流程：读取地点和当前行程，应用搜索、类型、焦点与缩放，组合路线和详情。
+// 调用方式：地图页传入state与地图选项。
+// 返回值：舆图HTML字符串。
 export function renderAtlas(state, { focus: focusId = null, search = '', filter = 'all', mode = '', zoom = 1 } = {}) {
   const locations = state.locations || [];
   const job = isTravelJob(state.job) ? state.job : null;
@@ -137,6 +177,10 @@ export function renderAtlas(state, { focus: focusId = null, search = '', filter 
   const here = locations.find(location => location.id === state.player.location);
   const from = job ? locations.find(location => location.id === job.from) : here;
   const to = job ? locations.find(location => location.id === job.to) : focus;
+  // 用途：判断地点是否符合舆图筛选。
+  // 流程：同时比较当前地点类型与搜索关键词。
+  // 调用方式：renderAtlas筛选locations时调用。
+  // 返回值：布尔值。
   const matches = location => (filter === 'all' || filter === location.type)
     && (!search.trim() || `${location.name} ${location.desc || ''}`.includes(search.trim()));
   const pins = locations.map(location => {

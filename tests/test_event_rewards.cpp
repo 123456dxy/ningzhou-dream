@@ -253,10 +253,18 @@ void runEventRewardTests() {
             pending.options = {{"help", "合力救援", "灵药最多+3，好感最多+20", false}};
             game.pending = pending;
             const int herbs = game.player.herbs;
+            const auto herbInventory = game.player.arts.herbs;
             checkEq(chooseEvent("help").status, 200, "药谷有限资源通过真实API结算");
             checkEq(game.player.herbs, herbs + 2, "药谷仅取得实际余下的两份灵药");
             checkEq(game.player.relations[npcId], 100, "九十九交情实际仅加一");
-            check(logged(game, "未分类灵药+2") && logged(game, "交情+1"), "药谷日志显示有限材料和交情真实增量");
+            int received = 0;
+            bool loggedMaterials = true;
+            for (const auto& [name, count] : game.player.arts.herbs) {
+                const auto old = herbInventory.find(name);
+                const int delta = count - (old == herbInventory.end() ? 0 : old->second);
+                if (delta > 0) { received += delta; loggedMaterials &= logged(game, name + "+" + std::to_string(delta)); }
+            }
+            check(received == 2 && loggedMaterials && logged(game, "交情+1"), "药谷日志显示有限具体草药和交情真实增量");
             check(!logged(game, "灵药+3") && !logged(game, "交情+20"), "药谷有限资源不再按名义奖励假报");
         }
     }

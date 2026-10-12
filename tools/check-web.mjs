@@ -21,7 +21,10 @@ import { renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSect
 import * as artifacts from '../web/artifacts.mjs';
 import { renderNumericPreview } from '../web/numeric-preview.mjs';
 import { renderRenownSources } from '../web/renown.mjs';
-import { renderEconomy, forgeRequirements } from '../web/economy.mjs';
+import { renderEconomy, forgeRequirements, brewRequirements, renderPillEffect } from '../web/economy.mjs';
+import { renderInventoryPanel } from '../web/inventory-panel.mjs';
+import { renderTaskPanel } from '../web/task-panel.mjs';
+import { renderCraftSupply, renderSalvageQuote } from '../web/workshop.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 let checks = 0;
@@ -228,7 +231,7 @@ const document = { querySelector: element, getElementById(id) { return element('
   body: { setAttribute() {}, removeAttribute() {} } };
 const requests = [];
 const context = { ...tianji, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
-  renderSectMentors, renderSectTasks,
+  renderSectMentors, renderSectTasks, brewRequirements, renderPillEffect, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
   fetch: async (path, options) => { requests.push({ path, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; } };
@@ -239,17 +242,18 @@ for (const name of ['ningzhou-atlas']) {
 }
 let source = readFileSync(join(rootDir, 'web', 'app.mjs'), 'utf8').replace(/^import[\s\S]*?;\r?\n/gm, '');
 source = source.slice(0, source.indexOf('(async function boot()'));
-source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = { viewMarket, viewBattle, viewMap, renderSidebar, call, manualSourceRows, setSub, getTab:()=>tab, getState: () => S, focusMap: (id, mode) => { mapFocus = id; mapModes[id] = mode; } };`;
+source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = { viewMarket, viewBattle, viewMap, renderSidebar, call, manualSourceRows, setSub, setTab:next=>tab=next, getTab:()=>tab, getState: () => S, focusMap: (id, mode) => { mapFocus = id; mapModes[id] = mode; } };`;
 vm.runInNewContext(source, context);
 context.api.renderSidebar();
 verify(element('#player-card').innerHTML.includes('<strong>16</strong><span>岁</span>'), '年龄显示单位而不粘连月份');
 verify(element('#player-card').innerHTML.includes('player-female.webp') && element('#player-card').innerHTML.includes('遁速')
   && !element('#player-card').innerHTML.includes('<label>剑意</label>'), '角色侧栏使用性别立绘与遁速，移除旧永久剑意属性');
-context.api.setSub('market', 'brew');
+context.api.setTab('workshop');
+context.api.setSub('workshop', 'brew');
 const brew = context.api.viewMarket();
 verify(brew.includes('丹方14'), '完整可炼丹方可访问，不截断为前九条');
 verify(brew.includes('data-brew-batch'), '批量炼丹入口可访问');
-context.api.setSub('market', 'kit');
+context.api.setTab('market');
 verify(context.api.viewMarket().includes('功法13'), '完整书坊可访问，不截断为前六条');
 const ownedBooks = context.api.manualSourceRows([{ id: 'owned', name: '抄本', owned: true, canLearn: true, learnDays: 20, learnCost: 12 }], 'book-buy');
 verify(ownedBooks.includes('data-action="learn"') && ownedBooks.includes('开始修习'), '购得抄本后显示修习入口');
@@ -316,7 +320,7 @@ verify(targetView.includes('<span class="card-energy">1</span>'), '手牌包含�
 const uiCSS = readFileSync(join(rootDir, 'web', 'enhance.css'), 'utf8');
 verify(/\.combat-hand \.card-energy, \.sc-top \.card-energy\s*\{[^}]*position:\s*static/.test(uiCSS), '费用圆标定位在卡面流中，避免使用页面绝对坐标');
 verify(targetView.includes('本场移除 2 张') && targetView.includes('旧神通 ×2') && targetView.includes('弃牌堆 2'), '本场移除清单与弃牌堆分开显示');
-verify(targetView.includes('下回合实际回复 <b>6</b> 点灵力') && targetView.includes('上限 9'), '下一回合回复与灵力上限使用实际状态');
+verify(targetView.includes('下回合灵力恢复到 <b>6</b> 点') && targetView.includes('上限 9'), '下一回合灵力设为权威总值，文案区分恢复到与增量回复');
 const clickAction = async (action, id) => {
   actionButton.dataset = { action, id };
   await handlers.click({ target: { closest(sel) { return sel === '[data-action]' ? actionButton : null; } } });

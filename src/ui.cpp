@@ -28,6 +28,10 @@ namespace nz::ui {
 // ============================================================
 // 输出基础
 // ============================================================
+// 用途：设置控制台UTF8中文输入输出。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：无参数，读取或初始化当前模块状态。
+// 返回值：无；完成说明所述写入或展示操作。
 void setupConsole() {
 #ifdef _WIN32
     // 切到 UTF-8 代码页，否则中文显示为乱码
@@ -36,8 +40,16 @@ void setupConsole() {
 #endif
 }
 
+// 用途：输出菜单分隔线。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：无参数，读取或初始化当前模块状态。
+// 返回值：无；完成说明所述写入或展示操作。
 void line() { std::cout << "────────────────────────────────────────\n"; }
 
+// 用途：打印当前菜单标题。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const std::string& text，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 void title(const std::string& text) {
     std::cout << "\n";
     line();
@@ -45,6 +57,10 @@ void title(const std::string& text) {
     line();
 }
 
+// 用途：清除当前控制台画面。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：无参数，读取或初始化当前模块状态。
+// 返回值：无；完成说明所述写入或展示操作。
 void clearScreen() {
     // 只在真正的交互式终端清屏。
     // 输入被重定向（管道/文件）时清屏会把输出搅乱，也让自动化测试看不全内容。
@@ -55,6 +71,10 @@ void clearScreen() {
 #endif
 }
 
+// 用途：读取一行输入并处理输入终止。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入std::string& out，按本模块入口调用。
+// 返回值：成功读到一行为真；输入结束为假。
 bool readLine(std::string& out) {
     if (!std::getline(std::cin, out)) return false;
     // 去掉行尾的 \r（Windows 换行）
@@ -63,6 +83,10 @@ bool readLine(std::string& out) {
     return true;
 }
 
+// 用途：读取范围内数字并使用默认值处理无效输入。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入int lo, int hi, int fallback，按本模块入口调用。
+// 返回值：范围内输入值或fallback默认值。
 int readInt(int lo, int hi, int fallback) {
     std::string s;
     if (!readLine(s)) return fallback;
@@ -77,6 +101,10 @@ int readInt(int lo, int hi, int fallback) {
 }
 
 // 中文按 2 列宽度计算，便于对齐
+// 用途：按UTF8字符估算控制台显示宽度。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const std::string& s，按本模块入口调用。
+// 返回值：说明所述数值结果；不额外消耗资源。
 size_t displayWidth(const std::string& s) {
     size_t w = 0;
     for (size_t i = 0; i < s.size();) {
@@ -92,6 +120,10 @@ size_t displayWidth(const std::string& s) {
     return w;
 }
 
+// 用途：补齐菜单文本的显示宽度。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const std::string& s, size_t width，按本模块入口调用。
+// 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
 std::string pad(const std::string& s, size_t width) {
     const size_t w = displayWidth(s);
     if (w >= width) return s;
@@ -101,6 +133,10 @@ std::string pad(const std::string& s, size_t width) {
 // ============================================================
 // 界面绘制
 // ============================================================
+// 用途：显示角色境界资源日期与状态。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void showHeader(const Game& g) {
     const Player& p = g.player;
     CalDate d = calendarDate(g);
@@ -135,6 +171,10 @@ static void showHeader(const Game& g) {
 }
 
 // 最近几条纪事
+// 用途：显示最近指定数量的岁月纪事。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const Game& g, int count = 5，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void showLog(const Game& g, int count = 5) {
     if (g.logs.empty()) return;
     const int n = std::min<int>(count, static_cast<int>(g.logs.size()));
@@ -149,6 +189,10 @@ static void showLog(const Game& g, int count = 5) {
 // ============================================================
 // 建号
 // ============================================================
+// 用途：显示可选初始天赋目录。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：无参数，读取或初始化当前模块状态。
+// 返回值：无；完成说明所述写入或展示操作。
 static void showTalentList() {
     std::cout << "\n  可用天赋（成本负数代表磨砺，会退还点数）：\n";
     const auto& t = TALENTS();
@@ -158,6 +202,10 @@ static void showTalentList() {
     }
 }
 
+// 用途：交互选择初始天赋并校验预算。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：无参数，读取或初始化当前模块状态。
+// 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
 static std::string pickTraits() {
     std::cout << "\n  选择天赋：输入编号，最多 3 个，用空格分隔（直接回车用默认 sword）\n";
     std::cout << "  例：1 5 9\n> ";
@@ -190,6 +238,10 @@ static std::string pickTraits() {
     return joined;
 }
 
+// 用途：执行控制台建号输入与确认流程。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：无参数，读取或初始化当前模块状态。
+// 返回值：Game结果，包含说明所述状态或计算数据。
 static Game newGameFlow() {
     title("创建新的一世");
 
@@ -249,6 +301,10 @@ static Game newGameFlow() {
 // ============================================================
 // 行动菜单
 // ============================================================
+// 用途：执行控制台推进并显示事件或结局。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g, int days，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void doAdvance(Game& g, int days) {
     // 直接推进若干天：没有在途工作时先按当前计划建一个
     if (!g.job.has_value()) {
@@ -281,6 +337,10 @@ static void doAdvance(Game& g, int days) {
 }
 
 // 处理待处理抉择（山门来信 / 药谷 / 游历遇事）
+// 用途：展示并结算待处理事件选择。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void handlePending(Game& g) {
     if (!g.pending.has_value()) return;
     const Pending ev = *g.pending;
@@ -360,6 +420,10 @@ static void handlePending(Game& g) {
 }
 
 // 洞府：道法节点与功法
+// 用途：交互管理功法悟道神通与配装。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void doArtsMenu(Game& g) {
     Player& p = g.player;
     while (true) {
@@ -508,6 +572,10 @@ static void doArtsMenu(Game& g) {
 }
 
 // 斗法界面：卡牌交互
+// 用途：显示斗法状态并接收出牌与结束回合。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void doBattleLoop(Game& g) {
     if (!g.player.arts.battle.has_value()) return;
     Battle& b = *g.player.arts.battle;
@@ -602,6 +670,10 @@ static void doBattleLoop(Game& g) {
 
 
 // 存档菜单
+// 用途：交互选择存档位进行保存读取。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void doSaveMenu(Game& g) {
     title("存档");
     const auto slots = listSaveSlots();
@@ -646,6 +718,10 @@ static void doSaveMenu(Game& g) {
 }
 
 // 调试信息：把关键内部状态摊开，方便核对
+// 用途：显示调试数值与世界内部状态。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void showDebug(const Game& g) {
     title("内部状态（调试）");
     const Player& p = g.player;
@@ -747,12 +823,20 @@ const BondKind kBondKinds[] = {
     {"dismiss", "辞别师门", 1, 0},
 };
 
+// 用途：按ID查询控制台NPC往来类别。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const std::string& id，按本模块入口调用。
+// 返回值：匹配定义或实体指针；未找到时为空。
 const BondKind* findBondKind(const std::string& id) {
     for (const auto& k : kBondKinds)
         if (id == k.id) return &k;
     return nullptr;
 }
 
+// 用途：按可见序号查询附近道友。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g, int index，按本模块入口调用。
+// 返回值：匹配定义或实体指针；未找到时为空。
 Npc* nearbyNpc(Game& g, int index) {
     int seen = 0;
     for (auto& n : g.npcs) {
@@ -763,6 +847,10 @@ Npc* nearbyNpc(Game& g, int index) {
     return nullptr;
 }
 
+// 用途：统计当前地点可见NPC。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const Game& g，按本模块入口调用。
+// 返回值：说明所述数值结果；不额外消耗资源。
 int nearbyCount(const Game& g) {
     int n = 0;
     for (const auto& x : g.npcs)
@@ -771,6 +859,10 @@ int nearbyCount(const Game& g) {
 }
 
 // 校验（对应 socActionError 的 bond 分支）
+// 用途：检查控制台NPC往来门槛与资源。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入const Game& g, const std::string& kind, const Npc* npc，按本模块入口调用。
+// 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
 std::string bondError(const Game& g, const std::string& kind, const Npc* npc) {
     const Player& p = g.player;
     const Bonds& b = g.bonds;
@@ -828,6 +920,10 @@ std::string bondError(const Game& g, const std::string& kind, const Npc* npc) {
     return "未知往来。";
 }
 
+// 用途：执行选定道友的关系往来。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g, const std::string& kind，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 void doBondAction(Game& g, const std::string& kind) {
     const BondKind* def = findBondKind(kind);
     if (!def) return;
@@ -905,6 +1001,10 @@ void doBondAction(Game& g, const std::string& kind) {
                  std::to_string(def->days) + " 天。");
 }
 
+// 用途：展示支线并提交分支选择。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 void doStoryMenu(Game& g) {
     title("原创支线");
     std::vector<const data::StoryDef*> available;
@@ -956,6 +1056,10 @@ void doStoryMenu(Game& g) {
     readLine(d);
 }
 
+// 用途：展示野外探索与悬赏选择。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 void doWildMenu(Game& g) {
     title("野外悬赏");
     const auto& tasks = data::WildTaskDef_TABLE();
@@ -982,6 +1086,10 @@ void doWildMenu(Game& g) {
     societyWildBegin(g, t.id);
 }
 
+// 用途：展示名册宗门与好友通讯入口。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 void doSocietyMenu(Game& g) {
     while (true) {
         title("宗门与知交");
@@ -1039,6 +1147,10 @@ void doSocietyMenu(Game& g) {
 } // namespace
 
 // ============================================================
+// 用途：驱动控制台主菜单与子流程。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 static void mainMenu(Game& g) {
     string lastAutomatic;
     while (true) {
@@ -1310,6 +1422,10 @@ static void mainMenu(Game& g) {
 // ============================================================
 // 入口
 // ============================================================
+// 用途：初始化控制台并处理启动参数和主循环。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入int argc, char** argv，按本模块入口调用。
+// 返回值：说明所述数值结果；不额外消耗资源。
 int run(int argc, char** argv) {
     setupConsole();
 
@@ -1374,4 +1490,8 @@ int run(int argc, char** argv) {
 } // namespace nz::ui
 
 // main.cpp 调用这个入口
+// 用途：进入控制台程序入口。
+// 参与流程：本地控制台菜单与交互。
+// 使用方式：传入int argc, char** argv，按本模块入口调用。
+// 返回值：说明所述数值结果；不额外消耗资源。
 int main(int argc, char** argv) { return nz::ui::run(argc, argv); }

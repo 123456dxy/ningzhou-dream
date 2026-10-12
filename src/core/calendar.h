@@ -17,14 +17,34 @@ struct CalDate {
 };
 
 // 取得日历位置。接受天数而不是 Game，方便单独测试。
+// 用途：把绝对天数或游戏日历转换为年月日。
+// 参与流程：日历推进与月年边界结算。
+// 使用方式：传入int days，按本模块入口调用。
+// 返回值：CalDate结果，包含说明所述状态或计算数据。
 CalDate calendarDate(int days);
+// 用途：把绝对天数或游戏日历转换为年月日。
+// 参与流程：日历推进与月年边界结算。
+// 使用方式：传入const Game& g，按本模块入口调用。
+// 返回值：CalDate结果，包含说明所述状态或计算数据。
 CalDate calendarDate(const Game& g);
+// 用途：生成游戏年月日中文标记。
+// 参与流程：日历推进与月年边界结算。
+// 使用方式：传入const Game& g，按本模块入口调用。
+// 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
 string calendarLabel(const Game& g);
 
 // 把连续的少量收益按「整天」发放，零头留在 carry 里下次再用。
 // 对应 JS 的 calendarTake：先累加，再取整数部分，余数留回 carry。
+// 用途：累计小数消耗并取整保持长期数值一致。
+// 参与流程：日历推进与月年边界结算。
+// 使用方式：传入Game& g, const string& key, double amount，按本模块入口调用。
+// 返回值：本次应付整数份数，并保留未取整余量。
 int calendarTake(Game& g, const string& key, double amount);
 // 同一自然化毒速率供每日结算与只读展示使用（每年360天）。
+// 用途：读取功法天赋加成后的年度排毒量。
+// 参与流程：日历推进与月年边界结算。
+// 使用方式：传入const Player& player，按本模块入口调用。
+// 返回值：说明所述数值结果；不额外消耗资源。
 double calendarDetoxPerYear(const Player& player);
 
 // 执行在途工作，逐天推进。
@@ -38,9 +58,17 @@ struct CalRunResult {
     bool restored = false;  // 本次推进发生死亡回档，必须停止原安排
     int days = 0;
 };
+// 用途：推进工作日历并处理月年边界与事件死亡。
+// 参与流程：日历推进与月年边界结算。
+// 使用方式：传入Game& g, int maxDays = 30，按本模块入口调用。
+// 返回值：CalRunResult结果，包含说明所述状态或计算数据。
 CalRunResult calendarRun(Game& g, int maxDays = 30);
 
 // 初始化时钟（只在读旧档或建新档时调用）
+// 用途：补齐旧存档的日历与月度结算状态。
+// 参与流程：日历推进与月年边界结算。
+// 使用方式：传入Game& g，按本模块入口调用。
+// 返回值：无；完成说明所述写入或展示操作。
 void ensureCalendar(Game& g);
 
 } // namespace nz
