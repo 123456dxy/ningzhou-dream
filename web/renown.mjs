@@ -6,12 +6,24 @@
 
 'use strict';
 
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// 用途：显示百分比。
+// 流程：按函数参数指定的小数精度将比例乘100。
+// 调用方式：各数值面板传入比例。
+// 返回值：带百分号的字符串。
 const pct = v => `${Math.round((v || 0) * 100)}%`;
 
 // 声望档位条
+// 用途：显示当前声望阶位。
+// 流程：依据服务端tiers和当前声望生成阶位摘要。
+// 调用方式：声望面板传入info。
+// 返回值：声望条HTML字符串。
 export function renderRenownBar(info) {
   if (!info) return '';
   const tiers = info.tiers || [];
@@ -27,6 +39,10 @@ export function renderRenownBar(info) {
 }
 
 // 声望的实际作用
+// 用途：说明可获取声望的途径。
+// 流程：逐项列出实际来源、收益、条件与动作入口。
+// 调用方式：人物面板传入sources。
+// 返回值：来源卡片HTML字符串。
 export function renderRenownSources(sources = []) {
   if (!sources.length) return '<div class="empty">声望来源暂未加载。</div>';
   return `<div class="renown-source-grid">${sources.map(source => {
@@ -44,6 +60,10 @@ export function renderRenownSources(sources = []) {
   }).join('')}</div>`;
 }
 
+// 用途：展示声望用途与获取说明。
+// 流程：读取议价、待遇与来源数据并组合阶位和详细面板。
+// 调用方式：人物面板传入info及可选sources。
+// 返回值：声望面板HTML字符串。
 export function renderRenownPanel(info, { sources = info?.sources || [] } = {}) {
   if (!info) return '<div class="empty">声望信息未加载。</div>';
   const rows = [
@@ -79,6 +99,10 @@ export function renderRenownPanel(info, { sources = info?.sources || [] } = {}) 
 }
 
 // 侧栏里的一行摘要（其他页面用）
+// 用途：生成声望简短徽章。
+// 流程：读取当前阶位与数值并组合标签。
+// 调用方式：相关页面传入info。
+// 返回值：徽章HTML字符串。
 export function renownChip(info) {
   if (!info) return '';
   return `<div><label>宁州声望</label><strong>${info.value}

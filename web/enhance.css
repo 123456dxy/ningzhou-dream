@@ -1550,6 +1550,27 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 .nz-login-card small { color: #7a7f78; font-size: 12px; }
 #nz-user { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; font-size: 13px; }
 
+/* 桌面行囊与工坊：沿用纸面、绿墨与细线，不改变移动端布局规则。 */
+.innate-stats{display:flex;justify-content:space-between;gap:8px;padding:10px 0;font-size:12px;color:var(--muted)}
+.sidebar .innate-stats{color:#c3d2c7}.sidebar .innate-stats b{color:#f1e6ce}
+.sidebar button.wide-btn{color:#e5eadc;border-color:#78978c;background:#21483e}
+.chronicle-resizable{resize:vertical;overflow:auto;min-height:180px;max-height:900px;padding-bottom:14px;box-sizing:border-box}
+.compact-plan{display:grid;gap:7px;font-size:12px;color:var(--muted)}
+.compact-plan select,.inventory-controls select{padding:9px 11px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
+.plan-description,.plan-preview{font-size:12px;line-height:1.8;margin:10px 0}
+.inventory-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid var(--line)}
+.inventory-controls .shop-tabs{flex-wrap:wrap}.inventory-controls label{font-size:12px;white-space:nowrap}
+.inventory-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:14px;padding:18px 22px}
+.inventory-item{border:1px solid var(--line);border-radius:8px;padding:16px;background:var(--surface);min-width:0}
+.inventory-item-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.inventory-item h4{font-size:15px;margin:0}.inventory-item-head span,.inventory-item>p{font-size:12px;color:var(--muted)}
+.character-details,.task-content{padding:18px 22px}.character-details .detail-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
+.character-details .detail-list>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.talent-detail{border-top:1px solid var(--line);padding:12px 0}.talent-detail p,.pill-effect p,.pill-effect small{font-size:12px;line-height:1.7}
+.pill-effect{padding:10px 0;text-align:left}.pill-effect strong{font-size:12px;color:var(--green)}.pill-effect small{display:block;color:var(--muted)}
+.craft-materials{font-size:11px;line-height:1.8;text-align:left}.craft-card.card-disabled{opacity:.75;cursor:default}
+.inventory-pill-details{margin-top:12px}.inventory-pill-details summary{cursor:pointer;font-size:12px;color:var(--green);padding:7px 0}.inventory-pill-details>p{font-size:12px;color:var(--muted);margin-top:8px}
+
 /* 突破入口：左侧金色按钮 + 面板高亮 */
 .progress-box button.bt-cta { background: linear-gradient(135deg, #e3c77d, #c9a457); color: #2a2412; font-weight: bold; letter-spacing: 2px; box-shadow: 0 0 0 1px #f1dc9e inset, 0 4px 14px #c9a45755; animation: bt-glow 2.2s ease-in-out infinite; }
 .progress-box button.bt-cta small { display: block; font-weight: normal; letter-spacing: 0; font-size: 10px; color: #4f4322; margin-top: 2px; }
@@ -1557,3 +1578,15 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 #bt-panel.bt-flash .chronicle-panel { animation: bt-flash 1.6s ease-out 2; }
 @keyframes bt-flash { 0% { box-shadow: 0 0 0 3px #d2b468; } 100% { box-shadow: 0 0 0 0 transparent; } }
 .hero-time .bt-chip { border: 1px solid #c9a457; background: #f6ecd0; color: #7a5a1f; border-radius: 12px; padding: 2px 12px; font-size: 11px; animation: bt-glow 2.2s ease-in-out infinite; }
+@media (min-width:761px) {
+  [data-page="workshop"] .craft-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));align-items:start;gap:12px}
+  [data-page="workshop"] .craft-card{display:flex;flex-direction:column;justify-content:flex-start;min-width:0;white-space:normal;gap:7px}
+  [data-page="workshop"] .craft-card .craft-top{gap:8px;flex-wrap:wrap;margin:0}
+  [data-page="workshop"] .craft-card .rate{white-space:nowrap}
+  [data-page="workshop"] .craft-card .pill-effect{padding:3px 0}
+  [data-page="workshop"] .craft-card p{margin:0}
+  .market-catalog-controls{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:center}
+  .market-catalog-controls .shop-tabs{flex-wrap:wrap}
+  .shop-grade-control{font-size:12px;white-space:nowrap}
+  .shop-grade-control select{padding:7px 10px;background:var(--surface);border:1px solid var(--line);border-radius:5px;color:var(--ink)}
+}

@@ -316,7 +316,7 @@ struct Battle {
     int enemyHp = 1;
     int enemyMax = 1;
     int enemyPower = 14;
-    int enemySword = 0;            // 对手剑意（用于剑道境差）
+    int enemySword = 0;            // 旧存档兼容字段，不参与伤害或境界修正
     bool enemySwordCult = false;   // 对手是否剑修
     int mana = 0;                  // 当前灵力
     int maxMana = 3;               // 每回合自然回复，随大境界和功法成长

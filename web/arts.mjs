@@ -13,6 +13,10 @@
 import { cardKind, cardRule } from './cards.mjs';
 import { renderNumericPreview } from './numeric-preview.mjs';
 
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -20,6 +24,10 @@ export const DAOS = ['金', '木', '水', '火', '土', '神', '体', '剑', '�
 export const DAO_LEVELS = ['未入门', '初窥门径', '略有小成', '融会贯通', '道之真境', '大道已成'];
 const THRESHOLDS = [0, 30, 100, 300, 900, 2000];
 
+// 用途：按大道经验显示境界。
+// 流程：用既有阈值表计算已跨过的等级数。
+// 调用方式：道法节点渲染传入经验。
+// 返回值：0至5的等级整数。
 export function artLevelOf(exp) {
   return Math.max(0, THRESHOLDS.filter(t => exp >= t).length - 1);
 }
@@ -27,6 +35,10 @@ export function artLevelOf(exp) {
 // 节点定义缓存（一次拉取，全局复用）
 let nodeCache = null;
 
+// 用途：读取大道节点目录。
+// 流程：优先复用缓存，必要时POST arts/nodes并缓存nodes。
+// 调用方式：洞府道法页面可传force强制刷新。
+// 返回值：Promise，节点数组。
 export async function loadNodes(force) {
   if (nodeCache && !force) return nodeCache;
   const r = await fetch('/api/arts/nodes', {
@@ -38,11 +50,19 @@ export async function loadNodes(force) {
   return nodeCache;
 }
 
+// 用途：清除节点目录缓存。
+// 流程：把nodeCache置空，供下次加载使用。
+// 调用方式：需要刷新定义时无参调用。
+// 返回值：无返回值。
 export function invalidateNodes() { nodeCache = null; }
 
 // 神通全表缓存（携带 / 卸下用）
 let spellCache = null;
 
+// 用途：读取神通目录与权威预览。
+// 流程：优先复用缓存，必要时POST arts/spells并保存结果。
+// 调用方式：构筑页面可传force强制刷新。
+// 返回值：Promise，神通目录对象。
 export async function loadSpells(force) {
   if (spellCache && !force) return spellCache;
   const r = await fetch('/api/arts/spells', {
@@ -54,9 +74,17 @@ export async function loadSpells(force) {
   return spellCache;
 }
 
+// 用途：清除神通目录缓存。
+// 流程：把spellCache置空使下次读取重新核算。
+// 调用方式：角色状态变化时无参调用。
+// 返回值：无返回值。
 export function invalidateSpells() { spellCache = null; }
 
 // 神通种类的中文标签（与 Core 的 kind 对应）
+// 用途：显示神通用途标签。
+// 流程：根据现有kind分类选择中文称呼。
+// 调用方式：神通面板传入神通对象。
+// 返回值：中文标签字符串。
 export function spellKindLabel(sp) {
   const k = sp.kind;
   if (k === 'attack') return '攻击';
@@ -72,6 +100,10 @@ export function spellKindLabel(sp) {
 
 // 渲染十二大道。
 // state 用于取经验、悟道点、主修方向；busy 表示当前不能操作。
+// 用途：展示十二大道与节点条件。
+// 流程：读取经验、悟道点与已领悟节点，为每道生成状态及按钮。
+// 调用方式：洞府页传入state和nodes。
+// 返回值：道法卡片HTML字符串。
 export function renderDaos(state, nodes) {
   const a = state.arts;
   const p = state.player;
@@ -122,6 +154,10 @@ export function renderDaos(state, nodes) {
 }
 
 // 洞府页的侧栏
+// 用途：展示修炼和斗法属性摘要。
+// 流程：读取mods和基础灵力等权威字段，组合说明。
+// 调用方式：洞府页传入state。
+// 返回值：侧栏HTML字符串。
 export function renderArtsAside(state) {
   const a = state.arts;
   const m = a.mods;
@@ -146,6 +182,10 @@ export function renderArtsAside(state) {
 // 携带神通面板：列出全部神通，逐张切换。
 // JS 版有「携带神通 / 卸下神通」，C++ 版此前完全缺失，
 // 玩家只能一直用开局那四个初始神通。
+// 用途：区分神通学习与携带状态。
+// 流程：按流派筛选，核实已学、境界、槽位和权威条件，显示真实预览。
+// 调用方式：构筑页传入目录、state和筛选选项。
+// 返回值：可操作或禁用神通卡片HTML。
 export function renderSpellPicker(data, state, options = {}) {
   const max = state.arts.spellSlots ?? data?.max ?? 4;
   const mandatoryIds = (state.arts.mandatorySpells || []).map(s => typeof s === 'string' ? s : s.id);
@@ -196,10 +236,18 @@ export function renderSpellPicker(data, state, options = {}) {
     + `</div>`;
 }
 
+// 用途：显示流派所需构筑条件。
+// 流程：解析功法、神通和节点引用，标注获得与生效状态。
+// 调用方式：流派页面传入state、神通目录、节点和筛选id。
+// 返回值：流派HTML；无建议时空字符串。
 export function renderArtBuilds(state, data, nodes, selected = 'all') {
   const builds = state.artBuilds || [];
   if (!builds.length) return '';
   const spells = data?.spells || [];
+  // 用途：解释流派构筑引用。
+  // 流程：分别按功法、神通或道法查目录并核实获得与生效状态。
+  // 调用方式：renderArtBuilds传入kind和ref。
+  // 返回值：名称、ready、known及说明对象。
   const resolve = (kind, ref) => {
     const id = typeof ref === 'string' ? ref : ref.id;
     const definition = typeof ref === 'string' ? null : ref;
@@ -222,6 +270,10 @@ export function renderArtBuilds(state, data, nodes, selected = 'all') {
     const ready = (state.arts.nodes || []).includes(id);
     return { name: definition?.name || n?.name || id, ready, known: ready, note: ready ? '已领悟' : '待领悟' };
   };
+  // 用途：生成流派一类组件。
+  // 流程：解析每个引用并按已生效、已获得或缺少生成标记。
+  // 调用方式：renderArtBuilds传入label、kind和refs。
+  // 返回值：组件组HTML；无条目时空字符串。
   const group = (label, kind, refs) => {
     if (!refs?.length) return '';
     return `<div class="build-components"><b>${label}</b>` + refs.map(ref => {

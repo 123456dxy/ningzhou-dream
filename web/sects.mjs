@@ -6,12 +6,20 @@
 
 'use strict';
 
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 let sectCache = null;
 let achCache = null;
 
+// 用途：读取宗门目录。
+// 流程：优先复用缓存，必要时POST sects并保存响应。
+// 调用方式：宗门与任务页面可传force。
+// 返回值：Promise，宗门目录对象。
 export async function loadSects(force) {
   if (sectCache && !force) return sectCache;
   sectCache = await fetch('/api/sects', {
@@ -22,6 +30,10 @@ export async function loadSects(force) {
   return sectCache;
 }
 
+// 用途：读取本世成就进度。
+// 流程：优先复用缓存，必要时POST achievements并保存响应。
+// 调用方式：成就页面可传force。
+// 返回值：Promise，成就对象。
 export async function loadAchievements(force) {
   if (achCache && !force) return achCache;
   achCache = await fetch('/api/achievements', {
@@ -32,11 +44,19 @@ export async function loadAchievements(force) {
   return achCache;
 }
 
+// 用途：清除宗门和成就缓存。
+// 流程：同时重置sectCache与achCache。
+// 调用方式：角色状态变化时调用。
+// 返回值：无返回值。
 export function invalidateSects() { sectCache = null; achCache = null; }
 
 // ------------------------------------------------------------
 // 五宗一览
 // ------------------------------------------------------------
+// 用途：展示可拜入的宗门。
+// 流程：逐宗读取门规、条件和当前身份，生成入宗按钮。
+// 调用方式：宗门页传入目录和player。
+// 返回值：宗门卡片HTML字符串。
 export function renderSectPicker(data, player) {
   const list = data?.sects || [];
   if (!list.length) return '<div class="empty">宗门信息未加载。</div>';
@@ -68,6 +88,10 @@ export function renderSectPicker(data, player) {
     </div>`).join('') + `</div>`;
 }
 
+// 用途：展示师尊和授业条件。
+// 流程：按当前宗门及权威候选列表组织拜师与授业入口。
+// 调用方式：宗门页传入目录与state。
+// 返回值：师尊面板HTML字符串。
 export function renderSectMentors(data, state) {
   const player = state.player || {};
   if (!player.sect) return '<div class="empty">先到山门完成入门考核，入宗后可向同门师长行拜师礼。</div>';
@@ -92,6 +116,10 @@ export function renderSectMentors(data, state) {
     }).join('') || '<div class="empty">当前没有在世且境界更高的同门可拜为师。可先与同门往来，等待同门突破或新的师长入宗。</div>'}</div></div>`;
 }
 
+// 用途：展示本门任务与考核。
+// 流程：筛选山门行动并显示真实费用报酬及可做原因。
+// 调用方式：任务宗门分类传入state、options与data。
+// 返回值：宗门任务HTML字符串。
 export function renderSectTasks(state, options, data) {
   const player = state.player || {};
   if (!player.sect) return '<div class="empty">散修不能承接宗门差事，请先通过山门考核。</div>';
@@ -110,6 +138,10 @@ export function renderSectTasks(state, options, data) {
     + (!tasks.length ? '<div class="empty">正在读取本门差事，请稍候。</div>' : '') + `</div>`;
 }
 
+// 用途：展示藏经阁神通来源。
+// 流程：筛选本门条目，说明已学状态、兑换条件与费用。
+// 调用方式：宗门页传入state。
+// 返回值：藏经阁神通HTML字符串。
 export function renderSectSpellLibrary(state) {
   const list = (state.librarySpells || []).filter(sp => !sp.sect || sp.sect === state.player.sect);
   if (!list.length) return '<div class="empty">本门暂未提供可请领的神通。</div>';
@@ -131,6 +163,10 @@ export function renderSectSpellLibrary(state) {
 // ------------------------------------------------------------
 // 成就
 // ------------------------------------------------------------
+// 用途：展示成就当前与目标。
+// 流程：读取已达成状态，进度条限制0至100%，完成条目显示已达成。
+// 调用方式：成就页传入data。
+// 返回值：成就HTML；未加载时空状态HTML。
 export function renderAchievements(data) {
   const list = data?.achievements || [];
   if (!list.length) return '<div class="empty">成就信息未加载。</div>';
@@ -139,10 +175,10 @@ export function renderAchievements(data) {
   return `<div class="ach-head">已达成 <b>${done}</b> / ${list.length}</div>`
     + list.map(a => {
         const pct = a.target > 0
-          ? Math.min(100, Math.round(a.progress / a.target * 100)) : 0;
+          ? Math.max(0, Math.min(100, Math.round(a.progress / a.target * 100))) : 0;
         return `<div class="ach-row ${a.done ? 'done' : ''}">
           <div class="ach-top"><strong>${esc(a.name)}</strong>
-            <span>${a.progress} / ${a.target}</span></div>
+            <span>${a.done ? '已达成' : `${a.progress} / ${a.target}`}</span></div>
           <div class="ach-bar"><i style="width:${pct}%"></i></div>
         </div>`;
       }).join('');

@@ -45,6 +45,13 @@ int main() {
     nztest::runSectCompletionTests();
     nztest::runTianjiTests();
     nztest::runShadowCombatTests();
+    nztest::runContentRegistryTests();
+    nztest::runApiRefactorTests();
+    nztest::runPersistenceRefactorTests();
+    nztest::runCombatFixTests();
+    nztest::runPlayerFixTests();
+    nztest::runCraftingFixTests();
+    nztest::runCatalogDisplayTests();
 
     const int f = nztest::failures();
     std::printf("\n===== 结果: %s（%d 项失败）=====\n",

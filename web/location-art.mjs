@@ -1,7 +1,15 @@
 // 每处地点独立景观；主题对应 locations/prompts.json 中的插画构思。
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = value => String(value ?? '').replace(/[&<>"']/g,
   ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
+// 用途：登记地点插画信息。
+// 流程：根据id拼接资源路径并冻结名称、副标题等条目。
+// 调用方式：地点插画映射表初始化时调用。
+// 返回值：不可变插画对象。
 const artwork = (id, name, subtitle) => Object.freeze({
   src: `assets/map/locations/${id}.webp`,
   alt: `${name}景观插画：${subtitle}`,
@@ -43,11 +51,19 @@ export const LOCATION_ART = Object.freeze({
   tianmo: artwork('tianmo', '天魔眼', '魔物灵核 · 险地探查'),
 });
 
+// 用途：读取地点插画条目。
+// 流程：接受地点对象或id，在映射表中查找对应插画。
+// 调用方式：地点渲染传入locationOrId。
+// 返回值：插画对象或空值。
 export function locationArt(locationOrId) {
   const id = typeof locationOrId === 'string' ? locationOrId : locationOrId?.id;
   return Object.hasOwn(LOCATION_ART, id) ? LOCATION_ART[id] : null;
 }
 
+// 用途：显示地点专属插画。
+// 流程：读取插画与地点信息，生成可放大的图片和说明。
+// 调用方式：地图地点详情传入location。
+// 返回值：插画HTML字符串。
 export function renderLocationArt(location) {
   const art = locationArt(location);
   if (!art) return '';

@@ -35,6 +35,16 @@ function walk(dir, ext, out = []) {
 const read = (p) => readFileSync(p, 'utf8');
 const rel = (p) => relative(ROOT, p).replace(/\\/g, '/');
 
+// API serializers are separate translation units. Scan the actual module tree
+// instead of depending on the former monolithic api.cpp or local variable names.
+const interfaceFiles = walk(join(ROOT, 'src/core/interface'), ['.cpp']);
+const interfaceText = interfaceFiles.map(read).join('\n') + '\n' + read(join(ROOT, 'src/web_main.cpp'));
+const playerViewText = read(join(ROOT, 'src/core/interface/player_views.cpp'));
+const apiRouteText = read(join(ROOT, 'src/core/api.cpp')) + '\n' +
+  read(join(ROOT, 'src/core/interface/routes.cpp')) + '\n' +
+  read(join(ROOT, 'src/web_main.cpp')) + '\n' +
+  read(join(ROOT, 'src/core/tianji.cpp'));
+
 // ============================================================
 // 1. C++：定义了但从未被调用的函数
 // ============================================================
@@ -117,21 +127,16 @@ function auditJsDeadLocals() {
 // 3. 后端下发的 state 字段 vs 前端读取的字段
 // ============================================================
 function auditStateContract() {
-  const api = read(join(ROOT, 'src/core/api.cpp'));
-  const start = api.indexOf('Value buildState(');
-  const end = api.indexOf('Value okWithState(');
-  const body = api.slice(start, end);
+  const body = interfaceText;
 
   // 顶层 state 字段：buildState 里任何 s.set("xxx")
   const sent = new Set();
-  for (const m of body.matchAll(/\bs\.set\("(\w+)"/g)) sent.add(m[1]);
+  for (const m of body.matchAll(/\bstate\.set\("(\w+)"/g)) sent.add(m[1]);
 
   // 玩家子对象字段：定位到 // ---- 玩家 ---- 那一块
-  const pStart = body.indexOf('const Player& p = g.player;');
-  const pEnd = body.indexOf('// ---- 时间 ----');
-  const playerBlock = (pStart >= 0 && pEnd > pStart) ? body.slice(pStart, pEnd) : '';
+  const playerBlock = playerViewText;
   const playerSent = new Set();
-  for (const m of playerBlock.matchAll(/\bo\.set\("(\w+)"/g)) playerSent.add(m[1]);
+  for (const m of playerBlock.matchAll(/\bentry\.set\("(\w+)"/g)) playerSent.add(m[1]);
 
   // 前端读的字段
   const jsFiles = walk(join(ROOT, 'web'), ['.mjs']);
@@ -164,20 +169,13 @@ function auditStateContract() {
 // 4. 后端下发了但前端从不读的字段
 // ============================================================
 function auditUnusedStateFields() {
-  const api = read(join(ROOT, 'src/core/api.cpp'));
-  const start = api.indexOf('Value buildState(');
-  const end = api.indexOf('Value okWithState(');
-  const body = api.slice(start, end);
+  const body = interfaceText;
   const jsFiles = walk(join(ROOT, 'web'), ['.mjs']);
   const allJs = jsFiles.map(read).join('\n');
 
   const sent = new Set();
-  for (const m of body.matchAll(/\bs\.set\("(\w+)"/g)) sent.add(m[1]);
-  const pStart = body.indexOf('const Player& p = g.player;');
-  const pEnd = body.indexOf('// ---- 时间 ----');
-  if (pStart >= 0 && pEnd > pStart) {
-    for (const m of body.slice(pStart, pEnd).matchAll(/\bo\.set\("(\w+)"/g)) sent.add(m[1]);
-  }
+  for (const m of body.matchAll(/\bstate\.set\("(\w+)"/g)) sent.add(m[1]);
+  for (const m of playerViewText.matchAll(/\bentry\.set\("(\w+)"/g)) sent.add(m[1]);
 
   for (const name of sent) {
     if (new RegExp(`\\b${name}\\b`).test(allJs)) continue;
@@ -189,8 +187,9 @@ function auditUnusedStateFields() {
 // 5. 前端发起的 API 路径 vs 后端注册的路由
 // ============================================================
 function auditRoutes() {
-  const api = read(join(ROOT, 'src/core/api.cpp'));
+  const api = apiRouteText;
   const registered = new Set();
+  for (const m of api.matchAll(/RouteId::\w+,\s*"(\/api\/[^"]+)"/g)) registered.add(m[1]);
   for (const m of api.matchAll(/path == "(\/api\/[^"]+)"/g)) registered.add(m[1]);
   // 前缀匹配的写法：path.rfind("/api/xxx/", 0) == 0
   for (const m of api.matchAll(/rfind\("(\/api\/[^"]+)"/g)) registered.add(m[1]);
@@ -213,7 +212,7 @@ function auditRoutes() {
       }
     }
     for (const m of src.matchAll(/fetch\('(\/api\/[^']+)'/g)) {
-      const p = m[1];
+      const p = m[1].split(/[?#]/, 1)[0];
       if (!registered.has(p)) {
         const line = src.slice(0, m.index).split('\n').length;
         add('路由不存在', `${rel(f)}:${line}`, `前端 fetch ${p}，后端未注册`);

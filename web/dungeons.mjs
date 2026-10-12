@@ -9,12 +9,24 @@ const ROOM = {
   treasure: ['▣', '宝箱'], boss: ['♜', '守关者'], start: ['⌾', '入口'],
 };
 const SITE = { wild: '野外秘境', natural: '野外秘境', intel: '情报秘境', tianmo: '天魔眼', sea: '无尽海' };
+// 用途：显示秘境奖励类型中文名。
+// 流程：按奖励kind查中文标签，未知类型保留其文字。
+// 调用方式：秘境奖励渲染传入kind。
+// 返回值：中文类型字符串。
 const kindName = kind => ({ herb: '药材', material: '炼器材料', spell: '神通', card: '神通', buyCard: '购买神通',
   learnSpell: '永久神通', manual: '功法抄本',
   relic: '秘境遗物', buyRelic: '购买遗物', heal: '疗伤', rest: '调息休整', buyHeal: '药浴疗伤', remove: '精简牌组',
   cache: '搜寻遗藏', risk: '破开禁制', stones: '灵石' }[kind] || '奖励');
+// 用途：显示秘境节点图标与名称。
+// 流程：按节点type从ROOM表查找，未知类型回退通用节点。
+// 调用方式：路线和当前节点渲染传入type。
+// 返回值：图标与名称二元数组。
 const room = type => ROOM[type] || ['○', '去处'];
 
+// 用途：显示秘境通关奖励候选。
+// 流程：读取bossRewards，按details决定是否显示描述与折叠容器。
+// 调用方式：入口或目录传入source和选项。
+// 返回值：奖励预览HTML字符串。
 export function renderDungeonBossPreview(source, { details = false } = {}) {
   const rewards = source.bossRewards || [];
   if (!rewards.length) return '';
@@ -23,10 +35,18 @@ export function renderDungeonBossPreview(source, { details = false } = {}) {
     : `<section class="dungeon-boss-preview"><strong>通关主奖励 · 三选一</strong>${content}</section>`;
 }
 
+// 用途：筛选已发现秘境入口。
+// 流程：只保留revealed条目，并按可选地点过滤。
+// 调用方式：舆图或秘境页传入state与location。
+// 返回值：入口数组。
 export function visibleDungeonSites(state, location = '') {
   return (state.dungeons?.sites || []).filter(site => site.revealed !== false && (!location || site.location === location));
 }
 
+// 用途：显示当地秘境入口。
+// 流程：组合可见副本、周期开放说明及情报购买入口。
+// 调用方式：地点详情传入state和location。
+// 返回值：入口HTML字符串。
 export function renderDungeonEntrances(state, location) {
   const sites = visibleDungeonSites(state, location);
   const specials = (state.dungeons?.specials || []).filter(site => site.location === location);
@@ -43,6 +63,10 @@ export function renderDungeonEntrances(state, location) {
     + `<button class="subtle" data-action="goto-tab" data-tab="dungeon">查看宁州秘境</button></section>`;
 }
 
+// 用途：展示全部已知秘境。
+// 流程：读取地点、周期与入口条件，为可见副本生成定位和进入操作。
+// 调用方式：秘境页传入state。
+// 返回值：秘境目录HTML字符串。
 export function renderDungeonDirectory(state) {
   const d = state.dungeons || {};
   const sites = visibleDungeonSites(state);
@@ -65,15 +89,21 @@ export function renderDungeonDirectory(state) {
     }).join('') || `<div class="empty">尚未发现可探索的秘境。前往天机阁购买材料秘境情报，或等待山河中的新机缘。</div>`}</div></div>`;
 }
 
-export function renderDungeonIntel(state, { kind = 'all', search = '' } = {}) {
+// 用途：展示材料秘境情报。
+// 流程：按类型与关键词筛选服务端情报，显示费用和可购条件。
+// 调用方式：情报子页传入state与筛选选项。
+// 返回值：情报列表HTML字符串。
+export function renderDungeonIntel(state, { kind = 'all', search = '', grade = '3' } = {}) {
   const d = state.dungeons || {};
-  const entries = (d.intel || []).filter(item => (kind === 'all' || item.kind === kind)
+  const grades = [...new Set([3, 4, 5, ...(d.intel || []).map(item => Number(item.grade))])].filter(value => Number.isFinite(value) && value >= 3).sort((a, b) => a - b);
+  const entries = (d.intel || []).filter(item => Number(item.grade) >= 3 && (grade === 'all' || Number(item.grade) === Number(grade)) && (kind === 'all' || item.kind === kind)
     && (!search.trim() || `${item.name} ${item.desc || ''} ${item.stageName || ''}`.includes(search.trim())));
   const here = state.player.location === 'tianji';
   return panel('天机阁 · 秘境情报', '每月限购一次', `<div class="dungeon-intel-body">`
     + `<p class="dungeon-intel-lead">购买三阶及以上材料所在的秘境位置。探索分支路线，击败终点守关者，保底取得指定材料 ×10，并选择一份通关主奖励。</p>`
     + (!here ? `<div class="dungeon-intel-away">需在天机阁购买情报。<button data-action="dungeon-locate" data-id="tianji">在舆图定位天机阁</button></div>` : '')
     + `<div class="dungeon-intel-filters"><div class="shop-tabs">${[['all','全部'],['herb','炼丹药材'],['material','炼器材料']].map(([id,label]) => `<button class="${kind === id ? 'active' : ''}" data-dungeon-intel-kind="${id}">${label}</button>`).join('')}</div>`
+    + `<label class="shop-grade-control">品阶 <select data-dungeon-intel-grade><option value="all" ${grade === 'all' ? 'selected' : ''}>全部三阶以上</option>${grades.map(value => `<option value="${value}" ${String(value) === String(grade) ? 'selected' : ''}>${value} 阶</option>`).join('')}</select></label>`
     + `<input type="search" data-dungeon-intel-search value="${esc(search)}" placeholder="搜索材料或境界" aria-label="搜索材料秘境情报"></div>`
     + `<div class="dungeon-intel-list">${entries.map(item => {
       const enabled = here && item.enabled;
@@ -83,10 +113,18 @@ export function renderDungeonIntel(state, { kind = 'all', search = '' } = {}) {
     }).join('') || `<div class="empty">没有符合条件的材料情报。</div>`}</div></div>`);
 }
 
+// 用途：计算秘境路线绘图位置。
+// 流程：按节点行列及总行数映射到路线画布坐标。
+// 调用方式：路线绘制传入node和rows。
+// 返回值：含x与y的坐标对象。
 function nodePosition(node, rows) {
   return { x: 120 + (Number(node.lane) || 0) * 240, y: 64 + (rows - 1 - (Number(node.row) || 0)) * 112 };
 }
 
+// 用途：展示可走的秘境路线。
+// 流程：按真实节点连线绘制路线并区分已走、当前和可选节点。
+// 调用方式：探索页传入run。
+// 返回值：路线HTML字符串。
 export function renderDungeonRoute(run) {
   const nodes = run.nodes || [];
   const rows = Math.max(1, ...nodes.map(node => (Number(node.row) || 0) + 1));
@@ -111,6 +149,10 @@ export function renderDungeonRoute(run) {
     }).join('') + `</div></div><div class="dungeon-room-legend">${[['battle','斗法'],['elite','强敌'],['camp','营地'],['event','奇遇'],['merchant','行商'],['chest','宝箱'],['boss','守关者']].map(([type,label]) => `<span>${room(type)[0]} ${label}</span>`).join('')}</div></section>`;
 }
 
+// 用途：整理秘境战利品摘要。
+// 流程：读取已得物资、名称和数量并转为可读条目。
+// 调用方式：探索页传入run。
+// 返回值：战利品文字数组。
 function lootEntries(run) {
   const loot = run.loot || {}, names = run.itemNames || {};
   const entries = Array.isArray(run.lootItems) ? run.lootItems.map(item => `${item.name} ×${item.amount ?? item.count}`) : [];
@@ -121,6 +163,10 @@ function lootEntries(run) {
   return entries;
 }
 
+// 用途：展示当前秘境探索。
+// 流程：组合路线、战斗或节点选项、临时牌、遗物与战利品。
+// 调用方式：秘境页面传入state与可选battleHTML。
+// 返回值：探索HTML字符串。
 export function renderDungeonRun(state, battleHTML = '') {
   const run = state.dungeons?.run;
   if (!run) return '';
@@ -168,11 +214,15 @@ export function renderDungeonRun(state, battleHTML = '') {
     + `</aside></div></div>`;
 }
 
-export function renderDungeons(state, { mode = 'sites', intelKind = 'all', intelSearch = '', battleHTML = '' } = {}) {
+// 用途：选择秘境视图。
+// 流程：有run显示探索，否则按mode显示目录或材料情报。
+// 调用方式：主渲染传入state与模式选项。
+// 返回值：秘境页HTML字符串。
+export function renderDungeons(state, { mode = 'sites', intelKind = 'all', intelSearch = '', intelGrade = '3', battleHTML = '' } = {}) {
   if (state.dungeons?.run) return renderDungeonRun(state, battleHTML);
   return heading('宁州秘境', '寻访秘境，选择路线，以神通与遗物应对层层斗法。', '带伤续战 · 临时构筑')
     + `<div class="subtabs"><button class="subtab ${mode === 'sites' ? 'on' : ''}" data-dungeon-view="sites">山河秘境</button>`
     + `<button class="subtab ${mode === 'intel' ? 'on' : ''}" data-dungeon-view="intel">天机阁情报</button></div>`
-    + (mode === 'intel' ? renderDungeonIntel(state, { kind: intelKind, search: intelSearch }) : renderDungeonDirectory(state))
+    + (mode === 'intel' ? renderDungeonIntel(state, { kind: intelKind, search: intelSearch, grade: intelGrade }) : renderDungeonDirectory(state))
     + hintBox(['秘境难度按入境时的境界确定；探索后续房间会沿用当前气血。', '天机阁可购买指定材料的秘境位置，通关终点固定获得材料 ×10。', '天魔眼每 50 年开放 5 年；无尽海每 10 年开放 2 年。']);
 }

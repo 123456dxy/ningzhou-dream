@@ -5,11 +5,19 @@
 
 'use strict';
 
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 let cache = null;
 
+// 用途：读取传承档案。
+// 流程：优先使用缓存，必要时POST legacy并保存响应。
+// 调用方式：结局或设置页可传force。
+// 返回值：Promise，传承对象或失败时null。
 export async function loadLegacy(force) {
   if (cache && !force) return cache;
   cache = await fetch('/api/legacy', {
@@ -20,8 +28,16 @@ export async function loadLegacy(force) {
   return cache;
 }
 
+// 用途：清除传承档案缓存。
+// 流程：把cache置空，供后续重新读取。
+// 调用方式：结算或状态替换后调用。
+// 返回值：无返回值。
 export function invalidateLegacy() { cache = null; }
 
+// 用途：读取旧版种子天赋候选。
+// 流程：把seed与roll发送legacy/draft并解析响应。
+// 调用方式：旧版候选重抽动作调用。
+// 返回值：Promise，候选对象或失败时null。
 export async function draftTalents(seed, roll) {
   return fetch('/api/legacy/draft', {
     method: 'POST',
@@ -30,6 +46,10 @@ export async function draftTalents(seed, roll) {
   }).then(r => r.json()).catch(() => null);
 }
 
+// 用途：结算本世传承。
+// 流程：POST legacy/settle后清除缓存并返回响应。
+// 调用方式：需要显式结算这一世时调用。
+// 返回值：Promise，结算响应或失败时null。
 export async function settleLife() {
   const r = await fetch('/api/legacy/settle', {
     method: 'POST',
@@ -43,6 +63,10 @@ export async function settleLife() {
 // ------------------------------------------------------------
 // 结局结算画面
 // ------------------------------------------------------------
+// 用途：展示结局与回档选择。
+// 流程：读取ending、检查点和里程碑，显示成绩、新传承点与下一世入口。
+// 调用方式：结局页面传入state和传承档案。
+// 返回值：结局HTML字符串。
 export function renderEnding(state, leg) {
   const e = state.ending || {};
   const ms = (leg?.milestones || []);
@@ -98,6 +122,10 @@ export function renderEnding(state, leg) {
 // ------------------------------------------------------------
 // 传承档案（设置页里展示）
 // ------------------------------------------------------------
+// 用途：显示跨人生传承档案。
+// 流程：列出已转世次数、点数、预算和已领里程碑。
+// 调用方式：设置页传入leg。
+// 返回值：传承HTML；未加载时空状态HTML。
 export function renderLegacyPanel(leg) {
   if (!leg) return '<div class="empty">传承档案未加载。</div>';
   const ms = leg.milestones || [];
@@ -117,6 +145,10 @@ export function renderLegacyPanel(leg) {
 // ------------------------------------------------------------
 // 建号抽天赋面板
 // ------------------------------------------------------------
+// 用途：显示旧版候选天赋面板。
+// 流程：计算选中候选成本并列出选择和重抽按钮。
+// 调用方式：旧版候选界面传入draft、roll、seed、budget和selected。
+// 返回值：候选HTML字符串。
 export function renderDraftPanel(draft, roll, seed, budget, selected) {
   if (!draft) return '<div class="empty">正在抽取天赋…</div>';
   const total = (draft.talents || []).reduce(

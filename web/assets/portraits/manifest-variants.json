@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "generatedDate": "2026-10-12",
+  "mode": "built-in image_gen",
+  "format": "RGBA WebP, quality 74-80, method 6, 768x1152",
+  "selection": "FNV-1a of NPC identity, portrait and v1; original and variant pool per sect/gender",
+  "assets": [
+    {
+      "id": "npc-jinhong-male-v1",
+      "file": "npc-jinhong-male-v1.webp",
+      "description": "金虹男：低马尾、月牙额冠、双手持剑",
+      "width": 768,
+      "height": 1152,
+      "bytes": 169452,
+      "sourceBytes": 2529160,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        7,
+        43,
+        768,
+        1152
+      ]
+    },
+    {
+      "id": "npc-jinhong-female-v1",
+      "file": "npc-jinhong-female-v1.webp",
+      "description": "金虹女：高编辫、叶簪、立剑与剑印",
+      "width": 768,
+      "height": 1152,
+      "bytes": 201932,
+      "sourceBytes": 2622995,
+      "quality": 76,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        46,
+        25,
+        768,
+        1152
+      ]
+    },
+    {
+      "id": "npc-xinghe-male-v1",
+      "file": "npc-xinghe-male-v1.webp",
+      "description": "星河男：披发侧辫、银水滴饰、执扇",
+      "width": 768,
+      "height": 1152,
+      "bytes": 195822,
+      "sourceBytes": 2634978,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        20,
+        19,
+        768,
+        1152
+      ]
+    },
+    {
+      "id": "npc-xinghe-female-v1",
+      "file": "npc-xinghe-female-v1.webp",
+      "description": "星河女：低盘髻侧辫、月簪、持星盘",
+      "width": 768,
+      "height": 1152,
+      "bytes": 195764,
+      "sourceBytes": 2645290,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        15,
+        31,
+        768,
+        1152
+      ]
+    },
+    {
+      "id": "npc-zhushan-male-v1",
+      "file": "npc-zhushan-male-v1.webp",
+      "description": "竹山男：布束髻、短须、竹杖和药草",
+      "width": 768,
+      "height": 1152,
+      "bytes": 185980,
+      "sourceBytes": 2727229,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        35,
+        1,
+        751,
+        1152
+      ]
+    },
+    {
+      "id": "npc-zhushan-female-v1",
+      "file": "npc-zhushan-female-v1.webp",
+      "description": "竹山女：双辫低髻、叶簪、竹笛",
+      "width": 768,
+      "height": 1152,
+      "bytes": 137372,
+      "sourceBytes": 2222501,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        142,
+        33,
+        768,
+        1152
+      ]
+    },
+    {
+      "id": "npc-lihuo-male-v1",
+      "file": "npc-lihuo-male-v1.webp",
+      "description": "离火男：半高马尾、赤铜扣、火杖与炉囊",
+      "width": 768,
+      "height": 1152,
+      "bytes": 194062,
+      "sourceBytes": 2652463,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        39,
+        16,
+        751,
+        1152
+      ]
+    },
+    {
+      "id": "npc-lihuo-female-v1",
+      "file": "npc-lihuo-female-v1.webp",
+      "description": "离火女：双髻火鸟簪、铜扇与手诀",
+      "width": 768,
+      "height": 1152,
+      "bytes": 192156,
+      "sourceBytes": 2474165,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        29,
+        36,
+        761,
+        1152
+      ]
+    },
+    {
+      "id": "npc-huachen-male-v1",
+      "file": "npc-huachen-male-v1.webp",
+      "description": "化尘男：短发小髻、石簪、双手拄剑",
+      "width": 768,
+      "height": 1152,
+      "bytes": 106940,
+      "sourceBytes": 2196041,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        164,
+        9,
+        645,
+        1143
+      ]
+    },
+    {
+      "id": "npc-huachen-female-v1",
+      "file": "npc-huachen-female-v1.webp",
+      "description": "化尘女：高环髻、木簪、竹卷与铜盘",
+      "width": 768,
+      "height": 1152,
+      "bytes": 123832,
+      "sourceBytes": 2327909,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        92,
+        21,
+        719,
+        1152
+      ]
+    },
+    {
+      "id": "npc-rogue-male-v1",
+      "file": "npc-rogue-male-v1.webp",
+      "description": "散修男：凌乱低马尾、布带、肩扛剑与葫芦",
+      "width": 768,
+      "height": 1152,
+      "bytes": 204342,
+      "sourceBytes": 2732418,
+      "quality": 78,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        28,
+        31,
+        765,
+        1152
+      ]
+    },
+    {
+      "id": "npc-rogue-female-v1",
+      "file": "npc-rogue-female-v1.webp",
+      "description": "散修女：短发侧结、布带、短剑与地图",
+      "width": 768,
+      "height": 1152,
+      "bytes": 175590,
+      "sourceBytes": 2375334,
+      "quality": 80,
+      "transparent": true,
+      "alphaExtrema": [
+        0,
+        255
+      ],
+      "alphaBounds": [
+        32,
+        19,
+        752,
+        1146
+      ]
+    }
+  ]
+}

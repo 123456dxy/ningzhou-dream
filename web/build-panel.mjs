@@ -20,12 +20,20 @@ const GIVEN = ['知微', '清川', '疏影', '砚秋', '鹤鸣', '书白', '既�
   '素心', '怀瑾', '临风', '澄之', '观澜', '问樵', '含章', '可言',
   '星阑', '暮成', '青崖', '沉璧', '抚琴', '抱一'];
 
+// 用途：生成随机道号。
+// 流程：分别从姓氏与名字表选取一项并拼接。
+// 调用方式：建号初始化或换名按钮无参调用。
+// 返回值：道号字符串。
 function randomName() {
   const s = SURNAMES[Math.floor(Math.random() * SURNAMES.length)];
   const g = GIVEN[Math.floor(Math.random() * GIVEN.length)];
   return s + g;
 }
 
+// 用途：创建独立建号面板实例。
+// 流程：维护本地构筑、预算、校验和事件生命周期，返回挂载接口。
+// 调用方式：主界面传入onStart和onCancel回调。
+// 返回值：包含mount与unmount的面板对象。
 export function createBuildPanel({ onStart, onCancel }) {
   let opts = null;          // /api/build-options 的结果
   let name = randomName();
@@ -44,6 +52,10 @@ export function createBuildPanel({ onStart, onCancel }) {
   let seed = 0;
 
   // ---- 取选项 ----
+  // 用途：读取当前建号预算与种子。
+  // 流程：POST build-options，更新可选项与权威预算，失败时显示重试入口。
+  // 调用方式：面板挂载、重试或更换种子时调用。
+  // 返回值：Promise；更新内部状态，无显式返回值。
   async function load() {
     const r = await fetch('/api/build-options', {
       method: 'POST',
@@ -61,6 +73,10 @@ export function createBuildPanel({ onStart, onCancel }) {
   }
 
   // ---- 校验（防抖，避免每个按键都打服务端）----
+  // 用途：防抖校验人物构筑。
+  // 流程：取消旧计时器，稍后POST build-check并刷新预算与动作。
+  // 调用方式：天赋或属性变化后无参调用。
+  // 返回值：无返回值。
   function scheduleCheck() {
     clearTimeout(timer);
     timer = setTimeout(async () => {
@@ -74,6 +90,10 @@ export function createBuildPanel({ onStart, onCancel }) {
   }
 
   // 本地即时估算，让界面不卡
+  // 用途：即时展示构筑点数。
+  // 流程：合计选中天赋成本与属性分配，并减去当前权威预算。
+  // 调用方式：建号渲染及点击处理无参调用。
+  // 返回值：spent、allocSpent、remain组成的对象。
   function estimate() {
     let spent = 0;
     for (const id of traits) {
@@ -85,6 +105,10 @@ export function createBuildPanel({ onStart, onCancel }) {
     return { spent, allocSpent, remain: budget - spent - allocSpent };
   }
 
+  // 用途：刷新本地点数摘要。
+  // 流程：读取即时估算并标记超支，写入bp-points。
+  // 调用方式：选择变化与校验返回后调用。
+  // 返回值：无返回值。
   function paintPoints() {
     const host = root?.querySelector('#bp-points');
     if (!host) return;
@@ -101,6 +125,10 @@ export function createBuildPanel({ onStart, onCancel }) {
     + `<div><label>尚余</label><strong class="${cls}">${remain}</strong></div>`;
   }
 
+  // 用途：刷新建号操作区。
+  // 流程：依据点数、道号与提交状态显示解释和禁用开始按钮。
+  // 调用方式：输入变化及校验前后调用。
+  // 返回值：无返回值。
   function paintActions() {
     const host = root?.querySelector('#bp-actions');
     if (!host) return;
@@ -116,12 +144,20 @@ export function createBuildPanel({ onStart, onCancel }) {
     + `${starting ? '正在开辟……' : '开始这一世'}</button>`;
   }
 
+  // 用途：转义插入HTML的文字。
+  // 流程：将空值转为空串，再替换五种HTML特殊字符。
+  // 调用方式：各渲染函数传入文本。
+  // 返回值：安全文本字符串。
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
   // ---- 渲染 ----
+  // 用途：重绘本地人物构筑面板。
+  // 流程：记录滚动与焦点，按选项和预算生成天赋、属性与预览，再恢复交互位置。
+  // 调用方式：构筑加载完成或选择变化后无参调用。
+  // 返回值：无返回值；修改面板宿主DOM。
   function render() {
     if (!opts) return;
     const scrollTop = root.querySelector('.build-panel')?.scrollTop || 0;
@@ -205,6 +241,7 @@ export function createBuildPanel({ onStart, onCancel }) {
             <div>
               <h2>开辟这一世</h2>
               <p>天赋全部列出，按需挑选。只受点数限制，选多少项都行；磨砺类会退还点数。</p>
+              ${opts.pendingLegacyPoints > 0 ? `<p class="build-legacy-preview">本世已达成成就可新增 ${opts.pendingLegacyPoints} 点传承，已计入当前预算；成功开启新人生时才结算。</p>` : ''}
             </div>
             <div class="build-innate" id="bp-innate"></div>
       <div class="build-points" id="bp-points"></div>
@@ -249,6 +286,10 @@ export function createBuildPanel({ onStart, onCancel }) {
 
   // 先天气运：这一世生来的资质与悟性由地图种子决定。
   // 展示出来玩家才知道自己底子如何、要不要重掷。
+  // 用途：显示种子决定的先天数值。
+  // 流程：读取服务端innate并列出数值、说明和换种子按钮。
+  // 调用方式：建号面板渲染后无参调用。
+  // 返回值：无返回值。
   function paintInnate() {
     const host = root?.querySelector('#bp-innate');
     if (!host) return;
@@ -257,6 +298,10 @@ export function createBuildPanel({ onStart, onCancel }) {
       host.innerHTML = '';
       return;
     }
+    // 用途：将先天掷值显示为定性档位。
+    // 流程：对照两个展示阈值，依次选择上乘、中平或偏薄。
+    // 调用方式：paintInnate 传入掷值和区间三等分边界。
+    // 返回值：中文档位字符串；不影响人物属性。
     const grade = (v, lo, hi) => {
       if (v >= hi) return '上乘';
       if (v >= lo) return '中平';
@@ -265,7 +310,15 @@ export function createBuildPanel({ onStart, onCancel }) {
     // 评价档位按初始掷出范围三等分（资质 60–120、悟性 15–60）
     const aptLo = inn.aptRollMin ?? 60, aptHi = inn.aptRollMax ?? 120;
     const insLo = inn.insightRollMin ?? 15, insHi = inn.insightRollMax ?? 60;
+    // 用途：计算掷值范围的下三分界。
+    // 流程：在范围下限上增加跨度的三分之一。
+    // 调用方式：先天气运展示传入 lo 与 hi。
+    // 返回值：仅用于文字评价的阈值数值。
     const t1 = (lo, hi) => lo + (hi - lo) / 3;
+    // 用途：计算掷值范围的上三分界。
+    // 流程：在范围下限上增加跨度的三分之二。
+    // 调用方式：先天气运展示传入 lo 与 hi。
+    // 返回值：仅用于文字评价的阈值数值。
     const t2 = (lo, hi) => lo + ((hi - lo) * 2) / 3;
     host.innerHTML =
       `<div class="innate-item"><label>灵根资质</label>`
@@ -282,8 +335,16 @@ export function createBuildPanel({ onStart, onCancel }) {
   }
 
   // ---- 事件 ----
+  // 用途：绑定构筑局部事件。
+  // 流程：通过AbortController连接天赋、属性、换名、种子和开始事件。
+  // 调用方式：建号面板挂载完成后调用。
+  // 返回值：无返回值。
   function bind() {
     events = new globalThis.AbortController();
+    // 用途：执行人物构筑面板中的选择与提交。
+    // 流程：处理天赋、属性和种子本地状态，最终再校验并调用 onStart。
+    // 调用方式：挂载时绑定的 click 委托，由局部按钮触发。
+    // 返回值：Promise；真正建号结果由 onStart 完成。
     root.addEventListener('click', async ev => {
       if (starting) return;
       if (ev.target.closest('#bp-retry')) { await load(); render(); return; }
@@ -367,6 +428,10 @@ export function createBuildPanel({ onStart, onCancel }) {
       }
     }, { signal: events.signal });
 
+    // 用途：同步正在输入的道号。
+    // 流程：只接收 bp-name 的输入，更新本地 name 并刷新开始按钮状态。
+    // 调用方式：面板 input 事件自动触发。
+    // 返回值：无返回值。
     root.addEventListener('input', ev => {
       if (ev.target.id === 'bp-name') {
         name = ev.target.value;
@@ -377,12 +442,20 @@ export function createBuildPanel({ onStart, onCancel }) {
 
   // ---- 对外 ----
   return {
+    // 用途：挂载并加载建号面板。
+    // 流程：记录宿主、读取选项、渲染内容并绑定局部事件。
+    // 调用方式：主界面调用面板对象.mount(host)。
+    // 返回值：Promise；无显式返回值。
     async mount(host) {
       root = host;
       await load();
       render();
       bind();
     },
+    // 用途：卸载建号面板。
+    // 流程：撤销事件、清理防抖计时器并清空宿主。
+    // 调用方式：关闭或替换面板时调用。
+    // 返回值：无返回值。
     unmount() {
       events?.abort();
       clearTimeout(timer);

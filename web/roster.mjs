@@ -13,14 +13,26 @@ let cacheKey = '';
 let filter = { text: '', sort: 'relation', strangers: false, realm: 'all' };
 let selected = null;
 
+// 用途：转义插入HTML的文字。
+// 流程：将空值转为空串，再替换五种HTML特殊字符。
+// 调用方式：各渲染函数传入文本。
+// 返回值：安全文本字符串。
 const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// 用途：生成好感进度。
+// 流程：限制可见进度宽度并生成进度条。
+// 调用方式：人物或通讯录渲染传入好感值。
+// 返回值：进度条HTML字符串。
 function relBar(v) {
   const w = Math.max(0, Math.min(100, (v + 100) / 2));
   return `<div class="rel-bar ${v < 0 ? 'neg' : ''}"><i style="width:${w}%"></i></div>`;
 }
 
+// 用途：整理通讯录关系标签。
+// 流程：读取人物已知、关系、师徒和身份状态，收集标签。
+// 调用方式：通讯录渲染传入条目。
+// 返回值：标签数组。
 function tagsOf(e) {
   const t = [];
   if (e.isMaster) t.push('<span class="tag master">师尊</span>');
@@ -31,6 +43,10 @@ function tagsOf(e) {
 }
 
 // 拉名单（按需刷新）
+// 用途：读取好友通讯录。
+// 流程：按参数与缓存键复用数据，必要时POST roster。
+// 调用方式：通讯录页面可传force。
+// 返回值：Promise，通讯录对象或失败时null。
 export async function loadRoster(force) {
   const key = `${filter.sort}|${filter.strangers}`;
   if (!force && cache && cacheKey === key) return cache;
@@ -44,9 +60,17 @@ export async function loadRoster(force) {
   return cache;
 }
 
+// 用途：清除通讯录缓存。
+// 流程：重置cache与cacheKey。
+// 调用方式：邀约、支线或游戏状态变化后调用。
+// 返回值：无返回值。
 export function invalidateRoster() { cache = null; cacheKey = ''; }
 
 // 本地筛选
+// 用途：筛选并排序通讯录条目。
+// 流程：按本地搜索、境界和关系条件筛选后按当前顺序排列。
+// 调用方式：通讯录渲染无参调用。
+// 返回值：可见人物数组。
 function visible() {
   let list = cache || [];
   const q = filter.text.trim();
@@ -63,6 +87,10 @@ function visible() {
   return list;
 }
 
+// 用途：生成通讯录界面。
+// 流程：根据缓存、筛选与state组织搜索、分类、人物和动作。
+// 调用方式：通讯录页面传入state。
+// 返回值：通讯录HTML字符串。
 export function renderRoster(state) {
   const list = visible();
   const stat = state.rosterStat || { known: 0, here: 0 };
@@ -139,10 +167,18 @@ export function renderRoster(state) {
 
 // 事件绑定（由 app.mjs 调用一次）
 const boundRoots = new WeakMap();
+// 用途：绑定通讯录局部事件。
+// 流程：委托分类、排序、动作与搜索输入，变更后调用外部重绘。
+// 调用方式：页面插入后传入宿主和回调对象。
+// 返回值：无返回值。
 export function bindRoster(root, { onAction, onRerender }) {
   const handlers = { onAction, onRerender };
   if (boundRoots.has(root)) { boundRoots.set(root, handlers); return; }
   boundRoots.set(root, handlers);
+  // 用途：委托通讯录排序、境界筛选、人物选择与往来动作。
+  // 流程：读取最新回调，处理匹配的 data 属性并按需重新加载或重绘。
+  // 调用方式：bindRoster 首次在宿主绑定，宿主 click 自动触发。
+  // 返回值：无返回值；外部动作通过 onAction 执行。
   root.addEventListener('click', ev => {
     const { onAction, onRerender } = boundRoots.get(root);
     const sort = ev.target.closest('[data-rsort]');
@@ -165,6 +201,10 @@ export function bindRoster(root, { onAction, onRerender }) {
     if (sel) { selected = sel.dataset.rsel; onRerender(); }
   });
 
+  // 用途：即时筛选通讯录姓名。
+  // 流程：更新关键词并调用重绘，随后恢复搜索框焦点和光标。
+  // 调用方式：通讯录搜索框的 input 事件触发。
+  // 返回值：无返回值。
   root.addEventListener('input', ev => {
     const { onRerender } = boundRoots.get(root);
     if (ev.target.id === 'roster-search') {

@@ -1,5 +1,7 @@
 // 反馈箱：顶栏「反馈」按钮 → 弹窗选类型 + 填文字，提交到 /api/feedback（需登录）。
 // 服务器自动附上道号、时间、境界、游戏内日期等上下文；不提供公开读取。
+// 本地测试版（--local）不显示该入口，也不请求 /api/feedback。
+import { mode } from './nz-mode.mjs';
 const MAX = 2000;
 
 function dialog() {
@@ -51,7 +53,8 @@ function dialog() {
   return d;
 }
 
-function mount() {
+async function mount() {
+  if (await mode()) return;   // 本地测试版：没有意见箱
   const bar = document.querySelector('.toolbar');
   if (!bar || document.getElementById('nz-fb-btn')) return;
   const b = document.createElement('button');

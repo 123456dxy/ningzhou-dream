@@ -1,5 +1,9 @@
 import { esc } from './shell.mjs';
 
+// 用途：读取洞府供应档位权限。
+// 流程：按kind与level查找权威档位，给出可用性和原因。
+// 调用方式：配给按钮传入state、kind和level。
+// 返回值：含enabled与reason的对象。
 export function caveSupplyAccess(state, kind, level) {
   if (kind !== 'qi' || level === 0) return { enabled: true, reason: '' };
   if (!state.player?.cave) return { enabled: false, reason: '尚未安府，需先在此安府。' };
@@ -12,6 +16,10 @@ export function caveSupplyAccess(state, kind, level) {
   return { enabled: true, reason: '' };
 }
 
+// 用途：显示洞府升级条件。
+// 流程：读取cave权威等级与报价，生成升级说明和按钮。
+// 调用方式：洞府页面传入state。
+// 返回值：升级面板HTML字符串。
 export function renderCaveUpgrade(state) {
   const cave = state.cave;
   if (!cave) return '';
@@ -25,6 +33,10 @@ export function renderCaveUpgrade(state) {
     + `<button class="wide-btn" data-action="cave-upgrade" ${upgrade.enabled ? '' : 'disabled'}>升档至${esc(upgrade.name)}</button></div></section>`;
 }
 
+// 用途：解释供应解锁限制。
+// 流程：遍历权威供应档位，显示境界、声望及权限原因。
+// 调用方式：洞府页面传入state。
+// 返回值：限制说明HTML字符串。
 export function renderCaveSupplyLimits(state) {
   const cave = state.cave || {}, supply = state.player?.supply || {};
   const rows = cave.supplies || cave.supplyRows || supply.qiRows || supply.qiOptions || [];

@@ -45,6 +45,10 @@ struct RosterEntry {
 };
 
 // 名录。includeStrangers=false 时只列出「认识的人」（好感≠0 或有名分）
+// 用途：汇总 NPC 名录并按关系、境界等排序。
+// 参与流程：通讯录与故人旧卷。
+// 使用方式：传游戏、是否含陌生人及排序键；旧卷仅列认识的逝者。
+// 返回值：含地点、名分和远程动作提示的名录列表。
 std::vector<RosterEntry> roster(const Game& g, bool includeStrangers,
                                 const std::string& sortBy);
 
@@ -55,9 +59,17 @@ struct MessageResult {
     std::string text;
     int relationDelta = 0;
 };
+// 用途：向名录目标传讯并按当前好感增加关系。
+// 参与流程：远程问候动作。
+// 使用方式：传目标 ID，好感越深收益越少。
+// 返回值：传讯结果；成功修改关系和日志，不推进天数。
 MessageResult sendMessage(Game& g, const std::string& npcId);
 
-// 邀请对方来自己所在地（消耗天数与灵石）
+// 邀请对方来自己所在地（消耗灵石，不推进日历）
+// 用途：支付行装费用并邀请目标来到玩家地点。
+// 参与流程：远程邀请动作。
+// 使用方式：传游戏与目标 ID，要求关系至少十且不在同地。
+// 返回值：邀请结果；成功扣灵石、移动 NPC、加关系并记日志。
 MessageResult inviteToMe(Game& g, const std::string& npcId);
 
 // ============================================================
@@ -72,6 +84,10 @@ struct TalentOption {
 };
 
 // 全部天赋，按类别分组返回
+// 用途：读取天赋定义并转为建号选项。
+// 参与流程：建号面板。
+// 使用方式：无参数，从既有 TALENTS 表复制公开信息。
+// 返回值：包含类型、成本与效果的选项列表。
 std::vector<TalentOption> allTalents();
 
 // 建号校验：算已花点数、剩余点数，以及是否合法
@@ -84,6 +100,10 @@ struct BuildCheck {
     int remain = 0;          // 剩余
     int traitCount = 0;
 };
+// 用途：核算天赋与属性支出并检查互斥和上限。
+// 参与流程：建号方案预览校验。
+// 使用方式：传天赋 ID 列表、分配方案与点数预算。
+// 返回值：预算、余点和拒绝原因的 BuildCheck，不建角色。
 BuildCheck checkBuild(const std::vector<std::string>& traits,
                       const std::map<std::string, int>& allocation,
                       int budget);
@@ -96,6 +116,10 @@ struct AllocOption {
     int max = 0;
     int value = 0;           // 某次分配方案里已投入的点数
 };
+// 用途：将属性定义和当前投入合成建号选项。
+// 参与流程：建号属性分配面板。
+// 使用方式：传分配方案，缺项按零展示。
+// 返回值：五项属性的名称、上限和已投点数列表。
 std::vector<AllocOption> allocOptions(const std::map<std::string, int>& allocation);
 
 // ============================================================
@@ -110,6 +134,10 @@ struct PoisonInfo {
     bool affecting = false;    // 是否已经在影响修炼
     std::string summary;
 };
+// 用途：解释丹毒对修炼的影响与自然化解时间。
+// 参与流程：丹毒详情页面。
+// 使用方式：传游戏，计入日历已累计的化毒零数。
+// 返回值：丹毒值、效率、化解速度和预计天数，不改丹毒。
 PoisonInfo poisonInfo(const Game& g);
 
 } // namespace nz::play

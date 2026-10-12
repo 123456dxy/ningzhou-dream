@@ -86,5 +86,12 @@ void runDisplayContractTests();
 void runSectCompletionTests();
 void runTianjiTests();
 void runShadowCombatTests();
+void runContentRegistryTests();
+void runApiRefactorTests();
+void runPersistenceRefactorTests();
+void runCombatFixTests();
+void runPlayerFixTests();
+void runCraftingFixTests();
+void runCatalogDisplayTests();
 
 } // namespace nztest

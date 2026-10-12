@@ -1,7 +1,10 @@
 # 构建产物，全部由 CMake 生成，可以随时删掉重建
 build*/
+visual-studio/.vs/
+*.vcxproj.user
 dist/
 saves/
+saves-local/
 **/saves/
 *.exe
 *.dll

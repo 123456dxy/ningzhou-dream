@@ -5,6 +5,10 @@ const kindLabel = { attack: '攻击', shield: '护盾', guard: '护盾', heal: '
   water: '蓄水', charge: '蓄势', poison: '施毒', fire: '灼烧', soul: '震荡', wave: '水势爆发',
   heavy: '重势爆发', poisonBurst: '毒伤爆发', fireBurst: '灼烧爆发', soulBurst: '神识爆发', empower: '增伤', ward: '减伤' };
 
+// 用途：显示法宝神通与数值。
+// 流程：组合中文名称、类型、权威preview、费用和冷却。
+// 调用方式：行囊、侧栏与炼器传入ability。
+// 返回值：HTML字符串；无神通时空字符串。
 export function renderArtifactAbility(ability, { compact = false } = {}) {
   if (!ability) return '';
   return `<div class="artifact-ability${compact ? ' compact' : ''}" data-artifact-ability="${esc(ability.id)}">`
@@ -13,6 +17,10 @@ export function renderArtifactAbility(ability, { compact = false } = {}) {
     + `<small>耗灵力 ${esc(ability.cost)} · 冷却 ${esc(ability.cooldown)} 回合${ability.stageName ? ` · 需${esc(ability.stageName)}` : ''}</small></div>`;
 }
 
+// 用途：显示当前装备法宝神通。
+// 流程：筛选已装备且有神通的法宝并提供行囊入口。
+// 调用方式：侧栏或行囊传入gears。
+// 返回值：法宝摘要HTML字符串。
 export function renderEquippedArtifacts(gears = []) {
   const equipped = gears.filter(gear => gear.equipped && gear.ability);
   return `<details class="sidebar-artifacts"${equipped.length ? ' open' : ''}><summary>装备法宝神通 <b>${equipped.length}</b></summary>`
@@ -21,6 +29,10 @@ export function renderEquippedArtifacts(gears = []) {
     + `<button data-action="goto-equipment">查看行囊装备</button></details>`;
 }
 
+// 用途：显示可直接施展的法宝。
+// 流程：读取实时法宝数值、可用原因和冷却，生成施展按钮。
+// 调用方式：斗法视图传入battle。
+// 返回值：法宝操作区HTML字符串。
 export function renderBattleArtifacts(battle) {
   const abilities = battle.artifacts || [];
   return `<section class="combat-artifacts" data-combat-artifacts><div class="combat-artifacts-heading"><h3>法宝神通 <span>${abilities.length}</span></h3>`
@@ -39,6 +51,10 @@ export function renderBattleArtifacts(battle) {
     + `</section>`;
 }
 
+// 用途：展示权威成器效果。
+// 流程：检查推演有效性，列出被动、神通、铭刻后数值与配方条件。
+// 调用方式：炼器子页传入forge-preview响应。
+// 返回值：预览或错误占位HTML字符串。
 export function renderForgePreview(preview) {
   if (!preview) return '<div class="forge-preview"><p>正在推演当前配方…</p></div>';
   const info = preview.info;

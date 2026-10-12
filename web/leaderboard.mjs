@@ -1,4 +1,6 @@
 // 天骄榜：多人排行榜（数据由服务器从各道号存档计算，按 境界 > 修为 > 声望 排序）
+// 本地测试版（--local）不显示该入口，也不请求 /api/leaderboard。
+import { mode } from './nz-mode.mjs';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function dialog() {
@@ -35,7 +37,8 @@ async function openBoard() {
   }
 }
 
-function mount() {
+async function mount() {
+  if (await mode()) return;   // 本地测试版：没有天骄榜
   const bar = document.querySelector('.toolbar');
   if (!bar || document.getElementById('nz-lb-btn')) return;
   const b = document.createElement('button');
