@@ -147,7 +147,7 @@ try {
     Assert-Check 'first launch opens character creation' (-not $cold.hasGame) $cold
     $slots = Invoke-Api '/api/slots'
     Assert-Check 'first launch has no private save slots' (@($slots.slots | Where-Object exists).Count -eq 0) $slots.slots
-    foreach ($assetPath in @('/','/styles.css','/artifacts.mjs','/assets/portraits/player-female.png','/assets/portraits/beast-4.png','/assets/map/ningzhou-atlas.png')) {
+    foreach ($assetPath in @('/','/styles.css','/artifacts.mjs','/assets/portraits/player-female.webp','/assets/portraits/beast-4.webp','/assets/map/ningzhou-atlas.webp')) {
         $response = Invoke-WebRequest -Uri ($baseUrl+$assetPath) -TimeoutSec 10 -UseBasicParsing
         Assert-Check ('runtime asset loads: '+$assetPath) ($response.StatusCode -eq 200 -and $response.RawContentLength -gt 0) $response.RawContentLength
     }
@@ -192,7 +192,7 @@ try {
     $launcher = $null
 
     $sessionHash = (Get-FileHash -LiteralPath $sessionPath -Algorithm SHA256).Hash
-    $image = $manifest | Where-Object { $_.path -like 'runtime/web/assets/portraits/*.png' } | Select-Object -First 1
+    $image = $manifest | Where-Object { $_.path -like 'runtime/web/assets/portraits/*.webp' } | Select-Object -First 1
     if ($null -eq $image) { throw 'No packaged portrait is available for recovery verification.' }
     $imagePath = [IO.Path]::GetFullPath((Join-Path $dataRoot ([string]$image.path)))
     Assert-Check 'repair removes only one file inside isolated runtime' ($imagePath.StartsWith($runtime+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) $image.path

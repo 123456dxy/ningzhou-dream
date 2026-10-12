@@ -83,8 +83,8 @@ void runNpcLearningLocationTests() {
     g.pending.reset(); check(locationServiceBegin(g, "insight", tab).empty(), "本地感悟可开始");
     if (g.job) calendarRun(g, g.job->remaining);
     g.pending.reset(); check(!locationServiceBegin(g, "insight", tab).empty(), "地点感悟每月限一次");
-    checkStr(beastPortrait(0), "/assets/portraits/beast-0.png", "炼气妖兽使用低阶立绘");
-    checkStr(beastPortrait(12), "/assets/portraits/beast-4.png", "化神妖兽使用神兽立绘");
+    checkStr(beastPortrait(0), "/assets/portraits/beast-0.webp", "炼气妖兽使用低阶立绘");
+    checkStr(beastPortrait(12), "/assets/portraits/beast-4.webp", "化神妖兽使用神兽立绘");
     check(personPortrait("男", "xinghe") != personPortrait("女", "xinghe"), "NPC门派立绘匹配性别");
 
     std::printf("\n-- 授业知识、失约退费和完成资格 --\n");

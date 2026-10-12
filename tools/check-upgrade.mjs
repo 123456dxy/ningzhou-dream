@@ -25,7 +25,7 @@ try {
   const stable=JSON.stringify(after);
   await request('import',{game:JSON.stringify(after)});
   assert.equal(JSON.stringify(JSON.parse((await request('export')).game)),stable,'新版重复导入不重复发放迁移收益');
-  for(const image of [state.player.portrait,'/assets/portraits/beast-4.png','/assets/map/locations/tianmo.png']) {
+  for(const image of [state.player.portrait,'/assets/portraits/beast-4.webp','/assets/map/locations/tianmo.webp']) {
     const r=await fetch(`http://127.0.0.1:${port}${image}`,{signal:AbortSignal.timeout(10000)}); assert.equal(r.status,200); assert.ok((await r.arrayBuffer()).byteLength>10000);
   }
   console.log(`✓ 真实旧存档升级保留 ${before.player.name}／第${before.clock.days}天／${before.player.stones}灵石，人口、库存、日历与随机序列不变`);

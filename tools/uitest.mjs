@@ -522,7 +522,7 @@ async function mapUI(cdp) {
     && new Set(high.locations.map(location => location.id)).size === reference.locations.length
     && reference.locations.every(location => high.locations.some(actual => actual.id === location.id && actual.x === location.x && actual.y === location.y)),
     '真实地点完整对应截图与资料确认的位置');
-  const assetPaths = ['assets/map/ningzhou-atlas.png', ...high.locations.map(location => `assets/map/locations/${location.id}.png`)];
+  const assetPaths = ['assets/map/ningzhou-atlas.webp', ...high.locations.map(location => `assets/map/locations/${location.id}.webp`)];
   const images = await cdp.eval(`return Promise.all(${JSON.stringify(assetPaths)}.map(path => new Promise(resolve => {
     const image = new Image(); image.onload = () => resolve({ path, loaded: image.naturalWidth > 0 && image.naturalHeight > 0 });
     image.onerror = () => resolve({ path, loaded: false }); image.src = path;
@@ -535,20 +535,20 @@ async function mapUI(cdp) {
       return { id: document.querySelector('[data-map-detail]')?.dataset.mapDetail,
         src: image ? new URL(image.src).pathname : '', loaded: !!image && image.complete
           && image.naturalWidth > 0 && image.naturalHeight > 0 };`);
-    check(detail.id === location.id && detail.src === `/assets/map/locations/${location.id}.png` && detail.loaded,
+    check(detail.id === location.id && detail.src === `/assets/map/locations/${location.id}.webp` && detail.loaded,
       `真实点击 ${location.name} 后详情与已加载独立图片均对应地点 ${location.id}`);
     detailSources.push(detail.src);
     await cdp.eval(`document.querySelector('.atlas-destination')?.scrollIntoView({ block: 'start', behavior: 'instant' }); return true;`);
     await shot(cdp, 'map-location-' + location.id);
   }
   check(new Set(detailSources).size === high.locations.length
-    && detailSources.every(src => !/(?:city|sect|wild)-scene\.png$/.test(src)), '所有地点均使用独立插画');
+    && detailSources.every(src => !/(?:city|sect|wild)-scene\.(?:png|webp)$/.test(src)), '所有地点均使用独立插画');
   const artLocation = high.locations.at(-1);
   const artButton = `.destination-art-button[data-action="location-art"][data-id="${artLocation.id}"]`;
   const artBefore = await liveState();
   await click(cdp, artButton);
   check(await waitFor(cdp, '#location-art-modal[open]') && await cdp.eval(`const image = document.querySelector('#location-art-modal .location-art-full');
-    return image?.complete && image.naturalWidth > 0 && new URL(image.src).pathname === ${JSON.stringify(`/assets/map/locations/${artLocation.id}.png`)}
+    return image?.complete && image.naturalWidth > 0 && new URL(image.src).pathname === ${JSON.stringify(`/assets/map/locations/${artLocation.id}.webp`)}
       && document.querySelector('#location-art-title')?.textContent.includes(${JSON.stringify(artLocation.name)});`),
     '真实点击地点插画可打开与本地点对应的完整大图');
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
@@ -603,7 +603,7 @@ async function mapUI(cdp) {
   await click(cdp, `.destination-art-button[data-id="${destination.id}"]`);
   check(await waitFor(cdp, '#location-art-modal[open]') && await cdp.eval(`const image = document.querySelector('#location-art-modal .location-art-full');
     return !!image && image.complete && image.naturalWidth > 0
-      && new URL(image.src).pathname === ${JSON.stringify(`/assets/map/locations/${destination.id}.png`)}
+      && new URL(image.src).pathname === ${JSON.stringify(`/assets/map/locations/${destination.id}.webp`)}
       && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2;`),
     '390px 地点大图入口可真实点击，显示对应独立图片且无横向溢出');
   await shot(cdp, 'map-location-art-full-narrow');
@@ -1178,7 +1178,7 @@ async function beastUI(cdp) {
     }
     const state = data.state;
     if (!state.battle) throw new Error('驱妖未建立实际斗法');
-    check(state.battle.enemyStage === stage && state.battle.enemyPortrait === `/assets/portraits/beast-${tier}.png`,
+    check(state.battle.enemyStage === stage && state.battle.enemyPortrait === `/assets/portraits/beast-${tier}.webp`,
       `${state.battle.enemyRealmName}妖兽使用对应${beastNames[tier]}立绘`);
     await goto(cdp,BASE);
     check(await cdp.eval(`const image = document.querySelector('[data-combat-actor="enemy"] .combat-portrait');

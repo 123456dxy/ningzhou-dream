@@ -10,19 +10,19 @@
 
 | 文件 / 地点 | 原作线索 | 本次独立画面 |
 | --- | --- | --- |
-| wuling.png / 武陵城 | 白帝楼、升仙台、灵药堂 | 白石高楼、远处升仙石台、晨雾河桥与药市 |
-| yifeng.png / 逸风城 | 斗法台、宝器轩 | 圆形斗法台、风中旗楼、旅舍与剑器摊 |
-| yunxi.png / 云汐城 | 中草阁、药材交易 | 雨中水巷、草药铺、晾药与廊桥 |
-| tianxing.png / 天星城 | 问道楼、功法神通交易 | 灯火书楼、卷轴书市与暮色广场 |
-| guangling.png / 广陵城 | 材料交易、码头出海 | 临海商楼、帆舟、货箱和山湾码头 |
-| jinhong.png / 金虹剑派 | 金系剑修，见[宗门资料](https://wiki.biligame.com/mcs/金虹剑派) | 金铜山门、剑形石壁、金虹晨光 |
-| xinghe.png / 星河剑派 | 水系剑修，见[宗门资料](https://wiki.biligame.com/mcs/星河剑派) | 湖中剑台、水榭石桥、月夜星河倒影 |
-| zhushan.png / 竹山宗 | 木系宗门、药田，见[宗门资料](https://wiki.biligame.com/mcs/竹山宗) | 竹海山门、层叠药圃、林间清泉 |
-| lihuo.png / 离火门 | 火系宗门、环境炎热，见[宗门资料](https://wiki.biligame.com/mcs/离火门) | 赤岩黑石、铜鼎丹炉、地火与烟岚 |
-| huachen.png / 化尘教 | 土系宗门，见[宗门资料](https://wiki.biligame.com/mcs/化尘教) | 厚重石殿、砂岩层台、土色法坛 |
-| fanghu.png / 方壶山 | 草药采集、碧幽潭，见[地点攻略](https://www.scribd.com/document/843621381/觅长生全能攻略V1-7) | 玉色深潭、瀑布险峰、幽谷灵药 |
-| qingshi.png / 青石灵脉 | 宁州西部、门派共管、采集灵核，见[官方更新](https://store.steampowered.com/news/posts/?appids=1189490&enddate=1629862005&feed=steam_community_announcements) | 苍青矿谷、木撑矿口、小型灵核晶脉 |
-| sea.png / 无尽海 | 灵舟、海兽、岛城和灵气乱流，见[官方海域更新](https://store.steampowered.com/news/posts/?appids=1189490&enddate=1603445698&feed=steam_community_announcements) | 雷云孤帆、远岛仙山、深色浪涛 |
+| wuling.webp / 武陵城 | 白帝楼、升仙台、灵药堂 | 白石高楼、远处升仙石台、晨雾河桥与药市 |
+| yifeng.webp / 逸风城 | 斗法台、宝器轩 | 圆形斗法台、风中旗楼、旅舍与剑器摊 |
+| yunxi.webp / 云汐城 | 中草阁、药材交易 | 雨中水巷、草药铺、晾药与廊桥 |
+| tianxing.webp / 天星城 | 问道楼、功法神通交易 | 灯火书楼、卷轴书市与暮色广场 |
+| guangling.webp / 广陵城 | 材料交易、码头出海 | 临海商楼、帆舟、货箱和山湾码头 |
+| jinhong.webp / 金虹剑派 | 金系剑修，见[宗门资料](https://wiki.biligame.com/mcs/金虹剑派) | 金铜山门、剑形石壁、金虹晨光 |
+| xinghe.webp / 星河剑派 | 水系剑修，见[宗门资料](https://wiki.biligame.com/mcs/星河剑派) | 湖中剑台、水榭石桥、月夜星河倒影 |
+| zhushan.webp / 竹山宗 | 木系宗门、药田，见[宗门资料](https://wiki.biligame.com/mcs/竹山宗) | 竹海山门、层叠药圃、林间清泉 |
+| lihuo.webp / 离火门 | 火系宗门、环境炎热，见[宗门资料](https://wiki.biligame.com/mcs/离火门) | 赤岩黑石、铜鼎丹炉、地火与烟岚 |
+| huachen.webp / 化尘教 | 土系宗门，见[宗门资料](https://wiki.biligame.com/mcs/化尘教) | 厚重石殿、砂岩层台、土色法坛 |
+| fanghu.webp / 方壶山 | 草药采集、碧幽潭，见[地点攻略](https://www.scribd.com/document/843621381/觅长生全能攻略V1-7) | 玉色深潭、瀑布险峰、幽谷灵药 |
+| qingshi.webp / 青石灵脉 | 宁州西部、门派共管、采集灵核，见[官方更新](https://store.steampowered.com/news/posts/?appids=1189490&enddate=1629862005&feed=steam_community_announcements) | 苍青矿谷、木撑矿口、小型灵核晶脉 |
+| sea.webp / 无尽海 | 灵舟、海兽、岛城和灵气乱流，见[官方海域更新](https://store.steampowered.com/news/posts/?appids=1189490&enddate=1603445698&feed=steam_community_announcements) | 雷云孤帆、远岛仙山、深色浪涛 |
 
 ## 使用
 
