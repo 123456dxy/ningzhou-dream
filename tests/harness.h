@@ -83,5 +83,7 @@ void runRewardApiTests();
 void runEventRewardTests();
 void runNumericPreviewTests();
 void runSectCompletionTests();
+void runTianjiTests();
+void runShadowCombatTests();
 
 } // namespace nztest

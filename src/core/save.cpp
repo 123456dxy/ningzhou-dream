@@ -323,6 +323,7 @@ static Value enemyCombatToJson(const EnemyCombat& e) {
     o.set("maxMana", num(e.maxMana));
     o.set("shuffles", num(e.shuffles));
     o.set("played", num(e.played));
+    o.set("turns", num(e.turns));
     o.set("swordQi", num(e.swordQi));
     o.set("water", num(e.water));
     o.set("soul", num(e.soul));
@@ -336,6 +337,7 @@ static Value enemyCombatToJson(const EnemyCombat& e) {
     o.set("hpCostPct", num(e.hpCostPct));
     o.set("poison", num(e.poison));
     o.set("poisonTurns", num(e.poisonTurns));
+    o.set("poisonDamage", num(e.poisonDamage));
     o.set("burn", num(e.burn));
     o.set("burnTurns", num(e.burnTurns));
     o.set("swordSequence", num(e.swordSequence));
@@ -372,6 +374,7 @@ static void enemyCombatFromJson(const Value& o, EnemyCombat& e) {
     e.maxMana = o["maxMana"].asInt(3);
     e.shuffles = o["shuffles"].asInt(0);
     e.played = o["played"].asInt(0);
+    e.turns = o["turns"].asInt(0);
     e.swordQi = o["swordQi"].asInt(0);
     e.water = o["water"].asInt(0);
     e.soul = o["soul"].asInt(0);
@@ -385,6 +388,7 @@ static void enemyCombatFromJson(const Value& o, EnemyCombat& e) {
     e.hpCostPct = o["hpCostPct"].asInt(0);
     e.poison = o["poison"].asInt(0);
     e.poisonTurns = o["poisonTurns"].asInt(0);
+    e.poisonDamage = o["poisonDamage"].asInt(-1);
     e.burn = o["burn"].asInt(0);
     e.burnTurns = o["burnTurns"].asInt(0);
     e.swordSequence = o["swordSequence"].asInt(0);
@@ -414,6 +418,20 @@ static void enemyCombatFromJson(const Value& o, EnemyCombat& e) {
 static Value battleToJson(const Battle& b) {
     Value o(json::Object{});
     o.set("enemy", str(b.enemy));
+    if (b.shadowPlayer) {
+        // Never serialize nested battles from a combat snapshot.
+        Player player = *b.shadowPlayer;
+        player.arts.battle.reset();
+        Value shadow = personToJson(player);
+        shadow.set("talent", str(player.talent));
+        shadow.set("sect", str(player.sect));
+        json::Array traits;
+        for (const auto& trait : player.traits) traits.push_back(str(trait));
+        shadow.set("traits", Value(std::move(traits)));
+        shadow.set("arts", artsToJson(player.arts));
+        o.set("shadowPlayer", std::move(shadow));
+        o.set("shadowOutcome", str(b.shadowOutcome));
+    }
     o.set("enemyCards", enemyCombatToJson(b.enemyCards));
     o.set("playerFirst", Value(b.playerFirst));
     o.set("playerSpeed", num(b.playerSpeed));
@@ -486,6 +504,7 @@ static Value battleToJson(const Battle& b) {
     o.set("cooldowns", mapToJson(b.cooldowns));
     o.set("poison", num(b.poison));
     o.set("poisonTurns", num(b.poisonTurns));
+    o.set("poisonDamage", num(b.poisonDamage));
     o.set("playerPoison", num(b.playerPoison));
     o.set("playerPoisonTurns", num(b.playerPoisonTurns));
     o.set("burnTurns", num(b.burnTurns));
@@ -522,6 +541,18 @@ static Value battleToJson(const Battle& b) {
 
 static void battleFromJson(const Value& o, Battle& b) {
     b.enemy = o["enemy"].asString();
+    if (o["shadowPlayer"].isObject()) {
+        const Value& shadow = o["shadowPlayer"];
+        Player player;
+        personFromJson(shadow, player);
+        player.talent = shadow["talent"].asString();
+        player.sect = shadow["sect"].asString();
+        player.traits = jsonToStringVec(shadow["traits"]);
+        artsFromJson(shadow["arts"], player.arts);
+        player.arts.battle.reset();
+        b.shadowPlayer = std::make_shared<const Player>(std::move(player));
+        b.shadowOutcome = o["shadowOutcome"].asString();
+    }
     enemyCombatFromJson(o["enemyCards"], b.enemyCards);
     b.playerFirst = o["playerFirst"].asBool(true);
     b.playerSpeed = o["playerSpeed"].asInt();
@@ -581,6 +612,7 @@ static void battleFromJson(const Value& o, Battle& b) {
     b.cooldowns = jsonToMap<int>(o["cooldowns"]);
     b.poison = o["poison"].asInt();
     b.poisonTurns = o["poisonTurns"].asInt();
+    b.poisonDamage = o["poisonDamage"].asInt(-1);
     b.playerPoison = o["playerPoison"].asInt();
     b.playerPoisonTurns = o["playerPoisonTurns"].asInt();
     b.burnTurns = o["burnTurns"].asInt();
@@ -1240,7 +1272,20 @@ bool saveShapesValid(const Value& root) {
             {"discard", Type::Array}, {"exhausted", Type::Array},
             {"cooldowns", Type::Object}, {"enemyCd", Type::Object}, {"enemyCards", Type::Object},
             {"playerFirst", Type::Bool}, {"enemyStage", Type::Number},
+            {"shadowPlayer", Type::Object}, {"shadowOutcome", Type::String},
             {"playerSpeed", Type::Number}, {"enemySpeed", Type::Number}, {"dungeonSite", Type::String}, {"dungeonNode", Type::String}})) return false;
+    const auto& shadow = battle["shadowPlayer"];
+    if (shadow.isObject()) {
+        // Reject recursive snapshots before any recursive deserialization.
+        if (!shadow["arts"].isObject() || !shadow["arts"]["battle"].isNull() ||
+            !shadow["name"].isString() || !shadow["traits"].isArray() ||
+            !saveObjectFieldTypes(shadow, {{"talent", Type::String}, {"sect", Type::String}})) return false;
+        for (const auto& trait : shadow["traits"].asArray()) if (!trait.isString()) return false;
+        for (const char* key : {"stage", "age", "lifespan", "health", "body", "apt", "insight", "sword"})
+            if (!shadow[key].isNumber()) return false;
+        if (!saveObjectFieldTypes(shadow["arts"], {{"manuals", Type::Object}, {"equipped", Type::Object},
+                {"gear", Type::Array}, {"spells", Type::Array}, {"nodes", Type::Array}, {"aux", Type::Array}})) return false;
+    } else if (!battle["shadowOutcome"].isNull() && !battle["shadowOutcome"].asString().empty()) return false;
     const auto& enemy = battle["enemyCards"];
     if (enemy.isObject() && !saveObjectFieldTypes(enemy, {{"enabled", Type::Bool},
             {"attacked", Type::Bool}, {"sect", Type::String}, {"dao", Type::String}, {"main", Type::String},
@@ -1252,9 +1297,9 @@ bool saveShapesValid(const Value& root) {
         for (const auto& id : enemy[key].asArray()) if (!id.isString()) return false;
     for (const auto& card : enemy["deck"].asArray())
         if (!card.isObject() || !card["uid"].isString() || !card["spell"].isString()) return false;
-    for (const char* key : {"stage", "speed", "body", "mind", "mana", "maxMana", "shuffles", "played",
+    for (const char* key : {"stage", "speed", "body", "mind", "mana", "maxMana", "shuffles", "played", "turns",
             "swordQi", "water", "soul", "charge", "lock", "carryMana", "manaBonus", "manaPenalty", "drawNext",
-            "carryCap", "hpCostPct", "poison", "poisonTurns", "burn", "burnTurns", "swordSequence", "comboDraws",
+            "carryCap", "hpCostPct", "poison", "poisonTurns", "poisonDamage", "burn", "burnTurns", "swordSequence", "comboDraws",
             "buff", "reduction", "guard", "discardPower"})
         if (!enemy[key].isNull() && !enemy[key].isNumber()) return false;
     for (const char* key : {"manuals", "cooldowns"})
@@ -1385,8 +1430,31 @@ std::string saveStateError(const Game& g) {
     }
     if (a.battle.has_value()) {
         const Battle& b = *a.battle;
-        if (b.max <= 0 || b.enemyMax <= 0 || b.hp <= 0 || b.hp > b.max ||
-            b.enemyHp <= 0 || b.enemyHp > b.enemyMax || b.mana < 0 || b.maxMana < 0 ||
+        const bool terminalShadow = b.shadowPlayer && !b.shadowOutcome.empty();
+        if (b.shadowPlayer) {
+            const Player& shadow = *b.shadowPlayer;
+            if (b.kind != "tianji" || b.lethal || !b.npcId.empty() || !b.quest.empty() ||
+                !b.advKind.empty() || !b.dungeonSite.empty() || !b.wildTask.empty() ||
+                !b.enemyCards.enabled || b.enemyBeast || shadow.arts.battle || !validPerson(shadow) ||
+                (b.shadowOutcome != "" && b.shadowOutcome != "win" && b.shadowOutcome != "loss" &&
+                 b.shadowOutcome != "draw" && b.shadowOutcome != "retreat")) return "天机留影状态无效";
+            if (b.enemy != shadow.name || b.enemyStage != shadow.stage || b.enemySect != shadow.sect ||
+                b.enemyCards.main != shadow.arts.main || b.enemyCards.aux != shadow.arts.aux ||
+                b.enemyCards.manuals != shadow.arts.manuals || b.enemyCards.nodes != shadow.arts.nodes ||
+                b.enemyCards.mind != shadow.arts.mind || b.enemyCards.body != shadow.body)
+                return "天机留影构筑不一致";
+            if (const auto error = gearError(shadow.arts.gear, shadow.arts.equipped); !error.empty()) return error;
+            for (const auto& trait : shadow.traits) if (!findTalent(trait)) return "天机留影天赋无效";
+            for (const auto& id : shadow.arts.spells) if (!battleSpell(id)) return "天机留影神通无效";
+            if (b.turn > 24 || b.enemyCards.turns < 0 || b.enemyCards.turns > 24 ||
+                (!terminalShadow && b.turn >= 24) ||
+                (b.shadowOutcome == "win" && (b.enemyHp > 0 || b.hp <= 0)) ||
+                (b.shadowOutcome == "loss" && b.hp > 0) ||
+                (b.shadowOutcome == "draw" && !((b.turn == 24 && b.hp > 0 && b.enemyHp > 0) ||
+                                                (b.hp <= 0 && b.enemyHp <= 0)))) return "天机切磋结算无效";
+        }
+        if (b.max <= 0 || b.enemyMax <= 0 || (!terminalShadow && b.hp <= 0) || b.hp > b.max ||
+            (!terminalShadow && b.enemyHp <= 0) || b.enemyHp > b.enemyMax || b.mana < 0 || b.maxMana < 0 ||
             b.mana > 100000 || b.maxMana > 100000 ||
             b.manaBonus < 0 || b.manaBonus > 100000 || b.manaPenalty < 0 || b.manaPenalty > 100000 ||
             b.carryMana < 0 || b.carryMana > 100000 || b.carryCap < 0 || b.carryCap > 100000 ||
@@ -1398,6 +1466,9 @@ std::string saveStateError(const Game& g) {
             return "斗法参数无效";
         if (b.enemyStage < 0 || b.enemyStage > 12 || b.playerSpeed < 0 || b.enemySpeed < 0)
             return "斗法境界或遁速无效";
+        if (b.poisonDamage < -1 || b.poisonDamage > BATTLE_BURN_CAP ||
+            b.enemyCards.poisonDamage < -1 || b.enemyCards.poisonDamage > BATTLE_BURN_CAP)
+            return "斗法毒伤数值无效";
         if (b.poison < 0 || b.poison > BATTLE_POISON_CAP || b.poisonTurns < 0 || b.poisonTurns > 3 ||
             b.burn < 0 || b.burn > BATTLE_BURN_CAP || b.burnTurns < 0 || b.burnTurns > 3 ||
             b.playerPoison < 0 || b.playerPoison > BATTLE_BURN_CAP || b.playerPoisonTurns < 0 || b.playerPoisonTurns > 3)
@@ -1417,7 +1488,7 @@ std::string saveStateError(const Game& g) {
         }
         const EnemyCombat& e = b.enemyCards;
         std::set<string> enemyCards, enemyPlaced, planned;
-        if (e.deck.size() > 256 || e.hand.size() > 8 || e.planned.size() > 8) return "对手牌组过大";
+        if (e.deck.size() > 256 || e.hand.size() > 8 || e.planned.size() > 24) return "对手牌组过大";
         for (const auto& c : e.deck) {
             const auto* spell = battleSpell(c.spell);
             if (c.uid.empty() || !spell || !enemyCards.insert(c.uid).second ||
@@ -1427,14 +1498,20 @@ std::string saveStateError(const Game& g) {
             for (const auto& id : *pile)
                 if (!enemyCards.count(id) || !enemyPlaced.insert(id).second) return "对手牌堆引用无效或重复";
         if (enemyPlaced.size() != enemyCards.size()) return "对手牌组存在未归入牌堆的神通";
-        for (const auto& id : e.planned)
-            if (!planned.insert(id).second ||
+        for (const auto& id : e.planned) {
+            if (b.shadowPlayer) {
+                // Draw/redraw may reshuffle and replay a UID. Artifact actions have no card UID.
+                if (!enemyCards.count(id) && !equippedArtifactAbility(*b.shadowPlayer, id))
+                    return "留影行动计划引用无效";
+            } else if (!planned.insert(id).second ||
                 (std::find(e.hand.begin(), e.hand.end(), id) == e.hand.end() &&
                  std::find(e.draw.begin(), e.draw.end(), id) == e.draw.end())) return "对手行动计划无效";
+        }
         if (e.enabled) {
+            const int manaCap = b.shadowPlayer ? battleManaCap(*b.shadowPlayer) : 30;
             if (b.enemyBeast || e.deck.empty() || e.stage != b.enemyStage || e.speed != b.enemySpeed ||
-                e.stage < 0 || e.stage > 12 || e.mana < 0 || e.mana > 30 || e.maxMana <= 0 || e.maxMana > 30 ||
-                e.carryMana < 0 || e.carryCap < 0 || e.carryCap > 30 || e.carryMana > e.carryCap ||
+                e.stage < 0 || e.stage > 12 || e.mana < 0 || e.mana > manaCap || e.maxMana <= 0 || e.maxMana > manaCap ||
+                e.carryMana < 0 || e.carryCap < 0 || e.carryCap > manaCap || e.carryMana > e.carryCap ||
                 e.played < 0 || e.played > 24 || e.drawNext < 0 || e.drawNext > 256 ||
                 e.swordSequence < 0 || e.swordSequence > 24 || e.comboDraws < 0 || e.comboDraws > 2 ||
                 e.swordQi < 0 || e.swordQi > 8 || e.water < 0 || e.water > 6 || e.soul < 0 || e.soul > 6 ||
@@ -1446,12 +1523,13 @@ std::string saveStateError(const Game& g) {
             for (const int value : {e.speed, e.body, e.mind, e.shuffles, e.manaBonus, e.manaPenalty, e.hpCostPct})
                 if (value < 0 || value > 100000) return "对手斗法属性无效";
             for (const auto& [id, cooldown] : e.cooldowns)
-                if (!battleSpell(id) || cooldown < 0 || cooldown > 24) return "对手神通冷却无效";
+                if ((!battleSpell(id) && !(b.shadowPlayer && equippedArtifactAbility(*b.shadowPlayer, id))) ||
+                    cooldown < 0 || cooldown > 24) return "对手神通冷却无效";
             for (const auto& [id, level] : e.manuals) {
                 ManualInfo info;
                 if (!findManualInfo(id, info) || level < 1 || level > 5) return "对手功法无效";
             }
-            if (!e.manuals.count(e.main)) return "对手主修功法未领悟";
+            if (!e.manuals.count(e.main) && !(b.shadowPlayer && e.main.empty())) return "对手主修功法未领悟";
             std::set<string> aux, nodes;
             for (const auto& id : e.aux)
                 if (!e.manuals.count(id) || !aux.insert(id).second) return "对手辅修功法无效";
@@ -1499,7 +1577,7 @@ std::string saveStateError(const Game& g) {
 
 } // namespace
 
-bool loadFromJson(const std::string& text, Game& out, std::string* err) {
+static bool loadFromJsonImpl(const std::string& text, Game& out, std::string* err, bool detached) {
     if (err) err->clear();
     if (text.size() > 16u * 1024u * 1024u) { if (err) *err = "存档数据超过大小限制"; return false; }
     std::string perr;
@@ -1523,6 +1601,10 @@ bool loadFromJson(const std::string& text, Game& out, std::string* err) {
         return false;
     }
 
+    if (!detached && root["player"]["arts"]["battle"]["shadowPlayer"].isObject()) {
+        if (err) *err = "天机切磋不能作为角色存档导入";
+        return false;
+    }
     Game g;
     g.version = root["version"].asInt(VERSION);
     g.rng = static_cast<uint32_t>(root["rng"].asNumber(g.rng));
@@ -1926,11 +2008,15 @@ bool loadFromJson(const std::string& text, Game& out, std::string* err) {
     }
 
     // 读档后补齐可能缺失的初始化状态
-    ensureArts(g);
-    ensureEconomy(g);
-    ensureSociety(g);
-    ensureAdventure(g);
-    ensureDungeons(g);
+    // A Tianji encounter is deliberately world-free. World initialization can
+    // generate NPCs/dungeons, consume RNG, and rewrite a captured loadout.
+    if (!detached) {
+        ensureArts(g);
+        ensureEconomy(g);
+        ensureSociety(g);
+        ensureAdventure(g);
+        ensureDungeons(g);
+    }
 
     // 老版在途斗法没有保存任务来源，将能够确定的上下文迁移回来。
     if (g.player.arts.battle.has_value()) {
@@ -1955,6 +2041,14 @@ bool loadFromJson(const std::string& text, Game& out, std::string* err) {
 // ------------------------------------------------------------
 // 文件读写
 // ------------------------------------------------------------
+bool loadFromJson(const std::string& text, Game& out, std::string* err) {
+    return loadFromJsonImpl(text, out, err, false);
+}
+
+bool loadDetachedFromJson(const std::string& text, Game& out, std::string* err) {
+    return loadFromJsonImpl(text, out, err, true);
+}
+
 bool saveToFile(const Game& g, const std::string& path, std::string* err) {
     if (err) err->clear();
     const auto target = std::filesystem::u8path(path);

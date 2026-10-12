@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import * as tianji from '../web/tianji.mjs';
 import { renderDaos, renderSpellPicker, renderArtBuilds } from '../web/arts.mjs';
 import { renderFriendPanel, renderBondActions, renderNpcLearning, renderNpcLoadout } from '../web/friends.mjs';
 import { bindRoster } from '../web/roster.mjs';
@@ -226,7 +227,7 @@ const document = { querySelector: element, getElementById(id) { return element('
   querySelectorAll() { return []; }, addEventListener(type, fn) { handlers[type] = fn; },
   body: { setAttribute() {}, removeAttribute() {} } };
 const requests = [];
-const context = { ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
+const context = { ...tianji, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
   renderSectMentors, renderSectTasks,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,

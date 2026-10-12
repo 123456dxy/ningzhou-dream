@@ -275,6 +275,204 @@ bool legacySave(const legacy::Archive& a) {
 // ------------------------------------------------------------
 // 状态快照：前端每次动作后都拿它整页重绘
 // ------------------------------------------------------------
+Value battleViewImpl(const Game& g) {
+    if (!g.player.arts.battle) return Value();
+    const Battle& b = *g.player.arts.battle;
+    Value o(json::Object{});
+    o.set("enemy", str(b.enemy));
+    o.set("npcId", str(b.npcId));
+    o.set("style", str(b.style));
+    o.set("intentKind", str(b.intentKind));
+    o.set("enemyPortrait", str(b.enemyBeast ? beastPortrait(b.enemyStage) : personPortrait(b.enemyGender, b.enemySect)));
+    o.set("enemyStage", num(b.enemyStage));
+    o.set("dungeonSite", str(b.dungeonSite));
+    o.set("dungeonNode", str(b.dungeonNode));
+    o.set("enemyRealmName", str(realmName(b.enemyStage)));
+    o.set("playerSpeed", num(b.playerSpeed));
+    o.set("enemySpeed", num(b.enemySpeed));
+    o.set("playerFirst", Value(b.playerFirst));
+    o.set("escapeChance", num(battleEscapeChance(g.player, b)));
+    o.set("enemyDao", str(b.enemyDao));
+    o.set("enemyBeast", Value(b.enemyBeast));
+    o.set("enemySect", str(b.enemySect));
+    o.set("enemyMana", num(b.enemyCards.mana));
+    o.set("enemyMaxMana", num(b.enemyCards.maxMana));
+    const auto intent = battleEnemyPreview(g);
+    o.set("intentDescription", str(intent.description));
+    o.set("intentDamage", num(intent.damage));
+    o.set("intentShield", num(intent.shield));
+    o.set("intentHeal", num(intent.heal));
+    { json::Array spells; for (const auto& id : intent.spells) { const auto* sp = battleSpell(id); spells.push_back(str(sp ? sp->name : id)); } o.set("intentSpells", Value(std::move(spells))); }
+    o.set("hp", num(b.hp));
+    o.set("max", num(b.max));
+    o.set("enemyHp", num(b.enemyHp));
+    o.set("enemyMax", num(b.enemyMax));
+    o.set("mana", num(b.mana));
+    o.set("maxMana", num(b.maxMana));
+    o.set("shield", num(b.shield));
+    o.set("enemyShield", num(b.enemyShield));
+    o.set("swordQi", num(b.swordQi));
+    o.set("turn", num(b.turn));
+    o.set("intentName", str(b.intentName));
+    o.set("intentRaw", num(b.intentRaw));
+    // 生死斗法要在界面上明确提示，否则玩家会莫名其妙死掉
+    o.set("lethal", Value(battleDefeatEndsLife(b)));
+    o.set("kind", str(b.kind));
+    o.set("quest", str(b.quest));
+
+    {
+        json::Array lg;
+        for (const auto& s2 : b.log) lg.push_back(str(s2));
+        o.set("log", Value(std::move(lg)));
+    }
+    // 手牌：带上真实预览（和出牌共用同一函数，所见即所得）
+    {
+        json::Array hand;
+        const vector<string> spells = handSpells(b);
+        for (size_t i = 0; i < b.hand.size(); ++i) {
+            const SpellDef* sp = battleSpell(spells[i]);
+            if (!sp) continue;
+            const Preview pv = battlePreview(g.player, b, spells[i]);
+            const int cost = battleCost(g.player, *sp);
+            Value c(json::Object{});
+            c.set("uid", str(b.hand[i]));
+            c.set("id", str(sp->id));
+            c.set("name", str(sp->name));
+            c.set("dao", str(sp->dao));
+            c.set("kind", str(sp->kind));
+            c.set("cost", num(cost));
+            c.set("stage", num(sp->stage));
+            c.set("stageName", str(realmName(sp->stage)));
+            c.set("description", str(battleSpellDescription(*sp)));
+            c.set("requiresTarget", Value(battleNeedsTarget(*sp)));
+            // 能不能出这张牌，以及不能的原因。
+            // 之前手牌永远可点，点了才报错，玩家得一张张试。
+            {
+                std::string why;
+                auto cd = b.cooldowns.find(sp->id);
+                if (g.player.stage < sp->stage)
+                    why = "境界不足，需达到" + realmName(sp->stage) + "。";
+                else if (cd != b.cooldowns.end() && cd->second > 0)
+                    why = "冷却中（还剩 " + std::to_string(cd->second) +
+                          " 回合）";
+                else if (b.mana < cost)
+                    why = "灵力不足（需 " + std::to_string(cost) +
+                          "，有 " + std::to_string(b.mana) + "）";
+                else if (b.played >= 24)
+                    why = "本回合出牌已达上限";
+                else if (battleNeedsTarget(*sp)) {
+                    const bool hasTarget = std::any_of(b.deck.begin(), b.deck.end(), [&](const Card& card) {
+                        return card.spell != sp->id &&
+                            std::find(b.exhausted.begin(), b.exhausted.end(), card.uid) == b.exhausted.end();
+                    });
+                    if (!hasTarget) why = "本场已无其它可移除神通";
+                }
+                c.set("playable", Value(why.empty()));
+                c.set("reason", str(why));
+            }
+            c.set("damage", num(pv.damage));
+            c.set("shield", num(pv.shield));
+            c.set("heal", num(pv.heal));
+            c.set("qi", num(pv.qi));
+            c.set("text", str(pv.text));
+            hand.push_back(std::move(c));
+        }
+        o.set("hand", Value(std::move(hand)));
+    }
+    {
+        json::Array artifacts;
+        for (const auto& ability : equippedArtifactAbilities(g.player)) {
+            Value a = artifactView(g.player, ability);
+            const auto& sp = ability.spell;
+            const Preview pv = battlePreview(g.player, b, sp.id);
+            const int cd = battleCooldown(b, sp.id), cost = battleCost(g.player, sp);
+            const string reason = cd > 0 ? "法宝冷却中，还剩" + std::to_string(cd) + "个回合。" :
+                b.mana < cost ? "灵力不足，需" + std::to_string(cost) + "点。" :
+                b.played >= 24 ? "本回合施术已达上限。" : "";
+            a.set("playable", Value(reason.empty())); a.set("reason", str(reason)); a.set("cooldownRemaining", num(cd));
+            a.set("damage", num(pv.damage)); a.set("shield", num(pv.shield)); a.set("heal", num(pv.heal));
+            a.set("energy", num(pv.energy)); a.set("qi", num(pv.qi)); a.set("text", str(pv.text));
+            artifacts.push_back(std::move(a));
+        }
+        o.set("artifacts", Value(std::move(artifacts)));
+    }
+    {
+        Value cd(json::Object{});
+        for (const auto& [k, v] : b.cooldowns)
+            if (v > 0) cd.set(k, num(v));
+        o.set("cooldowns", std::move(cd));
+    }
+    // 自身状态：卡牌游戏的核心信息，之前一个都没显示
+    o.set("poison", num(b.poison));
+    o.set("burn", num(b.burn));
+    o.set("playerPoison", num(b.playerPoison));
+    o.set("playerPoisonTurns", num(b.playerPoisonTurns));
+    o.set("poisonTurns", num(b.poisonTurns));
+    o.set("burnTurns", num(b.burnTurns));
+    o.set("water", num(b.water));
+    o.set("soul", num(b.soul));
+    o.set("charge", num(b.charge));
+    o.set("swordQi", num(b.swordQi));
+    o.set("guard", num(b.guard));
+    o.set("reduction", num(b.reduction));
+    o.set("buff", num(b.buff));
+    o.set("manaBonus", num(b.manaBonus));
+    o.set("manaPenalty", num(b.manaPenalty));
+    o.set("carryMana", num(b.carryMana));
+    o.set("carryCap", num(b.carryCap));
+    o.set("drawNext", num(b.drawNext));
+    o.set("lock", num(b.lock));
+    o.set("enemyWeaken", num(b.enemyWeaken));
+    o.set("weakened", num(b.enemyWeaken));
+    o.set("weakenedPenalty", num(std::min(0.5, b.enemyWeaken * 0.15)));
+    o.set("hpCostPct", num(b.hpCostPct));
+    o.set("discardPower", num(b.discardPower));
+    o.set("swordSequence", num(b.swordSequence));
+    o.set("comboDraws", num(b.comboDraws));
+    o.set("lastDao", str(b.last));
+    o.set("manaCap", num(battleManaCap(g.player)));
+    o.set("nextMana", num(battleNextMana(g.player, b)));
+    o.set("baseReduction", num(talentMods(g.player).reduction));
+    o.set("effectiveReduction", num(battleReduction(g.player, b)));
+    o.set("played", num(b.played));
+    o.set("shuffles", num(b.shuffles));
+    o.set("style", str(b.style));
+    o.set("enemyShield", num(b.enemyShield));
+    o.set("mana", num(b.mana));
+    o.set("maxMana", num(b.maxMana));
+    o.set("draw", num(static_cast<int>(b.draw.size())));
+    o.set("discard", num(static_cast<int>(b.discard.size())));
+    o.set("exhausted", num(static_cast<int>(b.exhausted.size())));
+    {
+        std::map<std::string, int> active, removed;
+        for (const auto& card : b.deck) {
+            if (std::find(b.exhausted.begin(), b.exhausted.end(), card.uid) != b.exhausted.end())
+                ++removed[card.spell];
+            else if (std::find(b.hand.begin(), b.hand.end(), card.uid) != b.hand.end() ||
+                     std::find(b.draw.begin(), b.draw.end(), card.uid) != b.draw.end() ||
+                     std::find(b.discard.begin(), b.discard.end(), card.uid) != b.discard.end())
+                ++active[card.spell];
+        }
+        auto pileInfo = [&](const std::map<std::string, int>& pile) {
+            json::Array arr;
+            for (const auto& [id, count] : pile) {
+                const SpellDef* sp = battleSpell(id);
+                if (!sp) continue;
+                Value item(json::Object{});
+                item.set("id", str(id));
+                item.set("name", str(sp->name));
+                item.set("dao", str(sp->dao));
+                item.set("copies", num(count));
+                arr.push_back(std::move(item));
+            }
+            return Value(std::move(arr));
+        };
+        o.set("removalOptions", pileInfo(active));
+        o.set("exhaustedSpells", pileInfo(removed));
+    }
+    return o;
+}
+
 Value buildState(const Game& g) {
     Value s(json::Object{});
     s.set("dungeons", dungeonView(g));
@@ -641,203 +839,7 @@ Value buildState(const Game& g) {
         s.set("pending", std::move(o));
     }
 
-    // ---- 斗法（含每张手牌的即时预览）----
-    if (g.player.arts.battle.has_value()) {
-        const Battle& b = *g.player.arts.battle;
-        Value o(json::Object{});
-        o.set("enemy", str(b.enemy));
-        o.set("npcId", str(b.npcId));
-        o.set("style", str(b.style));
-        o.set("intentKind", str(b.intentKind));
-        o.set("enemyPortrait", str(b.enemyBeast ? beastPortrait(b.enemyStage) : personPortrait(b.enemyGender, b.enemySect)));
-        o.set("enemyStage", num(b.enemyStage));
-        o.set("dungeonSite", str(b.dungeonSite));
-        o.set("dungeonNode", str(b.dungeonNode));
-        o.set("enemyRealmName", str(realmName(b.enemyStage)));
-        o.set("playerSpeed", num(b.playerSpeed));
-        o.set("enemySpeed", num(b.enemySpeed));
-        o.set("playerFirst", Value(b.playerFirst));
-        o.set("escapeChance", num(battleEscapeChance(g.player, b)));
-        o.set("enemyDao", str(b.enemyDao));
-        o.set("enemyBeast", Value(b.enemyBeast));
-        o.set("enemySect", str(b.enemySect));
-        o.set("enemyMana", num(b.enemyCards.mana));
-        o.set("enemyMaxMana", num(b.enemyCards.maxMana));
-        const auto intent = battleEnemyPreview(g);
-        o.set("intentDescription", str(intent.description));
-        o.set("intentDamage", num(intent.damage));
-        o.set("intentShield", num(intent.shield));
-        o.set("intentHeal", num(intent.heal));
-        { json::Array spells; for (const auto& id : intent.spells) { const auto* sp = battleSpell(id); spells.push_back(str(sp ? sp->name : id)); } o.set("intentSpells", Value(std::move(spells))); }
-        o.set("hp", num(b.hp));
-        o.set("max", num(b.max));
-        o.set("enemyHp", num(b.enemyHp));
-        o.set("enemyMax", num(b.enemyMax));
-        o.set("mana", num(b.mana));
-        o.set("maxMana", num(b.maxMana));
-        o.set("shield", num(b.shield));
-        o.set("enemyShield", num(b.enemyShield));
-        o.set("swordQi", num(b.swordQi));
-        o.set("turn", num(b.turn));
-        o.set("intentName", str(b.intentName));
-        o.set("intentRaw", num(b.intentRaw));
-        // 生死斗法要在界面上明确提示，否则玩家会莫名其妙死掉
-        o.set("lethal", Value(battleDefeatEndsLife(b)));
-        o.set("kind", str(b.kind));
-        o.set("quest", str(b.quest));
-
-        {
-            json::Array lg;
-            for (const auto& s2 : b.log) lg.push_back(str(s2));
-            o.set("log", Value(std::move(lg)));
-        }
-        // 手牌：带上真实预览（和出牌共用同一函数，所见即所得）
-        {
-            json::Array hand;
-            const vector<string> spells = handSpells(b);
-            for (size_t i = 0; i < b.hand.size(); ++i) {
-                const SpellDef* sp = battleSpell(spells[i]);
-                if (!sp) continue;
-                const Preview pv = battlePreview(g.player, b, spells[i]);
-                const int cost = battleCost(g.player, *sp);
-                Value c(json::Object{});
-                c.set("uid", str(b.hand[i]));
-                c.set("id", str(sp->id));
-                c.set("name", str(sp->name));
-                c.set("dao", str(sp->dao));
-                c.set("kind", str(sp->kind));
-                c.set("cost", num(cost));
-                c.set("stage", num(sp->stage));
-                c.set("stageName", str(realmName(sp->stage)));
-                c.set("description", str(battleSpellDescription(*sp)));
-                c.set("requiresTarget", Value(battleNeedsTarget(*sp)));
-                // 能不能出这张牌，以及不能的原因。
-                // 之前手牌永远可点，点了才报错，玩家得一张张试。
-                {
-                    std::string why;
-                    auto cd = b.cooldowns.find(sp->id);
-                    if (g.player.stage < sp->stage)
-                        why = "境界不足，需达到" + realmName(sp->stage) + "。";
-                    else if (cd != b.cooldowns.end() && cd->second > 0)
-                        why = "冷却中（还剩 " + std::to_string(cd->second) +
-                              " 回合）";
-                    else if (b.mana < cost)
-                        why = "灵力不足（需 " + std::to_string(cost) +
-                              "，有 " + std::to_string(b.mana) + "）";
-                    else if (b.played >= 24)
-                        why = "本回合出牌已达上限";
-                    else if (battleNeedsTarget(*sp)) {
-                        const bool hasTarget = std::any_of(b.deck.begin(), b.deck.end(), [&](const Card& card) {
-                            return card.spell != sp->id &&
-                                std::find(b.exhausted.begin(), b.exhausted.end(), card.uid) == b.exhausted.end();
-                        });
-                        if (!hasTarget) why = "本场已无其它可移除神通";
-                    }
-                    c.set("playable", Value(why.empty()));
-                    c.set("reason", str(why));
-                }
-                c.set("damage", num(pv.damage));
-                c.set("shield", num(pv.shield));
-                c.set("heal", num(pv.heal));
-                c.set("qi", num(pv.qi));
-                c.set("text", str(pv.text));
-                hand.push_back(std::move(c));
-            }
-            o.set("hand", Value(std::move(hand)));
-        }
-        {
-            json::Array artifacts;
-            for (const auto& ability : equippedArtifactAbilities(g.player)) {
-                Value a = artifactView(g.player, ability);
-                const auto& sp = ability.spell;
-                const Preview pv = battlePreview(g.player, b, sp.id);
-                const int cd = battleCooldown(b, sp.id), cost = battleCost(g.player, sp);
-                const string reason = cd > 0 ? "法宝冷却中，还剩" + std::to_string(cd) + "个回合。" :
-                    b.mana < cost ? "灵力不足，需" + std::to_string(cost) + "点。" :
-                    b.played >= 24 ? "本回合施术已达上限。" : "";
-                a.set("playable", Value(reason.empty())); a.set("reason", str(reason)); a.set("cooldownRemaining", num(cd));
-                a.set("damage", num(pv.damage)); a.set("shield", num(pv.shield)); a.set("heal", num(pv.heal));
-                a.set("energy", num(pv.energy)); a.set("qi", num(pv.qi)); a.set("text", str(pv.text));
-                artifacts.push_back(std::move(a));
-            }
-            o.set("artifacts", Value(std::move(artifacts)));
-        }
-        {
-            Value cd(json::Object{});
-            for (const auto& [k, v] : b.cooldowns)
-                if (v > 0) cd.set(k, num(v));
-            o.set("cooldowns", std::move(cd));
-        }
-        // 自身状态：卡牌游戏的核心信息，之前一个都没显示
-        o.set("poison", num(b.poison));
-        o.set("burn", num(b.burn));
-        o.set("playerPoison", num(b.playerPoison));
-        o.set("playerPoisonTurns", num(b.playerPoisonTurns));
-        o.set("poisonTurns", num(b.poisonTurns));
-        o.set("burnTurns", num(b.burnTurns));
-        o.set("water", num(b.water));
-        o.set("soul", num(b.soul));
-        o.set("charge", num(b.charge));
-        o.set("swordQi", num(b.swordQi));
-        o.set("guard", num(b.guard));
-        o.set("reduction", num(b.reduction));
-        o.set("buff", num(b.buff));
-        o.set("manaBonus", num(b.manaBonus));
-        o.set("manaPenalty", num(b.manaPenalty));
-        o.set("carryMana", num(b.carryMana));
-        o.set("carryCap", num(b.carryCap));
-        o.set("drawNext", num(b.drawNext));
-        o.set("lock", num(b.lock));
-        o.set("enemyWeaken", num(b.enemyWeaken));
-        o.set("weakened", num(b.enemyWeaken));
-        o.set("weakenedPenalty", num(std::min(0.5, b.enemyWeaken * 0.15)));
-        o.set("hpCostPct", num(b.hpCostPct));
-        o.set("discardPower", num(b.discardPower));
-        o.set("swordSequence", num(b.swordSequence));
-        o.set("comboDraws", num(b.comboDraws));
-        o.set("lastDao", str(b.last));
-        o.set("manaCap", num(battleManaCap(g.player)));
-        o.set("nextMana", num(battleNextMana(g.player, b)));
-        o.set("baseReduction", num(talentMods(g.player).reduction));
-        o.set("effectiveReduction", num(battleReduction(g.player, b)));
-        o.set("played", num(b.played));
-        o.set("shuffles", num(b.shuffles));
-        o.set("style", str(b.style));
-        o.set("enemyShield", num(b.enemyShield));
-        o.set("mana", num(b.mana));
-        o.set("maxMana", num(b.maxMana));
-        o.set("draw", num(static_cast<int>(b.draw.size())));
-        o.set("discard", num(static_cast<int>(b.discard.size())));
-        o.set("exhausted", num(static_cast<int>(b.exhausted.size())));
-        {
-            std::map<std::string, int> active, removed;
-            for (const auto& card : b.deck) {
-                if (std::find(b.exhausted.begin(), b.exhausted.end(), card.uid) != b.exhausted.end())
-                    ++removed[card.spell];
-                else if (std::find(b.hand.begin(), b.hand.end(), card.uid) != b.hand.end() ||
-                         std::find(b.draw.begin(), b.draw.end(), card.uid) != b.draw.end() ||
-                         std::find(b.discard.begin(), b.discard.end(), card.uid) != b.discard.end())
-                    ++active[card.spell];
-            }
-            auto pileInfo = [&](const std::map<std::string, int>& pile) {
-                json::Array arr;
-                for (const auto& [id, count] : pile) {
-                    const SpellDef* sp = battleSpell(id);
-                    if (!sp) continue;
-                    Value item(json::Object{});
-                    item.set("id", str(id));
-                    item.set("name", str(sp->name));
-                    item.set("dao", str(sp->dao));
-                    item.set("copies", num(count));
-                    arr.push_back(std::move(item));
-                }
-                return Value(std::move(arr));
-            };
-            o.set("removalOptions", pileInfo(active));
-            o.set("exhaustedSpells", pileInfo(removed));
-        }
-        s.set("battle", std::move(o));
-    }
+    if (g.player.arts.battle) s.set("battle", battleViewImpl(g));
 
     // ---- 世界 ----
     {
@@ -1517,6 +1519,17 @@ void advance(Game& g, int days) {
 }
 
 } // namespace
+
+json::Value battleView(const Game& g) { return battleViewImpl(g); }
+json::Value equipmentView(const Player& player, const Gear& gear) {
+    Value o(json::Object{});
+    const auto ability = artifactAbility(gear);
+    o.set("shapeName", str(ability.shapeName));
+    o.set("ability", artifactView(player, ability));
+    o.set("passive", artifactPassiveView(player, gear));
+    o.set("inscribed", Value(gear.inscribed));
+    return o;
+}
 
 // ------------------------------------------------------------
 // 路由

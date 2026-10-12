@@ -42,6 +42,8 @@ int main() {
     nztest::runEventRewardTests();
     nztest::runNumericPreviewTests();
     nztest::runSectCompletionTests();
+    nztest::runTianjiTests();
+    nztest::runShadowCombatTests();
 
     const int f = nztest::failures();
     std::printf("\n===== 结果: %s（%d 项失败）=====\n",

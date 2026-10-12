@@ -11,6 +11,7 @@
 'use strict';
 
 import { createBuildPanel } from './build-panel.mjs';
+import { createTianji, renderTianjiReminder } from './tianji.mjs';
 import { ensureLogin } from './login.mjs';
 import { loadRoster, invalidateRoster, renderRoster, bindRoster } from './roster.mjs';
 import { heading, panel, layout, asideBlock, timeline, yearControls, hintBox } from './shell.mjs';
@@ -34,7 +35,7 @@ import {
 } from './friends.mjs';
 
 let S = null;            // 游戏状态（来自 C++）
-let tab = 'chronicle';   // 当前页签
+let tab = location.hash === '#tianji' ? 'tianji' : 'chronicle';   // 当前页签
 let selectedNpc = null;  // 选中的人
 let friendBag = null;    // 选中的人的可换物品（/api/npc-bag 结果）
 let mapFocus = null;     // 舆图上选中的地点
@@ -69,6 +70,23 @@ let dungeonView = 'sites';
 let dungeonIntelKind = 'all';
 let dungeonIntelSearch = '';
 let checkpointNotice = '';
+const tianji = createTianji({
+  onChange: () => {
+    if (S && tab === 'tianji' && !S.battle && !S.dungeons?.run && !S.ended) render();
+    else if (S) updateTianjiReminder();
+  },
+  onSettled: () => { call('state'); },
+});
+function navigateTab(next) {
+  if (next === 'tianji' && location.hash !== '#tianji') history.pushState({ nzTab: next }, '', '#tianji');
+  else if (next !== 'tianji' && location.hash === '#tianji') history.pushState({ nzTab: next }, '', location.pathname + location.search);
+  tab = next;
+  render();
+}
+window.addEventListener('popstate', () => {
+  tab = location.hash === '#tianji' ? 'tianji' : history.state?.nzTab || 'chronicle';
+  if (S) render();
+});
 
 // ------------------------------------------------------------
 // 基础工具
@@ -203,7 +221,11 @@ function breakthroughBlock() {
   return '';
 }
 
+function updateTianjiReminder() {
+  $('#tianji-reminder').innerHTML = renderTianjiReminder(S.tianji ? { ...S.tianji, hasEncounter: tianji.status ? tianji.status.encounter?.state === 'active' : S.tianji.hasEncounter } : null);
+}
 function renderSidebar() {
+  updateTianjiReminder();
   const p = S.player;
   $('#player-card').innerHTML =
     `<div class="portrait player-portrait">${renderPortrait(p, 'player')}</div>`
@@ -1570,6 +1592,7 @@ async function refreshSects() {
 // ------------------------------------------------------------
 function render() {
   if (!S) return;
+  tianji.setVisible(tab === 'tianji' && !S.battle && !S.dungeons?.run && !S.ended);
   const oldViewport = document.querySelector('[data-map-viewport]');
   const mapScroll = oldViewport ? { x: oldViewport.scrollLeft, y: oldViewport.scrollTop, zoom: oldViewport.dataset.zoom } : null;
   if (!S.battle || S.ended) closeRemoval();
@@ -1594,7 +1617,7 @@ function render() {
     const views = {
       chronicle: viewChronicle, map: viewMap, arts: viewArts,
       society: viewSociety, roster: viewRoster, quests: viewQuests,
-      market: viewMarket, economy: viewEconomy,
+      market: viewMarket, economy: viewEconomy, tianji: () => tianji.render(),
       dungeon: () => renderDungeons(S, { mode: dungeonView, intelKind: dungeonIntelKind, intelSearch: dungeonIntelSearch }),
     };
     $('#workspace').innerHTML = (views[tab] || viewChronicle)();
@@ -1696,9 +1719,10 @@ async function loadConflictPreview(npcId) {
 // 事件
 // ------------------------------------------------------------
 document.addEventListener('click', async e => {
+  if (e.target.closest('[data-tianji]')) { await tianji.handleClick(e); return; }
   // 页签
   const tabBtn = e.target.closest('.main-tabs button');
-  if (tabBtn) { if (S) { tab = tabBtn.dataset.tab; render(); } return; }
+  if (tabBtn) { if (S) navigateTab(tabBtn.dataset.tab); return; }
 
   // 剧情阅读器里的选择
   const sc = e.target.closest('[data-story]');
@@ -2121,8 +2145,7 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'goto-tab': {
-      tab = btn.dataset.tab;
-      render();
+      navigateTab(btn.dataset.tab);
       break;
     }
     case 'tide-fight': {
@@ -2408,7 +2431,7 @@ document.addEventListener('input', e => {
 
 // 快捷键
 document.addEventListener('keydown', e => {
-  if ($('#modal').open || $('#settings-modal').open || $('#battle-target-modal').open || $('#location-art-modal').open || buildPanel || $('#story-host').hasChildNodes() || requestBusy || !S || S.ended) return;
+  if (document.querySelector('dialog[open]') || tab === 'tianji' || tianji.status?.encounter?.state === 'active' || buildPanel || $('#story-host').hasChildNodes() || requestBusy || !S || S.ended) return;
   if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
   if (e.target.closest('[data-map-viewport]')) return;
 
@@ -2437,7 +2460,7 @@ $('#battle-target-modal').addEventListener('close', () => { removalSelection = n
   await ensureLogin();
   const res = await fetch('/api/state').then(r => r.json()).catch(() => null);
   // 只有后端明确说有存档时才用它；冷启动会返回 hasGame:false
-  if (res && res.hasGame && res.state) { S = res.state; render(); return; }
+  if (res && res.hasGame && res.state) { S = res.state; if (S.tianji?.hasEncounter) navigateTab('tianji'); else render(); return; }
   // 没有存档：先让玩家建号，不要直接拿默认天赋开局
   openBuildPanel({ firstTime: true });
 })();

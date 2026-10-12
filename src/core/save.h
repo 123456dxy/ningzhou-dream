@@ -18,6 +18,10 @@ std::string saveToJson(const Game& g);
 
 // 从 JSON 文本读回存档。失败时返回 false 并把原因写进 err
 bool loadFromJson(const std::string& text, Game& out, std::string* err);
+// Server-owned immutable snapshots/encounters only. Validates the same schema
+// but does not initialize/migrate a world or rewrite the captured loadout.
+// Never use for a player's ordinary save import.
+bool loadDetachedFromJson(const std::string& text, Game& out, std::string* err);
 
 // 写文件 / 读文件
 bool saveToFile(const Game& g, const std::string& path, std::string* err);

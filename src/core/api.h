@@ -11,6 +11,7 @@
 
 #include "core/http.h"
 #include "core/model.h"
+#include "core/json.h"
 
 namespace nz::api {
 
@@ -31,6 +32,10 @@ bool restoreGame(Session& s, const std::string& text, std::string* err);
 
 // 当前游戏会话
 Game& game();
+
+// 只读斗法视图：不触发存档、时钟或其他游戏副作用。
+json::Value battleView(const Game& g);
+json::Value equipmentView(const Player& player, const Gear& gear);
 
 // 处理 /api/ 请求
 http::Response handle(const http::Request& req);

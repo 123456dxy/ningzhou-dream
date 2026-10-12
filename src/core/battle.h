@@ -88,6 +88,11 @@ struct EnemySpec {
     string dungeonNode;
 };
 void battleStart(Game& g, const EnemySpec& enemy);
+// Tianji fights own an isolated encounter and immutable opponent loadout.
+// Completed encounters retain Battle/logs but battleActive becomes false.
+void battleStartShadow(Game& encounter, const Player& challengerSnapshot,
+                       const Player& opponentSnapshot, uint32_t seed);
+const string& battleShadowOutcome(const Game& encounter);
 
 // 行动：'end' 结束回合；'escape' 撤离；其余为手牌 uid 或神通 id
 struct TurnResult {
