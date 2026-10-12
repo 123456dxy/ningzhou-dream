@@ -92,5 +92,6 @@ void runPersistenceRefactorTests();
 void runCombatFixTests();
 void runPlayerFixTests();
 void runCraftingFixTests();
+void runCatalogDisplayTests();
 
 } // namespace nztest

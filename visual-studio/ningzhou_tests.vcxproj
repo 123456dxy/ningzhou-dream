@@ -21,6 +21,7 @@
 <ClCompile Include="..\tests\test_battle_mechanisms.cpp"/>
 <ClCompile Include="..\tests\test_battle_state.cpp"/>
 <ClCompile Include="..\tests\test_calendar.cpp"/>
+<ClCompile Include="..\tests\test_catalog_display.cpp"/>
 <ClCompile Include="..\tests\test_checkpoint.cpp"/>
 <ClCompile Include="..\tests\test_combat_design.cpp"/>
 <ClCompile Include="..\tests\test_combat_fixes.cpp"/>

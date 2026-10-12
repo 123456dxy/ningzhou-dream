@@ -109,6 +109,30 @@ try {
 
   await page.locator('.main-tabs [data-tab="market"]').click();
   check(await page.locator('[data-brew-batch],[data-forge],[data-action="furnace/repair"]').count() === 0, '坊市页面只显示交易入口');
+  check(await page.locator('[data-shop-grade]').inputValue()==='1','坊市品阶默认一阶');
+  await page.locator('[data-shop="potion"]').click();
+  check(await page.locator('[data-pill-catalog-effect]').innerText().then(text=>text.includes('回复气血20点')&&!text.includes('回复气血0点')),'坊市丹药显示完整效果，忽略当前健康度截断描述');
+  await page.locator('[data-shop-grade]').selectOption('2');
+  await page.locator('[data-shop="herb"]').click();
+  check(await page.locator('[data-shop-grade]').inputValue()==='1','坊市各类型分别记忆品阶');
+  await page.locator('[data-shop="potion"]').click();
+  check(await page.locator('[data-shop-grade]').inputValue()==='2','切回丹药保留上次二阶');
+  await page.reload(); await page.locator('[data-shop-grade]').waitFor();
+  check(await page.locator('[data-shop-grade]').inputValue()==='2'&&await page.locator('[data-shop="potion"].active').count()===1,'重新加载保留坊市类型与品阶');
+  await page.locator('[data-shop="book"]').click();
+  check(await page.locator('#workspace [data-action="trade-stock"]').count()===0&&await page.locator('[data-shop-grade]').count()===0,'书坊并入同一分类，功法不伪造物品品阶');
+  await page.locator('[data-shop="stock"]').click();
+  check(await page.locator('#workspace [data-action="trade-stock"]').count()===4,'灵核与凝元丹仅在突破物品分类展示');
+  if (simulated) {
+    const fullHealthFixture=structuredClone(fixture); fullHealthFixture.player.health=100;
+    await api('import',{game:JSON.stringify(fullHealthFixture)}); await page.reload();
+    await page.locator('[data-shop="potion"]').click(); await page.locator('[data-shop-grade]').selectOption('1');
+    check(await page.locator('[data-pill-catalog-effect]').innerText().then(text=>text.includes('回复气血20点')&&!text.includes('回复气血0点')),'满血时坊市目录仍展示完整20点效果');
+    await page.locator('.main-tabs [data-tab="inventory"]').click(); await page.locator('[data-inventory-kind="potion"]').click();
+    await page.locator('[data-inventory-pill-details="5001"] summary').click();
+    check(await page.locator('[data-inventory-pill-details="5001"]').innerText().then(text=>text.includes('当前回复气血0点')),'满血时具体服用详情准确展示当前实际回复0点');
+    await api('import',{game:JSON.stringify(fixture)}); await page.reload();
+  }
   await page.locator('.main-tabs [data-tab="inventory"]').click();
   await page.locator('[data-inventory-kind="potion"]').click();
   check(await page.locator('[data-inventory-item]').count() === 1 && await page.locator('[data-inventory-item="5001"]').innerText().then(text => text.includes('化淤丹')), '行囊类型筛选显示中文丹药');
@@ -130,6 +154,11 @@ try {
 
   await api('import', { game: JSON.stringify(fixture) }); await page.reload();
   await page.locator('.main-tabs [data-tab="workshop"]').click();
+  check(await page.locator('[data-brew-grade]').inputValue()==='1','炼丹目录默认一阶');
+  await page.locator('[data-brew-grade]').selectOption('2');
+  await page.reload(); await page.locator('[data-brew-grade]').waitFor();
+  check(await page.locator('[data-brew-grade]').inputValue()==='2'&&await page.locator('.craft-card').count()===1,'炼丹品阶筛选刷新后保留，目录只显示所选品阶');
+  await page.locator('[data-brew-grade]').selectOption('1');
   await page.locator('[data-brew-search]').fill('化淤丹');
   await page.locator('[data-brew-batch]').selectOption('10');
   check(await page.locator('[data-action="craft"][data-id="5001"]').isDisabled(), '选择10炉即时禁用材料只够1炉的开炉按钮');
@@ -146,7 +175,7 @@ try {
     && !await page.locator('[data-action="craft"][data-id="5001"]').isDisabled(), '确认补料只按报价扣灵石，补齐10炉后开炉即时可用');
   await page.locator('[data-brew-batch]').selectOption('1');
   check(!(await page.locator('[data-action="craft"][data-id="5001"]').isDisabled()), '切回1炉恢复可开炉');
-  check(await page.locator('[data-pill-effect="5001"]').first().innerText().then(text => text.includes('当前服用效果')), '开炉前展示服务端丹药真实效果');
+  check(await page.locator('.craft-card[data-id="5001"] [data-pill-catalog-effect]').innerText().then(text => text.includes('丹药完整效果')&&text.includes('回复气血20点')), '开炉前显示服务端丹药完整效果');
   await page.locator('[data-subtab="workshop"][data-sub="forge"]').click();
   await page.locator('.forge-preview [data-numeric-preview]').first().waitFor();
   check(await page.locator('.forge-preview [data-numeric-preview]').count() > 0 && await page.locator('.forge-passive').count() === 1, '炼器开炉前同时展示权威装备被动和法宝神通数值');
@@ -182,6 +211,30 @@ try {
   }
   await page.locator('.main-tabs [data-tab="quests"]').click(); await page.locator('[data-subtab="quests"][data-sub="renown"]').click();
   check(await page.locator('#workspace').innerText().then(text => !text.includes('本世档案') && !text.includes('灵根资质') && !text.includes('出身天赋')), '成就页没有重复人物档案');
+  if (simulated) {
+    await page.setViewportSize({width:1920,height:1080}); await page.goto(base+'/#brew');
+    await page.locator('.craft-card').first().waitFor();
+    const compact = await page.locator('.craft-grid').evaluate(grid=>({columns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+      cards:[...grid.querySelectorAll('.craft-card')].map(card=>({width:card.getBoundingClientRect().width,topGap:card.querySelector('.craft-top').getBoundingClientRect().top-card.getBoundingClientRect().top,display:getComputedStyle(card).display}))}));
+    check(compact.columns<=4&&compact.cards.every(card=>card.width>=270&&card.topGap<=24&&card.display==='flex'),'1920px炼丹目录不挤成五列，所有短卡内容顶对齐无巨大留白');
+    await page.screenshot({path:join(output,'workshop-brew-compact.png'),fullPage:true});
+    await page.locator('.main-tabs [data-tab="dungeon"]').click(); await page.locator('[data-dungeon-view="intel"]').click();
+    check(await page.locator('[data-dungeon-intel-grade]').inputValue()==='3'&&await page.locator('.dungeon-intel-item').count()===2,'天机阁情报默认三阶，不混入四阶目录');
+    check(await page.locator('[data-action="dungeon-intel"]').evaluateAll(buttons=>buttons.every(button=>button.disabled)),'不在天机阁时所有情报购买仍禁用');
+    await page.locator('[data-dungeon-intel-grade]').selectOption('4');
+    await page.locator('[data-dungeon-intel-kind="material"]').click();
+    await page.locator('[data-dungeon-intel-search]').fill('仙露草');
+    check(await page.locator('.dungeon-intel-item').count()===0,'四阶加炼器材料加药材关键词不产生错误交集');
+    await page.locator('[data-dungeon-intel-search]').fill('寒晶');
+    check(await page.locator('.dungeon-intel-item').count()===1&&await page.locator('.dungeon-intel-item h4').innerText()==='寒晶秘境','情报品阶、类型和关键词组合筛选生效');
+    await page.reload(); await page.locator('[data-dungeon-view="intel"]').click();
+    check(await page.locator('[data-dungeon-intel-grade]').inputValue()==='4','重新加载后记住上次四阶情报选择');
+    const atIntelFixture=structuredClone(fixture); atIntelFixture.player.location='tianji';
+    await api('import',{game:JSON.stringify(atIntelFixture)}); await page.reload(); await page.locator('[data-dungeon-view="intel"]').click();
+    await page.locator('[data-dungeon-intel-kind="material"]').click(); await page.locator('[data-dungeon-intel-search]').fill('寒晶');
+    check(await page.locator('.dungeon-intel-item').innerText().then(text=>text.includes('境界不足'))&&await page.locator('[data-action="dungeon-intel"]').isDisabled(),'抵达天机阁后境界不足条目继续禁用并说明原因');
+    await page.screenshot({path:join(output,'intel-grade-filter.png'),fullPage:true});
+  }
   check(errors.length === 0, '完整桌面流程无浏览器脚本异常');
   writeFileSync(join(output, 'server-test.log'), log.join(''), 'utf8');
 } catch (error) {

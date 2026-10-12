@@ -1,5 +1,7 @@
 # Visual Studio 2022 入口
 
+构建后，在仓库根双击 `start-desktop.cmd` 启动本地电脑端。它选取本仓库最新构建、仅监听本机，使用独立 `saves-local`，跳过联机登录和多人入口；默认公网服务仍由原 `ningzhou_web` 入口管理。已有 8107 游戏请先正常关闭再启动，避免端口冲突。
+
 下载或克隆仓库后，打开本目录的 **ningzhou.sln**。安装 Visual Studio 2022 的“使用 C++ 的桌面开发”、MSVC v143 和 Windows 10/11 SDK；选择 Debug/Release、x64，启动项目为 `ningzhou_web`。
 
 解决方案中的 Backend 子目录对应 `src/core` 的实际模块：combat、content、crafting、exploration、foundation、interface、persistence、progression、simulation、social、transport。公共兼容头保留在 Backend 根；Web UI 对应 `web` 的实际目录。模块 README 与 Documentation 文档也在项目中可查。

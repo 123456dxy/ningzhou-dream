@@ -12,6 +12,7 @@
 <ClCompile Include="..\tests\test_battle_mechanisms.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_battle_state.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_calendar.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_catalog_display.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_checkpoint.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_combat_design.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_combat_fixes.cpp"><Filter>Tests</Filter></ClCompile>

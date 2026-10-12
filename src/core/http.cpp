@@ -20,6 +20,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
 #pragma comment(lib, "ws2_32.lib")
 using socklen_t = int;
 #define CLOSE_SOCKET closesocket
@@ -92,9 +93,9 @@ bool isSafePath(const std::string& p) {
     return true;
 }
 
-bool readFile(const std::string& path, std::string& out) {
-    std::ifstream f(std::filesystem::path(std::u8string(
-        reinterpret_cast<const char8_t*>(path.data()), path.size())), std::ios::binary);
+// 直接接收 path：Windows 下 path::string() 会转成 ANSI 代码页，含中文的安装路径会读不到文件
+bool readFile(const std::filesystem::path& path, std::string& out) {
+    std::ifstream f(path, std::ios::binary);
     if (!f) return false;
     std::ostringstream ss;
     ss << f.rdbuf();
@@ -236,6 +237,33 @@ bool allowRequest(const std::string& ip) {
     return true;
 }
 
+// 用途：取得静态资源实际落到的路径，供根目录边界检查使用。
+// Windows 原生句柄会解析 junction；部分 MinGW filesystem::canonical 不识别此类链接。
+// 使用方式：传入根目录或目标资源路径；失败写入 ec，成功返回实际路径。
+std::filesystem::path resolvedStaticPath(const std::filesystem::path& path, std::error_code& ec) {
+#ifdef _WIN32
+    // GetFinalPathName 返回 \\?\ 长路径前缀，此时 Win32 不再自动把 URL 的 / 转成 \。
+    // 目标含 assets/... 等多级路径时必须先统一分隔符，再交给 CreateFileW。
+    auto nativePath = path;
+    nativePath.make_preferred();
+    const HANDLE handle = CreateFileW(nativePath.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) { ec = std::error_code(GetLastError(), std::system_category()); return {}; }
+    const DWORD size = GetFinalPathNameByHandleW(handle, nullptr, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (!size) { const DWORD error = GetLastError(); CloseHandle(handle); ec = std::error_code(error, std::system_category()); return {}; }
+    std::wstring finalPath(size, L'\0');
+    const DWORD written = GetFinalPathNameByHandleW(handle, finalPath.data(), size, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    const DWORD error = written ? ERROR_INSUFFICIENT_BUFFER : GetLastError();
+    CloseHandle(handle);
+    if (!written || written >= size) { ec = std::error_code(error, std::system_category()); return {}; }
+    finalPath.resize(written);
+    ec.clear();
+    return std::filesystem::path(finalPath);
+#else
+    return std::filesystem::weakly_canonical(path, ec);
+#endif
+}
+
 // 静态路径：URL 解码后再校验，并确认规范化后仍在静态根目录内
 bool resolveStatic(const std::string& root, const std::string& rel, std::filesystem::path& out) {
     if (rel.empty() || rel[0] != '/') return false;
@@ -248,14 +276,19 @@ bool resolveStatic(const std::string& root, const std::string& rel, std::filesys
         i = j;
     }
     std::error_code ec;
-    const auto base = std::filesystem::weakly_canonical(std::filesystem::path(root), ec);
+    const auto base = resolvedStaticPath(std::filesystem::path(std::u8string(
+        reinterpret_cast<const char8_t*>(root.data()), root.size())), ec);
     if (ec) return false;
     const std::string relNoSlash = rel.substr(1);
-    const auto target = std::filesystem::weakly_canonical(
+    const auto target = resolvedStaticPath(
         base / std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(relNoSlash.data()), relNoSlash.size())), ec);
     if (ec) return false;
-    const std::string b = base.string(), t = target.string();
-    if (t.size() <= b.size() || t.compare(0, b.size(), b) != 0 || t[b.size()] != '/') return false;
+    // 按路径组件确认子目录，避免 Windows 窄字符串编码与分隔符影响包含判断。
+    // 每个根目录组件必须匹配，且目标必须还有下一组件；同名前缀的相邻目录不算子目录。
+    auto basePart = base.begin(), targetPart = target.begin();
+    for (; basePart != base.end(); ++basePart, ++targetPart)
+        if (targetPart == target.end() || *basePart != *targetPart) return false;
+    if (targetPart == target.end()) return false;
     out = target;
     return true;
 }
@@ -348,7 +381,7 @@ void handleConnection(int fd, std::string ip, std::string staticDir, const Handl
         // 地图/立绘已压缩为 WebP：请求 .png 时优先返回同名 .webp
         if (rel.size() > 4 && rel.compare(rel.size() - 4, 4, ".png") == 0) {
             const std::string webp = rel.substr(0, rel.size() - 4) + ".webp";
-            if (resolveStatic(staticDir, webp, file) && readFile(file.string(), content)) {
+            if (resolveStatic(staticDir, webp, file) && readFile(file, content)) {
                 found = true;
                 resp.contentType = "image/webp";
             }
@@ -358,7 +391,7 @@ void handleConnection(int fd, std::string ip, std::string staticDir, const Handl
                 resp.status = 404;
                 resp.body = "找不到文件";
                 resp.contentType = "text/plain; charset=utf-8";
-            } else if (readFile(file.string(), content)) {
+            } else if (readFile(file, content)) {
                 found = true;
                 resp.contentType = mimeOf(rel);
             } else {

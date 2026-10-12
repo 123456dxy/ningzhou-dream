@@ -114,6 +114,8 @@ export function createTianji({ onChange = () => {}, onSettled = () => {}, fetche
     scheduleBattleFocus();
   }
   async function request(path, body) {
+    // 本地测试版关闭了天机大比：不发请求，交给上层的容错分支显示提示
+    if (window.__NZ_LOCAL__) { const failure = new Error('本地测试版已关闭天机大比'); failure.local = true; throw failure; }
     const abort = new AbortController();
     const timeout = globalThis.setTimeout(() => abort.abort(), 15000);
     try {

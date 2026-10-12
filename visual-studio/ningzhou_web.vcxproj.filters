@@ -28,6 +28,7 @@
 <None Include="..\web\mobile.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\mobile.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\numeric-preview.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\nz-mode.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\portraits.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\renown.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\roster.mjs"><Filter>Web UI</Filter></None>

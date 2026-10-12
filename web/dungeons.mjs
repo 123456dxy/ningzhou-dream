@@ -93,15 +93,17 @@ export function renderDungeonDirectory(state) {
 // 流程：按类型与关键词筛选服务端情报，显示费用和可购条件。
 // 调用方式：情报子页传入state与筛选选项。
 // 返回值：情报列表HTML字符串。
-export function renderDungeonIntel(state, { kind = 'all', search = '' } = {}) {
+export function renderDungeonIntel(state, { kind = 'all', search = '', grade = '3' } = {}) {
   const d = state.dungeons || {};
-  const entries = (d.intel || []).filter(item => (kind === 'all' || item.kind === kind)
+  const grades = [...new Set([3, 4, 5, ...(d.intel || []).map(item => Number(item.grade))])].filter(value => Number.isFinite(value) && value >= 3).sort((a, b) => a - b);
+  const entries = (d.intel || []).filter(item => Number(item.grade) >= 3 && (grade === 'all' || Number(item.grade) === Number(grade)) && (kind === 'all' || item.kind === kind)
     && (!search.trim() || `${item.name} ${item.desc || ''} ${item.stageName || ''}`.includes(search.trim())));
   const here = state.player.location === 'tianji';
   return panel('天机阁 · 秘境情报', '每月限购一次', `<div class="dungeon-intel-body">`
     + `<p class="dungeon-intel-lead">购买三阶及以上材料所在的秘境位置。探索分支路线，击败终点守关者，保底取得指定材料 ×10，并选择一份通关主奖励。</p>`
     + (!here ? `<div class="dungeon-intel-away">需在天机阁购买情报。<button data-action="dungeon-locate" data-id="tianji">在舆图定位天机阁</button></div>` : '')
     + `<div class="dungeon-intel-filters"><div class="shop-tabs">${[['all','全部'],['herb','炼丹药材'],['material','炼器材料']].map(([id,label]) => `<button class="${kind === id ? 'active' : ''}" data-dungeon-intel-kind="${id}">${label}</button>`).join('')}</div>`
+    + `<label class="shop-grade-control">品阶 <select data-dungeon-intel-grade><option value="all" ${grade === 'all' ? 'selected' : ''}>全部三阶以上</option>${grades.map(value => `<option value="${value}" ${String(value) === String(grade) ? 'selected' : ''}>${value} 阶</option>`).join('')}</select></label>`
     + `<input type="search" data-dungeon-intel-search value="${esc(search)}" placeholder="搜索材料或境界" aria-label="搜索材料秘境情报"></div>`
     + `<div class="dungeon-intel-list">${entries.map(item => {
       const enabled = here && item.enabled;
@@ -216,11 +218,11 @@ export function renderDungeonRun(state, battleHTML = '') {
 // 流程：有run显示探索，否则按mode显示目录或材料情报。
 // 调用方式：主渲染传入state与模式选项。
 // 返回值：秘境页HTML字符串。
-export function renderDungeons(state, { mode = 'sites', intelKind = 'all', intelSearch = '', battleHTML = '' } = {}) {
+export function renderDungeons(state, { mode = 'sites', intelKind = 'all', intelSearch = '', intelGrade = '3', battleHTML = '' } = {}) {
   if (state.dungeons?.run) return renderDungeonRun(state, battleHTML);
   return heading('宁州秘境', '寻访秘境，选择路线，以神通与遗物应对层层斗法。', '带伤续战 · 临时构筑')
     + `<div class="subtabs"><button class="subtab ${mode === 'sites' ? 'on' : ''}" data-dungeon-view="sites">山河秘境</button>`
     + `<button class="subtab ${mode === 'intel' ? 'on' : ''}" data-dungeon-view="intel">天机阁情报</button></div>`
-    + (mode === 'intel' ? renderDungeonIntel(state, { kind: intelKind, search: intelSearch }) : renderDungeonDirectory(state))
+    + (mode === 'intel' ? renderDungeonIntel(state, { kind: intelKind, search: intelSearch, grade: intelGrade }) : renderDungeonDirectory(state))
     + hintBox(['秘境难度按入境时的境界确定；探索后续房间会沿用当前气血。', '天机阁可购买指定材料的秘境位置，通关终点固定获得材料 ×10。', '天魔眼每 50 年开放 5 年；无尽海每 10 年开放 2 年。']);
 }

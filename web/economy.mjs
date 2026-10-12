@@ -56,6 +56,20 @@ export async function loadForgeOptions(force) {
 // 返回值：无返回值。
 export function invalidateEco() { optCache = null; forgeCache = null; }
 
+export function marketGrade(state, item) {
+  const direct = Number(item.grade);
+  if (Number.isInteger(direct) && direct > 0) return direct;
+  const catalog = item.kind === 'potion' ? state.pillCatalog : item.kind === 'herb' ? state.herbCatalog
+    : item.kind === 'material' ? state.materialCatalog : state.gears;
+  const known = Number((catalog || []).find(entry => entry.id === item.id)?.grade);
+  if (Number.isInteger(known) && known > 0) return known;
+  if (item.kind === 'gear') {
+    const model = /^(sword|seal|armor|bell|pearl)-([1-5])$/.exec(item.id || '');
+    if (model) return Number(model[2]);
+  }
+  return 0;
+}
+
 // 用途：按已选炉数预检服务端提供的单炉材料、灵石与耐久条件。
 // 流程：将权威单炉用量乘以炉数，对照当前库存，收集全部缺口并合并原有禁用原因。
 // 调用方式：炼丹页与开炉点击处理传入当前状态、丹方选项和所选炉数。
@@ -85,9 +99,12 @@ export function brewRequirements(state, recipe, batch = 1) {
 // 流程：按丹方编号读取服务端 pillCatalog，依次显示实际效果、使用限制和丹毒变化。
 // 调用方式：炼丹卡片、进行中的炼丹安排或丹药行囊调用此纯渲染函数。
 // 返回值：已转义的效果 HTML；没有权威条目时返回空字符串。
-export function renderPillEffect(state, id) {
+export function renderPillEffect(state, id, { catalog = false } = {}) {
   const pill = (state.pillCatalog || []).find(item => item.id === id);
   if (!pill) return '';
+  if (catalog) return `<div class="pill-effect" data-pill-effect="${esc(id)}" data-pill-catalog-effect><strong>丹药完整效果</strong><p>${esc(pill.catalogEffect || pill.baseEffect || '完整效果暂未加载')}</p>`
+    + (pill.usage ? `<small>${esc(pill.usage)}</small>` : '')
+    + (pill.basePoison != null ? `<small>基础丹毒 ${esc(pill.basePoison)}</small>` : '') + `</div>`;
   return `<div class="pill-effect" data-pill-effect="${esc(id)}"><strong>当前服用效果</strong><p>${esc(pill.effect || pill.baseEffect)}</p>`
     + (pill.usage ? `<small>${esc(pill.usage)}</small>` : '')
     + `<small>服用后丹毒 ${esc(pill.poisonAfter)}（本次 ${pill.poisonDelta >= 0 ? '+' : ''}${esc(pill.poisonDelta)}）</small>`

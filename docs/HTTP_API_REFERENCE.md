@@ -2,22 +2,23 @@
 
 核对日期：2026-10-12。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
 
-责任边界：我们维护核心规则与桌面 UI；账号、联机传输、天机大比由另一位成员维护。服务层和 Tianji 清单仅供对接参考，本轮保持这些实现与原位置不变。
+责任边界：我们维护核心规则与桌面 UI；账号、联机传输、天机大比由另一位成员维护。服务层增加可选本地启动模式与只读模式探测；默认公网模式和 Tianji Store 业务实现保持原样。
 
 ## 去重统计
 
 | 分派归属 | 精确端点 | 查询 | 写操作 | ReplaceGame | Persistence |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 核心 RouteInfo 表 | 85 | 20 ReadOnly | 59 Mutation | 3 | 3 |
-| 服务层账号/社区（排除转发Tianji） | 7 | 3 | 4 | 0 | 0 |
+| 服务层模式/账号/社区（排除转发Tianji） | 8 | 4 | 4 | 0 | 0 |
 | Tianji Store | 5 | 2 | 3 | 0 | 0 |
-| 总计（路径去重） | **97** | **25** | **66** | **3** | **3** |
+| 总计（路径去重） | **98** | **26** | **66** | **3** | **3** |
 
-核心四类取自真实 `RouteEffect`。服务层/Tianji 的查询与写操作按用途列示，它们没有使用该 enum；查询可维护会话、缓存或天机窗口记录，不能据此推断服务器完全没有 I/O。`/api/tianji/board` 在 web_main 与 Store 均出现，但最终归 Tianji，仅计一次。web_main 的精确拦截共8条，其中7条为服务专属。
+核心四类取自真实 `RouteEffect`。服务层/Tianji 的查询与写操作按用途列示，它们没有使用该 enum；查询可维护会话、缓存或天机窗口记录，不能据此推断服务器完全没有 I/O。`/api/tianji/board` 在 web_main 与 Store 均出现，但最终归 Tianji，仅计一次。web_main 的精确分派共9条，其中8条为服务专属。
 
 ## 请求、登录与通用返回
 
-- 多人 Web 服务中，全部85个核心端点均需有效 `nz_sid` Cookie。只有nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
+- 多人 Web 服务中，全部85个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
+- 显式 `--local` 启动时强制监听 `127.0.0.1`，使用内置本地会话，空档按默认配置开局。账号、反馈、排行榜、导出及全部 `/api/tianji/` 返回404；不初始化或读取 Tianji Store。默认不加此参数，继续使用上述公网鉴权。
 - 核心输入从 JSON **请求正文**读取，不从URL查询串读取；需要参数的查询建议使用POST JSON。表中未列默认值的字符串参数缺省为`""`，随后由对应规则校验；“无”表示没有业务输入。非空正文必须是JSON对象。
 - 所有20条核心 ReadOnly 端点均支持 **GET和POST**；其余核心端点只支持POST。成功的核心动作通常返回 `{ok:true,state:{...}}`，某些动作附加text/report；可能出现checkpointWarning。state包括玩家、功法、世界、经济、社交、秘境与恢复点视图。
 - `/api/state` 的核心处理在GET与POST下都纯只读：不推进时钟或RNG，不更新自动快照，也不写第4槽；未开局返回`{ok:true,hasGame:false}`。多人服务仍有玩家加载/续玩持久化、会话维护与Tianji.observe等外层维护，并在完整state上补充`state.tianji`及可能的tianjiWarning。
@@ -51,10 +52,11 @@ ReadOnly跳过人生动作阻塞；ReplaceGame（new/import/load）可替换人�
 
 未知路径按Mutation处理，不能凭dungeon前缀绕过保护。天机留影挑战进行中，Web服务另外把全部核心写动作（包括换档、保存）拦为409；20条核心查询仍可用。Tianji动作操作独立挑战存储，不使用人生的battle/turn。
 
-## 服务层账号与社区（7条）
+## 服务层模式、账号与社区（8条）
 
 | 路径 | 方法（当前实现） | 登录 | 主要输入/默认值 | 返回与副作用 |
 | --- | --- | --- | --- | --- |
+| `/api/mode` | 未限定；通常GET | 否 | 无 | `ok,local,nickname`；只读，本地模式 nickname 为“本地道友”，公网模式为空 |
 | `/api/nickinfo` | 未限定；通常GET | 否 | URL query `nickname` | ok/exists/hasPassword；查询账号目录与密码记录 |
 | `/api/login` | POST | 否 | JSON nickname/password | 去除道号首尾空格；无密码记录则首次设置；返回nickname/hasGame/passwordSet并设置nz_sid Cookie |
 | `/api/logout` | 未限定；建议POST | 否 | Cookie nz_sid（可无） | 删除对应会话，清Cookie；ok:true |
@@ -203,14 +205,14 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 - `state.player.combatReference`给出hp/hpMax、开局mana、manaRegen/manaCap、shield、swordQi、reduction、speed、damageBuff；日常health另为0–100百分制。
 - `arts/spells[].preview`与携带spellList/mandatorySpells含damage/shield/heal/healPotential、cost、energy/manaGain、qi/draw/drawNext、hpMaxChange/manaRegenDelta、storedMana、damageBonusPct/reductionPct/guardPct、statuses、conditions。known/learned/equipped/canEquip/canUnequip等用于学习与携带资格。
 - `state.gears[].ability.preview`、passive.delta与canEquip来自局部装备投影；actions包含enabled/reason/costStones/returnStones。forge-preview补充材料角色与缺口、灵石缺口、blockers以及inscribedAbility/inscribedPassive。
-- `state.pillCatalog[]`覆盖全部丹药，包括effect/effectValue/baseEffect/usage、owned/used/tolerance、poisonAfter/poisonDelta、requiredStage/requiredRealm和enabled/reason；breakthrough给出真实chance/cost/days/failureLoss及消耗说明。
+- `state.pillCatalog[]`覆盖全部丹药，包括effect/effectValue/baseEffect/catalogEffect/usage、owned/used/tolerance、poisonAfter/poisonDelta、requiredStage/requiredRealm和enabled/reason；breakthrough给出真实chance/cost/days/failureLoss及消耗说明。`catalogEffect` 为当前境界下不受现有属性、耐药与库存截断的完整能力；`effect` 仍为当前真实服用结果，不能互换。`market[].grade` 来自物品定义，未知为0；丹药市场与 `brewOptions[]` 也提供 `catalogEffect`，后者增加真实配方品阶。
 - battle视图的hand/artifacts使用实时battlePreview，enemyMana/enemyMaxMana与intentDescription/intentDamage/intentShield/intentHeal/intentSpells反映当前战斗；Tianji encounter复用公开battleView。
 
 业务标识采用服务端实际id；界面展示名称、中文兼容值与HTTP字段不应被用于推导或复制数值公式。JSON中直接使用上述已存在字段，前端别名如isLearned不构成额外HTTP端点。
 
 ## 精确路径核对规则
 
-本表97条路径全部在实际分派中存在，逐行路径无重复，核心表85条全覆盖。服务层的前缀转发、HTML页面、assets文件与JSON字段不是API端点；不同请求方法和同一路径在多层出现也不重复计数。新增端点需同时更新RouteInfo（核心）、真实handler与本表，再复核方法/登录/阻塞和错误契约。
+本表98条路径全部在实际分派中存在，逐行路径无重复，核心表85条全覆盖。服务层的前缀转发、HTML页面、assets文件与JSON字段不是API端点；不同请求方法和同一路径在多层出现也不重复计数。新增端点需同时更新RouteInfo（核心）、真实handler与本表，再复核方法/登录/阻塞和错误契约。
 
 ## 工坊整单补料（本版新增）
 

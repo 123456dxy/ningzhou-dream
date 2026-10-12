@@ -1578,3 +1578,15 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 #bt-panel.bt-flash .chronicle-panel { animation: bt-flash 1.6s ease-out 2; }
 @keyframes bt-flash { 0% { box-shadow: 0 0 0 3px #d2b468; } 100% { box-shadow: 0 0 0 0 transparent; } }
 .hero-time .bt-chip { border: 1px solid #c9a457; background: #f6ecd0; color: #7a5a1f; border-radius: 12px; padding: 2px 12px; font-size: 11px; animation: bt-glow 2.2s ease-in-out infinite; }
+@media (min-width:761px) {
+  [data-page="workshop"] .craft-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));align-items:start;gap:12px}
+  [data-page="workshop"] .craft-card{display:flex;flex-direction:column;justify-content:flex-start;min-width:0;white-space:normal;gap:7px}
+  [data-page="workshop"] .craft-card .craft-top{gap:8px;flex-wrap:wrap;margin:0}
+  [data-page="workshop"] .craft-card .rate{white-space:nowrap}
+  [data-page="workshop"] .craft-card .pill-effect{padding:3px 0}
+  [data-page="workshop"] .craft-card p{margin:0}
+  .market-catalog-controls{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:center}
+  .market-catalog-controls .shop-tabs{flex-wrap:wrap}
+  .shop-grade-control{font-size:12px;white-space:nowrap}
+  .shop-grade-control select{padding:7px 10px;background:var(--surface);border:1px solid var(--line);border-radius:5px;color:var(--ink)}
+}

@@ -5,6 +5,10 @@
 let current = null;
 let pending = null;
 
+// 本地测试版（服务端 --local）：跳过道号登录，直接用内置道号进入。
+function localMode() { return window.__NZ_LOCAL__ === true; }
+function localNick() { return window.__NZ_LOCAL_NICK || '本地道友'; }
+
 const NICK_RE = /^[A-Za-z0-9_\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]{1,16}$/u;
 
 function overlay() {
@@ -145,6 +149,7 @@ const rawFetch = window.fetch.bind(window);
 // 任何接口返回 401：弹出登录框，登录后自动重试一次
 window.fetch = async (input, init) => {
   const res = await rawFetch(input, init);
+  if (localMode()) return res;      // 本地测试版没有登录，不做 401 拦截
   const url = typeof input === 'string' ? input : input?.url || '';
   if (res.status === 401 && url.includes('/api/') && !url.includes('/api/login')) {
     current = null;
@@ -157,6 +162,7 @@ window.fetch = async (input, init) => {
 
 // 启动时确保已登录；返回 { nickname, hasGame }
 export async function ensureLogin() {
+  if (localMode()) return { ok: true, local: true, nickname: localNick(), hasGame: true };
   try {
     const r = await rawFetch('/api/whoami');
     if (r.ok) {

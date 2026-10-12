@@ -21,7 +21,7 @@ import { renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSect
 import * as artifacts from '../web/artifacts.mjs';
 import { renderNumericPreview } from '../web/numeric-preview.mjs';
 import { renderRenownSources } from '../web/renown.mjs';
-import { renderEconomy, forgeRequirements, brewRequirements, renderPillEffect } from '../web/economy.mjs';
+import { renderEconomy, forgeRequirements, brewRequirements, renderPillEffect, marketGrade } from '../web/economy.mjs';
 import { renderInventoryPanel } from '../web/inventory-panel.mjs';
 import { renderTaskPanel } from '../web/task-panel.mjs';
 import { renderCraftSupply, renderSalvageQuote } from '../web/workshop.mjs';
@@ -36,8 +36,8 @@ const state = {
   arts: { points: 3, nodes: ['0-1'], spells: ['one'], exp: { 金: 100 }, focus: '金', mods: { cult: 1 },
     manualList: [], manuals: {}, herbs: {}, potions: {}, durability: 40 },
   nearby: [{ id: 'friend', name: '道友', realmName: '炼气初期' }],
-  market: [{ kind: 'gear', id: 'blade-1', name: '剑', price: 50 }],
-  brewOptions: Array.from({ length: 15 }, (_, n) => ({ id: `r${n}`, name: `丹方${n}`, enabled: true, chance: .5, stoneCost: 8, days: 5 })),
+  market: [{ kind: 'gear', id: 'blade-1', name: '剑', grade: 1, price: 50 }],
+  brewOptions: Array.from({ length: 15 }, (_, n) => ({ id: `r${n}`, name: `丹方${n}`, grade: 1, enabled: true, chance: .5, stoneCost: 8, days: 5 })),
   manualSources: Array.from({ length: 14 }, (_, n) => ({ id: `m${n}`, name: `功法${n}`, city: 'wuling', stage: 0, price: 10 })),
   furnaces: [], gears: [], inCity: true,
   locations: [
@@ -231,7 +231,7 @@ const document = { querySelector: element, getElementById(id) { return element('
   body: { setAttribute() {}, removeAttribute() {} } };
 const requests = [];
 const context = { ...tianji, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
-  renderSectMentors, renderSectTasks, brewRequirements, renderPillEffect, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
+  renderSectMentors, renderSectTasks, brewRequirements, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
   fetch: async (path, options) => { requests.push({ path, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; } };
@@ -242,7 +242,7 @@ for (const name of ['ningzhou-atlas']) {
 }
 let source = readFileSync(join(rootDir, 'web', 'app.mjs'), 'utf8').replace(/^import[\s\S]*?;\r?\n/gm, '');
 source = source.slice(0, source.indexOf('(async function boot()'));
-source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = { viewMarket, viewBattle, viewMap, renderSidebar, call, manualSourceRows, setSub, setTab:next=>tab=next, getTab:()=>tab, getState: () => S, focusMap: (id, mode) => { mapFocus = id; mapModes[id] = mode; } };`;
+source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = { viewMarket, viewBattle, viewMap, renderSidebar, call, manualSourceRows, setSub, setTab:next=>tab=next, setShopKind:next=>shopKind=next, getTab:()=>tab, getState: () => S, focusMap: (id, mode) => { mapFocus = id; mapModes[id] = mode; } };`;
 vm.runInNewContext(source, context);
 context.api.renderSidebar();
 verify(element('#player-card').innerHTML.includes('<strong>16</strong><span>岁</span>'), '年龄显示单位而不粘连月份');
@@ -254,7 +254,18 @@ const brew = context.api.viewMarket();
 verify(brew.includes('丹方14'), '完整可炼丹方可访问，不截断为前九条');
 verify(brew.includes('data-brew-batch'), '批量炼丹入口可访问');
 context.api.setTab('market');
+verify(!context.api.viewMarket().includes('功法13') && !context.api.viewMarket().includes('data-action="trade-stock"'), '坊市普通分类不附加书坊或突破物品长列表');
+context.api.setShopKind('book');
 verify(context.api.viewMarket().includes('功法13'), '完整书坊可访问，不截断为前六条');
+context.api.setShopKind('stock');
+verify(context.api.viewMarket().includes('data-action="trade-stock"') && !context.api.viewMarket().includes('功法13'), '突破物品集中在独立坊市分类');
+context.api.setShopKind('herb');
+const clippedPill = {pillCatalog:[{id:'5001',effect:'当前回复气血0点',baseEffect:'回复气血15点',catalogEffect:'回复气血20点',basePoison:3,poisonAfter:3,poisonDelta:3}]};
+verify(renderPillEffect(clippedPill,'5001',{catalog:true}).includes('回复气血20点') && !renderPillEffect(clippedPill,'5001',{catalog:true}).includes('回复气血0点'), '丹药目录优先完整catalogEffect，不用健康度截断的当前回复');
+verify(renderPillEffect(clippedPill,'5001').includes('当前回复气血0点'), '实际服用详情保留当前健康度对应的真实效果');
+verify(['sword','seal','armor','bell','pearl'].every(shape=>marketGrade({gears:[]},{kind:'gear',id:shape+'-1'})===1), '旧接口未拥有的五种商城法器按稳定模型ID补齐一阶');
+verify(marketGrade({gears:[]},{kind:'gear',id:'forge-4143-1'})===0&&marketGrade({gears:[]},{kind:'gear',id:'unknown-1'})===0, '商城品阶回退不误判自炼ID或未知器型');
+verify(marketGrade({pillCatalog:[{id:'5001',grade:1}]},{kind:'potion',id:'5001'})===1&&marketGrade({gears:[]},{kind:'gear',id:'sword-1',grade:2})===2, '旧丹药接口使用权威目录，新grade字段优先于模型回退');
 const ownedBooks = context.api.manualSourceRows([{ id: 'owned', name: '抄本', owned: true, canLearn: true, learnDays: 20, learnCost: 12 }], 'book-buy');
 verify(ownedBooks.includes('data-action="learn"') && ownedBooks.includes('开始修习'), '购得抄本后显示修习入口');
 context.api.getState().battle = { hp: 100, max: 100, shield: 0, enemy: '敌方', enemyHp: 100, enemyMax: 100, enemyShield: 0,
@@ -389,9 +400,11 @@ const siteDirectory = dungeons.renderDungeonDirectory(dungeonState);
 verify(siteDirectory.includes('碧泉洞天') && siteDirectory.includes('灵叶草 ×10') && !siteDirectory.includes('隐秘高阶灵矿'), '秘境目录只显示已知位置，目标材料终点十份');
 verify(siteDirectory.includes('第 11 年开放') && /data-id="sea" disabled/.test(siteDirectory), '周期秘境未开门时显示下次年份并禁用入口');
 const tianjiState = {...dungeonState,player:{...dungeonState.player,location:'tianji'}};
-const intelHTML = dungeons.renderDungeonIntel(tianjiState,{kind:'material'});
+const intelHTML = dungeons.renderDungeonIntel(tianjiState,{kind:'material',grade:'4'});
 verify(intelHTML.includes('寒晶秘境') && intelHTML.includes('境界不足') && !intelHTML.includes('灵叶草秘境'), '天机阁情报可按炼器材料筛选且说明境界限制');
 verify(dungeons.renderDungeonIntel(dungeonState).includes('需先抵达天机阁') && /data-action="dungeon-intel"[^>]*disabled/.test(dungeons.renderDungeonIntel(dungeonState)), '远程目录不可购买情报，显示前往天机阁入口');
+verify(dungeons.renderDungeonIntel(tianjiState).includes('灵叶草秘境') && !dungeons.renderDungeonIntel(tianjiState).includes('寒晶秘境'), '天机阁情报默认只显示三阶');
+verify(!dungeons.renderDungeonIntel(tianjiState,{kind:'herb',grade:'4',search:'寒晶'}).includes('寒晶秘境'), '情报品阶、类型与搜索同时过滤，不绕过类型条件');
 const mapWithSite = renderAtlas(dungeonState);
 verify(mapWithSite.includes('atlas-dungeon-pin') && mapWithSite.includes('data-location-dungeons') && !mapWithSite.includes('隐秘高阶灵矿'), '地图标出开放已知秘境，并在地点详情显示入口');
 verify(caveUI.caveSupplyAccess(dungeonState,'qi',1).enabled && !caveUI.caveSupplyAccess(dungeonState,'qi',2).enabled

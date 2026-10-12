@@ -13,11 +13,12 @@
 import { createBuildPanel } from './build-panel.mjs';
 import { createTianji, renderTianjiReminder } from './tianji.mjs';
 import { ensureLogin } from './login.mjs';
+import { mode, hideOnlineEntries } from './nz-mode.mjs';
 import { loadRoster, invalidateRoster, renderRoster, bindRoster } from './roster.mjs';
 import { heading, panel, layout, asideBlock, timeline, yearControls, hintBox } from './shell.mjs';
 import { renderDaos, renderArtsAside, loadNodes, invalidateNodes,
          loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds } from './arts.mjs';
-import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect } from './economy.mjs';
+import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect, marketGrade } from './economy.mjs';
 import { loadLegacy, invalidateLegacy, draftTalents, renderEnding, renderLegacyPanel, renderDraftPanel } from './legacy.mjs';
 import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks, renderAchievements } from './sects.mjs';
 import { renderRenownPanel, renderRenownBar, renownChip } from './renown.mjs';
@@ -65,6 +66,16 @@ function subOf(tabKey, def) { return subTab[tabKey] || def; }
 // 返回值：无返回值。
 function setSub(tabKey, id) { subTab[tabKey] = id; }
 let shopKind = 'herb';   // 坊市当前分类
+let shopGrades = { herb: '1', material: '1', potion: '1', gear: '1' };
+let brewGrade = '1';
+try {
+  const savedGrades = JSON.parse(localStorage.getItem('nz-desktop-market-grades') || '{}');
+  for (const kind of Object.keys(shopGrades)) if (savedGrades[kind] === 'all' || /^[1-9]\d*$/.test(savedGrades[kind] || '')) shopGrades[kind] = savedGrades[kind];
+  const savedBrewGrade = localStorage.getItem('nz-desktop-brew-grade');
+  if (savedBrewGrade === 'all' || /^[1-9]\d*$/.test(savedBrewGrade || '')) brewGrade = savedBrewGrade;
+  const savedKind = localStorage.getItem('nz-desktop-market-kind');
+  if (['herb', 'material', 'potion', 'gear', 'book', 'stock'].includes(savedKind)) shopKind = savedKind;
+} catch { /* 本机偏好存储不可用时默认一阶。 */ }
 let shopQty = {};        // 各货品的购买数量
 let feed = [];           // 动作流（本会话的操作反馈）
 let lastReport = null;   // 上次推进的报告
@@ -84,6 +95,11 @@ let removalSelection = null;
 let dungeonView = 'sites';
 let dungeonIntelKind = 'all';
 let dungeonIntelSearch = '';
+let dungeonIntelGrade = '3';
+try {
+  const savedIntelGrade = localStorage.getItem('nz-desktop-intel-grade');
+  if (savedIntelGrade === 'all' || (/^\d+$/.test(savedIntelGrade || '') && Number(savedIntelGrade) >= 3)) dungeonIntelGrade = savedIntelGrade;
+} catch { /* 默认只显示三阶情报。 */ }
 let checkpointNotice = '';
 let inventoryKind = 'all';
 if (legacyHashParts[0] === 'equipment') inventoryKind = 'gear';
@@ -103,6 +119,8 @@ function tabFromHash() {
   if ((key === 'market' && ['brew', 'kit'].includes(sub)) || (key === 'economy' && sub === 'forge')) return 'workshop';
   const aliases = { poison: 'inventory', equipment: 'inventory', forge: 'workshop', brew: 'workshop', kit: 'workshop', tasks: 'economy' };
   const next = aliases[key] || key;
+  // 本地测试版没有天机大比，地址栏里残留的 #tianji 回到岁月纪事
+  if (window.__NZ_LOCAL__ && next === 'tianji') return 'chronicle';
   return ['chronicle', 'map', 'arts', 'society', 'roster', 'quests', 'market', 'economy', 'workshop', 'inventory', 'tianji', 'dungeon'].includes(next) ? next : 'chronicle';
 }
 const tianji = createTianji({
@@ -312,7 +330,12 @@ function breakthroughBlock() {
 // 调用方式：侧栏刷新或天机状态变化时调用。
 // 返回值：无返回值。
 function updateTianjiReminder() {
-  $('#tianji-reminder').innerHTML = renderTianjiReminder(S.tianji ? { ...S.tianji, hasEncounter: tianji.status ? tianji.status.encounter?.state === 'active' : S.tianji.hasEncounter } : null);
+  const host = $('#tianji-reminder');
+  if (!host) return;
+  // 本地测试版没有天机大比，提醒始终留空
+  if (window.__NZ_LOCAL__) { host.innerHTML = ''; host.hidden = true; return; }
+  host.hidden = false;
+  host.innerHTML = renderTianjiReminder(S.tianji ? { ...S.tianji, hasEncounter: tianji.status ? tianji.status.encounter?.state === 'active' : S.tianji.hasEncounter } : null);
 }
 // 用途：刷新人物和天下摘要。
 // 流程：读取当前S并重绘人物、眼前道友、进度、日期及天下概况。
@@ -460,7 +483,7 @@ function viewChronicle() {
   + `${btBlock ? escape(btBlock) : '开始闭关突破'}</button>`
   + `<button data-action="stipend">领俸禄（${S.bonds.stipendBalance}）</button>`
   + `<button data-action="save">保存</button>`
-  + `<button data-action="export-save">导出行卷</button>`
+  + (window.__NZ_LOCAL__ ? '' : `<button data-action="export-save">导出行卷</button>`)
   + `<button data-action="import-save">导回行卷</button>`
   + `</div></div>`) + `</div>`;
 
@@ -1276,7 +1299,7 @@ function viewMarket() {
   const a = S.arts;
 
   // ---- 坊市买卖 ----
-  const KINDS = [['herb', '药材'], ['material', '炼器材料'], ['potion', '丹药'], ['gear', '法器']];
+  const KINDS = [['herb', '药材'], ['material', '炼器材料'], ['potion', '丹药'], ['gear', '法器'], ['book', '功法 / 书坊'], ['stock', '突破物品']];
   const tabs = KINDS.map(([k, name]) =>
     `<button class="${shopKind === k ? 'active' : ''}" data-shop="${k}">${name}</button>`).join('');
 
@@ -1284,7 +1307,8 @@ function viewMarket() {
   if (!S.inCity) {
     shopBody = `<div class="empty">此地没有坊市。去「宁州舆图」前往城池即可买卖。</div>`;
   } else {
-    const items = (S.market || []).filter(i => i.kind === shopKind);
+    const items = (S.market || []).filter(i => i.kind === shopKind).map(i => ({ ...i, grade: marketGrade(S, i) }))
+      .filter(i => shopGrades[shopKind] === 'all' || Number(i.grade) === Number(shopGrades[shopKind]));
     shopBody = items.length
       ? `<div class="shop-list" style="padding:14px 22px 18px">` + items.map(i => {
           const qty = i.kind === 'gear' ? 1 : (shopQty[i.id] ?? 1);
@@ -1293,11 +1317,12 @@ function viewMarket() {
           const available = afford && i.enabled !== false && i.locked !== true;
           return `<div class="shop-row">
             <div><div class="item-name">${escape(i.name)}</div>
-            <div class="item-sub">${escape(i.desc || '')}`
+            <div class="item-sub">${escape(i.kind === 'potion' ? '' : i.desc || '')}`
+            + `${i.grade ? ` · ${i.grade} 阶` : ''}`
             + `${i.owned ? ` · 已有 ${i.owned}` : ''}`
             + `${i.stageName ? ` · 需${escape(i.stageName)}` : ''}`
             + `${i.reason ? `<span class="market-item-reason">${escape(i.reason)}</span>` : ''}`
-            + `</div></div>
+            + `</div>${i.kind === 'potion' ? renderPillEffect(S, i.id, { catalog: true }) : ''}</div>
             <div class="price">${i.price} 灵石</div>
             <div class="qty">
               <button data-qty="${i.id}" data-delta="-1" ${i.kind === 'gear' || qty === 1 ? 'disabled' : ''}>−</button>
@@ -1336,7 +1361,9 @@ function viewMarket() {
     </div></div>` : '';
 
   // ---- 炼丹 ----
-  const recipes = (S.brewOptions || []).filter(o => !brewSearch || `${o.name} ${o.desc} ${o.reason}`.includes(brewSearch.trim()));
+  const recipeCatalog = (S.brewOptions || []).map(o => ({ ...o, grade: o.grade ?? (S.pillCatalog || []).find(pill => pill.id === o.id)?.grade }));
+  const recipes = recipeCatalog.filter(o => (brewGrade === 'all' || Number(o.grade) === Number(brewGrade))
+    && (!brewSearch || `${o.name} ${o.desc} ${o.reason}`.includes(brewSearch.trim())));
   const quotedRecipes = recipes.map(o => ({ ...o, batchQuote: brewRequirements(S, o, brewBatch) }));
   if (!recipes.some(recipe => recipe.id === brewSupplyRecipeId)) brewSupplyRecipeId = recipes[0]?.id || '';
   const brew = quotedRecipes.filter(o => o.batchQuote.enabled);
@@ -1346,8 +1373,7 @@ function viewMarket() {
   + `<span class="rate ${o.chance < 0.4 ? 'low' : ''}">成丹 ${pct(o.chance)}</span></div>`
   + `<div class="craft-cost">开炉 ${o.stoneCost} 灵石 · ${o.days} 天</div>`
   + `<div class="craft-cost">整批 ${brewBatch} 炉：${o.batchQuote.cost} 灵石 · ${o.batchQuote.days} 天 · 每炉成丹 ${o.output} 枚</div>`
-  + `<p class="craft-desc">${escape(o.desc)}</p>`
-  + renderPillEffect(S, o.id)
+  + renderPillEffect(S, o.id, { catalog: true })
   + (o.batchQuote.rows.length ? `<p class="craft-materials">${o.batchQuote.rows.map(item => `${escape(item.name)}：需 ${item.required}，有 ${item.owned}${item.missing ? `，缺 ${item.missing}` : ''}`).join('；')}</p>` : '')
   + (o.batchQuote.reason ? `<p class="card-why">${escape(o.batchQuote.reason)}</p>` : '')
   + `</button>`).join('')
@@ -1435,8 +1461,8 @@ function viewMarket() {
 
   if (sub === 'brew') {
     return mHead + mTabs
-      + layout(panel('开炉炼丹', `${(S.brewOptions || []).length} 张丹方`, `<div style="padding:14px 22px 18px">
-          <div class="recipe-controls"><label>查丹方 <input data-brew-search type="search" placeholder="丹方名称、效果或药材" value="${escape(brewSearch)}"></label>
+      + layout(panel('开炉炼丹', `${brewGrade === 'all' ? '全部品阶' : brewGrade + ' 阶'} · ${recipes.length} 张丹方`, `<div style="padding:14px 22px 18px">
+          <div class="recipe-controls"><label>品阶 <select data-brew-grade><option value="all" ${brewGrade === 'all' ? 'selected' : ''}>全部品阶</option>${[1, 2, 3, 4, 5].map(grade => `<option value="${grade}" ${String(grade) === brewGrade ? 'selected' : ''}>${grade} 阶</option>`).join('')}</select></label><label>查丹方 <input data-brew-search type="search" placeholder="丹方名称、效果或药材" value="${escape(brewSearch)}"></label>
           <label>开炉次数 <select data-brew-batch>${[1, 3, 5, 10].map(n => `<option value="${n}" ${n === brewBatch ? 'selected' : ''}>${n} 炉</option>`).join('')}</select></label></div>
           <p class="panel-note">下方灵石、耗时为每炉投入；批量炼制会逐炉扣料，遇事暂停。</p>
           <div class="recipe-controls"><label>一键补料丹方 <select data-brew-supply-recipe>${recipes.map(recipe => `<option value="${escape(recipe.id)}" ${recipe.id === brewSupplyRecipeId ? 'selected' : ''}>${escape(recipe.name)}</option>`).join('')}</select></label></div>
@@ -1452,10 +1478,13 @@ function viewMarket() {
     return mHead + mTabs
       + panel('丹炉', `当前耐久 ${a.durability} / 40`, `<div class="task-content">${furnaces}<button data-action="furnace/repair">修炉（20 灵石）</button></div>`);
   }
+  const selectedShopBody = !S.inCity ? shopBody : shopKind === 'book'
+    ? `<div class="task-content">${bookRows || '<div class="empty">此地暂无功法抄本交易。</div>'}</div>`
+    : shopKind === 'stock' ? stock : shopBody;
+  const gradeControls = ['book', 'stock'].includes(shopKind) ? '' : `<label class="shop-grade-control">品阶 <select data-shop-grade><option value="all" ${shopGrades[shopKind] === 'all' ? 'selected' : ''}>全部品阶</option>${[1, 2, 3, 4, 5].map(grade => `<option value="${grade}" ${String(grade) === shopGrades[shopKind] ? 'selected' : ''}>${grade} 阶</option>`).join('')}</select></label>`;
   return mHead + mTabs
        + layout(panel('坊市', '', `<div style="padding:14px 22px 0">
-           <div class="shop-tabs">${tabs}</div><p class="market-material-note">普通坊市只供应一、二阶材料；高阶材料可在天机阁购买秘境位置，通关取得 ×10。</p></div>${shopBody}${stock}`), aside)
-       + `<div style="margin-top:18px">${panel('书坊', '购入抄本后可到洞府修习', `<div class="task-content">${bookRows || '<div class="empty">此地暂无功法抄本交易。</div>'}</div>`)}</div>`;
+           <div class="market-catalog-controls"><div class="shop-tabs">${tabs}</div>${gradeControls}</div>${['herb', 'material'].includes(shopKind) ? '<p class="market-material-note">普通坊市只供应一、二阶材料；高阶材料可在天机阁购买秘境位置，通关取得 ×10。</p>' : ''}</div>${selectedShopBody}`), aside);
 }
 // ------------------------------------------------------------
 // 用途：展示实时斗法信息。
@@ -1771,7 +1800,7 @@ async function openSettings() {
       + `<p>${s.exists ? `${escape(s.name)} · ${escape(s.realm)} · 第 ${s.year + 1} 年 · ${s.age} 岁` : '空存档位'}</p></div>`
       + `<div>${s.automatic ? '<span class="automatic-slot-label">自动写入 · 只读</span>' : `<button data-action="save" data-slot="${s.slot}" ${S ? '' : 'disabled'}>保存${s.exists ? '覆盖' : ''}</button>`}`
       + `<button data-action="load-slot" data-slot="${s.slot}" ${s.exists ? '' : 'disabled'}>读取</button></div></div>`).join('')
-    + `<div class="settings-row"><button data-action="export-save" ${S ? '' : 'disabled'}>导出行卷</button>`
+    + `<div class="settings-row">${window.__NZ_LOCAL__ ? '' : `<button data-action="export-save" ${S ? '' : 'disabled'}>导出行卷</button>`}`
     + `<button data-action="import-save">导回行卷</button></div></div>`;
   if (!dlg.open) dlg.showModal();
 }
@@ -1873,7 +1902,7 @@ function render() {
       society: viewSociety, roster: viewRoster, quests: viewQuests,
       market: viewMarket, workshop: viewMarket, economy: viewEconomy,
       inventory: () => renderInventoryPanel(S, { kind: inventoryKind, grade: inventoryGrade, sub: subOf('inventory', 'items'), materials: forgeOpts.materials, poisonHTML: poisonBox() }), tianji: () => tianji.render(),
-      dungeon: () => renderDungeons(S, { mode: dungeonView, intelKind: dungeonIntelKind, intelSearch: dungeonIntelSearch }),
+      dungeon: () => renderDungeons(S, { mode: dungeonView, intelKind: dungeonIntelKind, intelSearch: dungeonIntelSearch, intelGrade: dungeonIntelGrade }),
     };
     $('#workspace').innerHTML = (views[tab] || viewChronicle)();
     const viewport = document.querySelector('[data-map-viewport]');
@@ -2109,7 +2138,7 @@ document.addEventListener('click', async e => {
   const intelKind = e.target.closest('[data-dungeon-intel-kind]');
   if (intelKind) { dungeonIntelKind = intelKind.dataset.dungeonIntelKind; render(); return; }
   const shopTab = e.target.closest('[data-shop]');
-  if (shopTab) { shopKind = shopTab.dataset.shop; render(); return; }
+  if (shopTab) { shopKind = shopTab.dataset.shop; try { localStorage.setItem('nz-desktop-market-kind', shopKind); } catch {} render(); return; }
 
   // 分类筛选只更新本地纪事视图，不请求服务端或推进时间。
   const logTab = e.target.closest('[data-logfilter]');
@@ -2668,6 +2697,12 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'new': {
+      // 本地测试版没有建号面板：直接用默认天赋与属性再开一世
+      if (window.__NZ_LOCAL__) {
+        const r = await call('new', { name: window.__NZ_LOCAL_NICK || '本地道友', gender: '女', seed: 0 });
+        if (r && r.state) { S = r.state; render(); }
+        break;
+      }
       // 走建号面板：选天赋、分属性、掷先天气运。
       // 之前这里用 prompt 只问了个名字，天赋全是默认值。
       openBuildPanel({ firstTime: false });
@@ -2720,6 +2755,9 @@ document.addEventListener('change', async e => {
   }
   if (e.target.matches('[data-plan-select]')) { await call('plan', { id: e.target.value }); return; }
   if (e.target.matches('[data-inventory-grade]')) { inventoryGrade = e.target.value; render(); return; }
+  if (e.target.matches('[data-shop-grade]')) { shopGrades[shopKind] = e.target.value; try { localStorage.setItem('nz-desktop-market-grades', JSON.stringify(shopGrades)); } catch {} render(); return; }
+  if (e.target.matches('[data-dungeon-intel-grade]')) { dungeonIntelGrade = e.target.value; try { localStorage.setItem('nz-desktop-intel-grade', dungeonIntelGrade); } catch {} render(); return; }
+  if (e.target.matches('[data-brew-grade]')) { brewGrade = e.target.value; craftSupplyQuote = null; try { localStorage.setItem('nz-desktop-brew-grade', brewGrade); } catch {} render(); return; }
   if (e.target.matches('[data-brew-supply-recipe]')) { brewSupplyRecipeId = e.target.value; craftSupplyQuote = null; render(); return; }
   if (e.target.matches('[data-brew-batch]')) { brewBatch = Number(e.target.value) || 1; craftSupplyQuote = null; render(); }
   if (e.target.matches('[data-forge]')) {
@@ -2793,14 +2831,24 @@ $('#battle-target-modal').addEventListener('close', () => { removalSelection = n
 // 启动
 // ------------------------------------------------------------
 // 用途：初始化桌面游戏。
-// 流程：先完成登录，再读状态；有存档直接显示，否则打开建号面板。
+// 流程：先探测运行模式（本地测试版隐藏联网入口并跳过登录），再读状态；
+//       有存档直接显示，本地测试版由服务端按默认天赋开局，否则打开建号面板。
 // 调用方式：模块加载时由立即执行函数自动调用。
 // 返回值：Promise；无显式返回值。
 (async function boot() {
+  const local = await mode();
+  if (local) hideOnlineEntries();
   await ensureLogin();
   const res = await fetch('/api/state').then(r => r.json()).catch(() => null);
   // 只有后端明确说有存档时才用它；冷启动会返回 hasGame:false
-  if (res && res.hasGame && res.state) { S = res.state; if (S.tianji?.hasEncounter) navigateTab('tianji'); else render(); return; }
+  if (res && res.hasGame && res.state) { S = res.state; if (!local && S.tianji?.hasEncounter) navigateTab('tianji'); else render(); return; }
+  if (local) {
+    // 本地测试版不弹建号面板：这里只是服务端自动开局失败时的兜底
+    const r = await call('new', { name: window.__NZ_LOCAL_NICK || '本地道友', gender: '女', seed: 20261012 });
+    if (r && r.state) { S = r.state; render(); return; }
+    toast('本地测试版开局失败，请重启本地测试版程序。', 'bad');
+    return;
+  }
   // 没有存档：先让玩家建号，不要直接拿默认天赋开局
   openBuildPanel({ firstTime: true });
 })();

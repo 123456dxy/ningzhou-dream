@@ -2,6 +2,8 @@
 
 当前源码版本：**2026.10.12-desktop-refactor.1**。下载后可直接打开 [visual-studio/ningzhou.sln](visual-studio/ningzhou.sln)，项目内的 Backend / Web UI 分组对应实际模块目录；环境要求与同步方式见 [VS 打开说明](visual-studio/README.md)。本次更新和验证范围见 [版本说明](docs/reviews/2026-10-12-version-delivery.md)。
 
+只测试本地电脑端时，构建后双击 [start-desktop.cmd](start-desktop.cmd)。它使用最新仓库构建、独立 `saves-local`，以 `--local` 跳过登录和联网入口，仅监听本机。已有 8107 服务请先正常关闭；公网部署仍用原启动方式，不传 `--local`。
+
 > 在 VS Code 里打开本目录即可获得完整的跳转、补全与 F5 调试（.vscode/ 已配好）。
 > 调试前先跑 .\build.ps1 -Debug 生成带符号的可执行文件。
 

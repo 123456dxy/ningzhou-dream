@@ -19,17 +19,32 @@ Object.assign(initial, { plan:'cultivate', plans:[['cultivate','闭关修炼'],[
   breakthrough:{ready:false,cost:100,chance:.6,next:'炼气中期'},bonds:{stories:{},stipendBalance:0}, adventure:{events:0,since:0,total:0,wins:0}, logs:[],
   stories:[{id:'letter',name:'未拆的家书',location:'wuling',days:3,available:true,done:false,desc:'客栈掌柜替你收着家书',opening:'纸上写着家中近况。',opt1Name:'回信报平安',opt1Effect:'心境+4，福缘+2',opt2Name:'收入旧卷',opt2Effect:'悟性+2'}],
   wildTasks:[{id:'wolf',name:'山林猎妖',desc:'野外斗法',days:3,fee:20,enabled:true}], renownInfo:{value:0,tier:'初入宁州',tierDesc:'声望尚在积累。',toNext:20,buyDiscount:0,sellBonus:0,sellLimit:8,marketCashCap:400,firstImpression:0,libraryDiscount:0,stipendBonus:0,masterRequirement:20,tiers:[],sources:[]}, tianji:null, ended:false,
-  pillCatalog:[{id:'5001',name:'化淤丹',grade:1,effect:'回复气血20点',baseEffect:'回复气血20点',usage:'当前角色服用预览',enabled:true,poisonAfter:3,poisonDelta:3}],
+  pillCatalog:[{id:'5001',name:'化淤丹',grade:1,effect:'回复气血20点',baseEffect:'回复气血20点',catalogEffect:'回复气血20点',usage:'用于恢复气血',enabled:true,basePoison:3,poisonAfter:3,poisonDelta:3},
+    {id:'5002',name:'二阶补气丹',grade:2,effect:'恢复灵力2点',baseEffect:'恢复灵力2点',catalogEffect:'恢复灵力2点',enabled:false,reason:'尚未持有',basePoison:4,poisonAfter:4,poisonDelta:4}],
   herbCatalog:[{id:'silver',name:'银月花',grade:1},{id:'flow',name:'流莹草',grade:1},{id:'heart',name:'恒心草',grade:1}],
   materialCatalog:[{id:'iron',name:'锻剑铁',grade:1},{id:'jade',name:'岩玉',grade:1},{id:'wood',name:'桃木',grade:1}],
-  brewOptions:[{id:'5001',name:'化淤丹',desc:'炼制气血丹药',chance:.7,output:2,stoneCost:14,days:4,enabled:true,durabilityCost:1}],
+  dungeons:{sites:[],specials:[],intel:[
+    {id:'leaf-3',kind:'herb',name:'灵叶草',grade:3,desc:'三阶灵药',stageName:'金丹初期',cost:30,enabled:true},
+    {id:'ore-3',kind:'material',name:'三阶玄铁',grade:3,desc:'三阶炼器材料',stageName:'金丹初期',cost:30,enabled:true},
+    {id:'flower-4',kind:'herb',name:'仙露草',grade:4,desc:'四阶灵药',stageName:'元婴初期',cost:40,enabled:true},
+    {id:'crystal-4',kind:'material',name:'寒晶',grade:4,desc:'四阶矿晶',stageName:'元婴初期',cost:40,enabled:false,reason:'境界不足'},
+  ]},
+  brewOptions:[{id:'5001',name:'化淤丹',grade:1,desc:'炼制气血丹药',chance:.7,output:2,stoneCost:14,days:4,enabled:true,durabilityCost:1},
+    ...Array.from({length:10},(_,n)=>({id:'fixture-recipe-'+n,name:'一阶丹方'+(n+1),grade:1,desc:'用于密集目录布局验收',chance:.7,output:2,stoneCost:14,days:4,enabled:true,durabilityCost:1})),
+    {id:'5002',name:'二阶补气丹',grade:2,desc:'二阶丹方',chance:.7,output:1,stoneCost:20,days:5,enabled:false,reason:'境界不足',durabilityCost:1}],
   furnaces:[{id:'basic',name:'黄铜丹炉',grade:1,current:true,capacity:1,price:100}], gears:[] });
 initial.player.arts = initial.arts;
+initial.market = [
+  ...initial.herbCatalog.map(item=>({...item,kind:'herb',price:4,owned:0})),
+  ...initial.materialCatalog.map(item=>({...item,kind:'material',price:4,owned:0})),
+  ...initial.pillCatalog.map(item=>({...item,kind:'potion',price:20,desc:'当前回复气血0点',owned:0})),
+];
 let state = structuredClone(initial);
 function sync() {
   state.arts = state.player.arts;
   const count = state.arts.potions['5001'] || 0;
   Object.assign(state.pillCatalog[0], {owned:count,enabled:count>0,reason:count>0?'':'没有这枚丹药'});
+  state.pillCatalog[0].effect = state.player.health === 100 ? '当前回复气血0点' : '回复气血20点';
   state.brewOptions[0].ingredients = state.herbCatalog.map(item=>({...item,required:1,owned:state.arts.herbs[item.name]||0}));
   state.brewOptions[0].enabled=state.brewOptions[0].ingredients.every(item=>item.owned>=1);
   state.brewOptions[0].reason=state.brewOptions[0].enabled?'':'指定药材不足';

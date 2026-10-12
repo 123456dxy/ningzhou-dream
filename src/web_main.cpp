@@ -158,6 +158,25 @@ long long g_lastSessionsFlush = 0;
 constexpr long long kSessionTtl = 30LL * 24 * 3600;
 constexpr size_t kMaxSessions = 20000;
 
+// ---------------- 本地测试版 ----------------
+// 用途：--local 启动时关闭创建角色/登录/注册与全部联网模块，
+//       固定使用内置道号，并在没有存档时用默认天赋与属性直接开局。
+bool g_localMode = false;
+const std::string kLocalNick = "本地道友";
+const std::string kLocalSid = "local-test-session";
+
+// 用途：判断本地测试版下必须关闭的接口。
+// 流程：命中固定名单或天机大比前缀即返回 true。
+// 返回值：true 表示本地测试版不提供该接口。
+bool localDisabledPath(const std::string& path) {
+    static const std::vector<std::string> closed = {
+        "/api/nickinfo", "/api/login", "/api/logout", "/api/whoami", "/api/password",
+        "/api/feedback", "/api/export", "/api/leaderboard"
+    };
+    if (std::find(closed.begin(), closed.end(), path) != closed.end()) return true;
+    return path.rfind("/api/tianji/", 0) == 0;
+}
+
 std::string sessionsPath() { return g_dataDir + "/sessions.tsv"; }
 
 void loadSessions() {
@@ -475,6 +494,17 @@ std::string queryParam(const std::string& q, const std::string& key) {
 Response handle(const Request& req) {
     const std::string& path = req.path;
 
+    // 前端据此判断当前是不是本地测试版（本地版跳过登录与联网入口）
+    if (path == "/api/mode") {
+        nz::json::Value o(nz::json::Object{});
+        o.set("ok", true);
+        o.set("local", g_localMode);
+        o.set("nickname", g_localMode ? kLocalNick : std::string());
+        return jsonResp(200, o);
+    }
+    if (g_localMode && localDisabledPath(path))
+        return errorResp(404, "本地测试版已关闭该功能。");
+
     // 查询道号是否已设密码（登录框据此提示“首次设置密码”）
     if (path == "/api/nickinfo") {
         const std::string nick = queryParam(req.query, "nickname");
@@ -549,7 +579,9 @@ Response handle(const Request& req) {
         return r;
     }
 
-    const std::string sid = cookieSid(req);
+    // 本地测试版：没有登录流程，一律使用启动时预置的固定会话
+    std::string sid = cookieSid(req);
+    if (g_localMode) sid = kLocalSid;
     auto sit = sid.empty() ? g_sessions.end() : g_sessions.find(sid);
 
     if (path == "/api/logout") {
@@ -653,7 +685,7 @@ Response handle(const Request& req) {
     }
 
     // 留影挑战独立存储，但进行中锁定本人的人生操作，避免跨标签页换档或换装。
-    if (g_tianji->active(p.id)) {
+    if (!g_localMode && g_tianji->active(p.id)) {
         static const std::vector<std::string> reads = {
             "/api/state", "/api/slots", "/api/export", "/api/arts/spells", "/api/arts/nodes",
             "/api/social-actions", "/api/sects", "/api/achievements", "/api/legacy", "/api/legacy/draft",
@@ -663,8 +695,22 @@ Response handle(const Request& req) {
         if (std::find(reads.begin(), reads.end(), path) == reads.end())
             return errorResp(409, "请先回到天机大比完成或认输当前留影挑战，再操作人物存档。");
     }
-    if (g_tianji->healthy() && !g_tianji->observe(p.id, p.s.started ? &p.s.g : nullptr))
+    if (!g_localMode && g_tianji->healthy() && !g_tianji->observe(p.id, p.s.started ? &p.s.g : nullptr))
         return errorResp(503, "天机大比窗口记录保存失败，请稍后重试。");
+
+    // 本地测试版：没有存档时用默认天赋与属性自动开局，前端不再出现建号面板
+    if (g_localMode && !p.s.started) {
+        nz::api::bindSession(&p.s);
+        nz::setSaveDirOverride(p.dir);
+        Request create;
+        create.method = "POST";
+        create.path = "/api/new";
+        create.body = "{\"name\":\"本地道友\",\"gender\":\"女\",\"seed\":20261012}";
+        const Response created = nz::api::handle(create);
+        persist(p);
+        if (p.s.started) std::printf("[本地测试版] 已用默认天赋与属性开辟新的一世\n");
+        else std::fprintf(stderr, "[本地测试版] 默认开局失败：%s\n", created.body.c_str());
+    }
 
     // 切到这个玩家的会话与存档目录，交给原有规则接口
     nz::api::bindSession(&p.s);
@@ -679,10 +725,10 @@ Response handle(const Request& req) {
     }
     persist(p);
     // 轻量提醒只包含时间窗口和状态，完整对手/斗法数据通过独立接口读取。
-    const bool tianjiSaved = !g_tianji->healthy() || g_tianji->observe(p.id, p.s.started ? &p.s.g : nullptr);
+    const bool tianjiSaved = g_localMode || !g_tianji->healthy() || g_tianji->observe(p.id, p.s.started ? &p.s.g : nullptr);
     std::string responseError;
     auto body = nz::json::Value::parse(r.body, &responseError);
-    if (responseError.empty() && body["state"].isObject()) {
+    if (!g_localMode && responseError.empty() && body["state"].isObject()) {
         auto state = body["state"];
         state.set("tianji", g_tianji->hint(p.id, p.s.started ? &p.s.g : nullptr));
         body.set("state", state);
@@ -737,6 +783,7 @@ int main(int argc, char** argv) {
         else if (a == "--data" && i + 1 < argc) g_dataDir = argv[++i];
         else if (a == "--feedback" && i + 1 < argc) g_feedbackDir = argv[++i];
         else if (a == "--idle-minutes" && i + 1 < argc) g_idleSeconds = std::max(1, std::atoi(argv[++i])) * 60LL;
+        else if (a == "--local") g_localMode = true;
         else if (a == "--no-open") openBrowser = false;
         else if (a == "--help" || a == "-h") {
             std::printf(
@@ -748,18 +795,28 @@ int main(int argc, char** argv) {
                 "  --data DIR         玩家数据目录（默认 ./saves）\n"
                 "  --feedback DIR     反馈箱目录（默认 ./feedback）\n"
                 "  --idle-minutes N   玩家多久不操作后保存并释放内存（默认 30）\n"
+                "  --local            本地测试版：仅监听 127.0.0.1，关闭登录与联网模块，内置道号直接开局\n"
                 "  --no-open          启动后不自动打开浏览器\n");
             return 0;
         }
     }
+    // 免登录的本地角色只能由本机访问，即使同时传入 --host 也不对网络开放。
+    if (g_localMode) host = "127.0.0.1";
     if (port <= 0 || port > 65535) { std::fprintf(stderr, "端口无效\n"); return 1; }
 
     std::error_code ec;
     fs::create_directories(u8(g_dataDir + "/players"), ec);
     nz::setSaveDirOverride(g_dataDir + "/__unbound__");
     loadSessions();
-    g_tianji = std::make_unique<nz::tianji::Store>(g_dataDir + "/tianji");
-    if (!g_tianji->healthy()) std::fprintf(stderr, "%s\n", g_tianji->error().c_str());
+    if (g_localMode) {
+        // 内置道号的固定会话：前端不再登录，也不落盘 sessions.tsv
+        g_sessions[kLocalSid] = SessionInfo{hexId(kLocalNick), kLocalNick, nowSec()};
+        std::printf("本地测试版：已关闭创建角色/登录/注册与联网模块，使用内置道号「%s」\n", kLocalNick.c_str());
+    }
+    if (!g_localMode) {
+        g_tianji = std::make_unique<nz::tianji::Store>(g_dataDir + "/tianji");
+        if (!g_tianji->healthy()) std::fprintf(stderr, "%s\n", g_tianji->error().c_str());
+    }
     std::printf("数据目录：%s（已有会话 %zu 个）\n", g_dataDir.c_str(), g_sessions.size());
 
     if (openBrowser) {

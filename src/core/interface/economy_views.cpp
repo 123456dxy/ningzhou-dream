@@ -12,6 +12,33 @@
 
 namespace nz::api::view {
 
+namespace {
+// 用途：生成未受当前库存、属性与耐药截断的目录效果；流程：坊市/工坊展示；用法：传角色境界和配方；返回：完整能力说明，不改变实际服药规则。
+string catalogEffect(const Player& player, const data::RecipeDef& recipe) {
+    Player reference;
+    reference.stage = player.stage;
+    reference.apt = 0;
+    reference.arts.aptPills = 0;
+    reference.traits.clear();
+    return artPillEffect(reference, recipe).text;
+}
+
+// 用途：由稳定物品定义查询品阶；流程：坊市分类；用法：传目录条目类型和ID；返回：真实品阶，未知条目返回0，不从展示名称推断。
+int marketGrade(const play::MarketItem& item) {
+    static const auto grades = [] {
+        std::map<std::pair<string, string>, int> result;
+        for (const auto& recipe : data::RecipeDef_TABLE()) result[{"potion", recipe.id}] = recipe.grade;
+        for (const auto& herb : data::HerbDef_TABLE()) result[{"herb", herb.id}] = herb.grade;
+        for (const auto& material : data::MaterialDef_TABLE()) result[{"material", material.id}] = material.grade;
+        for (const auto& shape : data::ShapeDef_TABLE())
+            for (int grade = 1; grade <= 6; ++grade) result[{"gear", shape.id + "-" + std::to_string(grade)}] = grade;
+        return result;
+    }();
+    const auto found = grades.find({item.kind, item.id});
+    return found == grades.end() ? 0 : found->second;
+}
+}
+
 // 用途：叠加路由状态阻塞并编码领域动作报价。
 // 参与流程：HTTP请求分派、前端状态或动作预览。
 // 使用方式：传入const Game& game, const std::string& path, const shop::ActionQuote& quote，按本模块入口调用。
@@ -43,6 +70,7 @@ void appendEconomyState(const Game& game, Value& state) {
             item.set("kind", str(recipe.kind)); item.set("grade", num(recipe.grade)); item.set("dao", str(recipe.dao));
             item.set("owned", num(info.owned)); item.set("effect", str(info.effect));
             item.set("effectValue", num(info.effectValue)); item.set("baseEffect", str(info.baseEffect.text));
+            item.set("catalogEffect", str(catalogEffect(game.player, recipe)));
             item.set("usage", str(info.usage)); item.set("used", num(info.used));
             item.set("toleranceLimit", num(info.toleranceLimit)); item.set("toleranceRemaining", num(info.toleranceRemaining));
             item.set("toleranceUnlimited", Value(info.toleranceUnlimited)); item.set("overTier", Value(info.overTier));
@@ -83,6 +111,10 @@ void appendEconomyState(const Game& game, Value& state) {
             entry.set("price", num(m.price));
             entry.set("sellPrice", num(m.sellPrice));
             entry.set("owned", num(m.owned));
+            entry.set("grade", num(marketGrade(m)));
+            if (m.kind == "potion") {
+                if (const auto* recipe = findRecipe(m.id)) entry.set("catalogEffect", str(catalogEffect(game.player, *recipe)));
+            }
             arr.push_back(std::move(entry));
         }
         for (const auto& m : play::gearList(game)) {
@@ -94,6 +126,7 @@ void appendEconomyState(const Game& game, Value& state) {
             entry.set("price", num(m.price));
             entry.set("sellPrice", num(m.sellPrice));
             entry.set("owned", num(m.owned));
+            entry.set("grade", num(marketGrade(m)));
             arr.push_back(std::move(entry));
         }
         state.set("market", Value(std::move(arr)));
@@ -116,6 +149,8 @@ void appendEconomyState(const Game& game, Value& state) {
             entry.set("reason", str(c.reason));
             if (const auto* recipe = findRecipe(c.id)) {
                 const PillUseInfo pill = artPillUseInfo(game.player, *recipe);
+                entry.set("grade", num(recipe->grade)); entry.set("baseEffect", str(pill.baseEffect.text));
+                entry.set("catalogEffect", str(catalogEffect(game.player, *recipe)));
                 entry.set("effect", str(pill.effect)); entry.set("usage", str(pill.usage));
                 entry.set("poison", num(pill.poison)); entry.set("poisonAfter", num(pill.poisonAfter));
                 const auto* furnace = findFurnace(game.player.arts.furnace);

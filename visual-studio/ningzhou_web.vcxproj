@@ -34,6 +34,7 @@
 <None Include="..\web\mobile.css"/>
 <None Include="..\web\mobile.mjs"/>
 <None Include="..\web\numeric-preview.mjs"/>
+<None Include="..\web\nz-mode.mjs"/>
 <None Include="..\web\portraits.mjs"/>
 <None Include="..\web\renown.mjs"/>
 <None Include="..\web\roster.mjs"/>
