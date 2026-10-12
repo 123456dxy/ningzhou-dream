@@ -2,7 +2,7 @@
 # 宁州一梦 多人 Linux 版打包脚本
 # 用法：tools/linux/package-linux.sh [输出目录，默认 dist/linux/app]
 # 1. 用 CMake 构建 ningzhou_web（Release，静态 libstdc++）
-# 2. 复制 web/ 前端与 assets（仓库内图片已是 WebP；若有新增 PNG 会在打包时转成 WebP）
+# 2. 复制整个 web/ 前端（含 v2/ 手机试行版与 assets；若有新增 PNG 会在打包时转成 WebP）
 #    服务端收到旧的 *.png 请求时若存在同名 .webp 会直接返回 WebP，兼容旧存档里的立绘路径。
 # 3. 生成 run.sh（0.0.0.0:25001）
 # 依赖：cmake g++（仅当 web/assets 里有 PNG 时才需要 cwebp）
@@ -17,14 +17,13 @@ cmake --build "$BUILD" -j"$(nproc)" --target ningzhou_web
 
 rm -rf "$OUT"; mkdir -p "$OUT/web"
 cp "$BUILD/ningzhou_web" "$OUT/"; strip "$OUT/ningzhou_web" || true
-(cd "$ROOT/web" && cp ./*.html ./*.mjs ./*.css "$OUT/web/")
-(cd "$ROOT/web" && find assets -name '*.webp' -print0) | while IFS= read -r -d '' f; do
-  mkdir -p "$OUT/web/$(dirname "$f")"; cp "$ROOT/web/$f" "$OUT/web/$f"
-done
-(cd "$ROOT/web" && find assets -name '*.png' -print0) | while IFS= read -r -d '' f; do
+# 整个 web/ 目录原样复制（含 v2/ 等子目录），再去掉说明文档并把残留 PNG 转成 WebP
+cp -a "$ROOT/web/." "$OUT/web/"
+find "$OUT/web" -name '*.md' -delete
+(cd "$OUT/web" && find . -name '*.png' -print0) | while IFS= read -r -d '' f; do
   command -v cwebp >/dev/null || { echo "缺少 cwebp（apt install webp）"; exit 1; }
-  mkdir -p "$OUT/web/$(dirname "$f")"
-  cwebp -quiet -q "$QUALITY" -m 6 -mt "$ROOT/web/$f" -o "$OUT/web/${f%.png}.webp"
+  [ -f "$OUT/web/${f%.png}.webp" ] || cwebp -quiet -q "$QUALITY" -m 6 -mt "$OUT/web/$f" -o "$OUT/web/${f%.png}.webp"
+  rm -f "$OUT/web/$f"
 done
 cat > "$OUT/run.sh" <<'R'
 #!/bin/bash
