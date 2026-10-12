@@ -184,7 +184,7 @@ ningzhou-cpp/data/reference_tables.h   ← 自动生成，勿手改
 2. **Chromium 沙箱在本机起不来** —— 补齐文件后仍 abort，
    逐个试参数发现**只加 `--no-sandbox` 就能启动**（`--disable-gpu` 单独无效）。
 
-修复方式：在 `C:\Users\24974\.vscode\argv.json` 里加
+修复方式：在 `%USERPROFILE%\.vscode\argv.json` 里加
 
 ```json
 "disable-chromium-sandbox": true,

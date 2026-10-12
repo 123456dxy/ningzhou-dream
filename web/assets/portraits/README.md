@@ -1,6 +1,6 @@
 # 人物与妖兽立绘
 
-2026-10-11 使用内置 image_gen（built-in generate）逐张生成19张原创透明 PNG，均为1024×1536。未下载原作立绘，未用脚本裁切或编辑成品；CSS负责侧栏及战斗排版。完整实际提示词、文件名和生成源路径保存在 [prompts.json](prompts.json) 与 [prompts-extra.json](prompts-extra.json)。
+2026-10-11 使用内置 image_gen（built-in generate）逐张生成19张原创透明 PNG，均为1024×1536。未下载原作立绘，未用脚本裁切或编辑成品；CSS负责侧栏及战斗排版。完整提示词、生成源路径等元数据仅保留在开发者本地，未纳入公开仓库；游戏运行只需本目录中的成品 PNG。
 
 人物包括男女主角、五个宗门各男女一套、男女散修，共14张。宗门姿态、服饰与器物体现金、水、木、火、土风格；NPC根据门派和性别选图，属于共享人物原型。选图实现为 `src/core/npc_learning.cpp` 的 `personPortrait`，前端统一入口为 `web/portraits.mjs`。
 

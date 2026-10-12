@@ -2,7 +2,7 @@
 
 2026-10-11 使用内置 image_gen 工具生成并复制到本项目，均为不透明 PNG。生成原图保留在 Codex generated_images 中；游戏离线加载这里的素材。
 
-当前地图的28处地点使用 [locations/ 中的独立插画](locations/README.md)。新版舆图按用户三张截图重画，西部沙地、北部火山、东北金虹与东部海岸对应相对方位，实际叠加坐标见 [location-reference.json](location-reference.json)。最新版底图的实际提示词及生成源路径见 [atlas-layout-prompt.json](atlas-layout-prompt.json)。以下底图提示词和通用风景为旧版设计记录。
+当前地图的28处地点使用 [locations/ 中的独立插画](locations/README.md)。新版舆图按用户三张截图重画，西部沙地、北部火山、东北金虹与东部海岸对应相对方位，实际叠加坐标见 [location-reference.json](location-reference.json)。最新版底图的提示词与生成源路径等元数据仅保留在开发者本地，未纳入公开仓库；游戏运行只需本目录中的成品 PNG。以下底图提示词和通用风景为旧版设计记录。
 
 - ningzhou-atlas.png：水墨舆图底图，地图坐标和路线由前端叠加。
 - city-scene.png：城池景观。

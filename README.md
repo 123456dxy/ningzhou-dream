@@ -5,7 +5,7 @@
 
 《觅长生》同人修仙人生模拟的 C++ 版，以 JS 版（Demo 07）为基础，继续完善本地规则与界面。
 
-原版是浏览器里的 JS 游戏（`michangsheng-demo/`）。这个版本的目的是**让人能读懂、能调试**：
+历史原版是浏览器里的 JS 游戏（仓库外的 `michangsheng-demo/`，本仓库运行无需该目录）。这个版本的目的是**让人能读懂、能调试**：
 所有规则都是普通的 C++ 函数，存档是一份可读 JSON，出错时能直接看到中间数值。
 
 ---
@@ -22,7 +22,7 @@ cd ningzhou-cpp
 
 首次构建会自动调用 CMake 配置 Ninja 工程。
 
-给其他玩家使用的单文件发行入口为 [宁州一梦-宗门修正版.exe](dist/宁州一梦-单文件版-20261012-宗门修正版.exe)，适用于 Windows 10/11 x64。地图与立绘已内置，双击自动准备资源并打开浏览器；不包含本项目的个人存档。玩家数据保存于 `%LOCALAPPDATA%\NingzhouDream\game\runtime`，正常关闭启动器保存独立续玩快照，下次自动恢复，游戏内手动档和死亡回档继续独立保留。使用说明见 [使用说明.txt](tools/release/使用说明.txt)。
+给其他玩家使用的单文件发行入口为 [宁州一梦-宗门修正版.exe](https://github.com/123456dxy/ningzhou-dream/releases/latest)，适用于 Windows 10/11 x64。地图与立绘已内置，双击自动准备资源并打开浏览器；不包含本项目的个人存档。玩家数据保存于 `%LOCALAPPDATA%\NingzhouDream\game\runtime`，正常关闭启动器保存独立续玩快照，下次自动恢复，游戏内手动档和死亡回档继续独立保留。使用说明见 [使用说明.txt](tools/release/使用说明.txt)。
 
 宗门修正版补齐地图进入山门、拜师与受业、宗门任务板；修正事件实际收益记录与功法抄本修习入口，区分神通学习和携带状态，补上非战斗神通与炼器的真实数值预览。全部修复备注见 [CHANGELOG.md](CHANGELOG.md)。原续玩文件与手动档自动保留。
 
@@ -30,7 +30,7 @@ cd ningzhou-cpp
 
 已构建时可直接双击 `build\ningzhou_web.exe`。移动游戏时请一起复制同目录的 `web\`；存档保存在该目录的 `saves\`。本轮检查与修复详情见 [AUDIT.md](AUDIT.md)。
 
-当前8107服务已更新为灼烧天然叠加、秘境永久传承、法宝主动神通与声望来源版本，启动入口为 [start-latest.cmd](start-latest.cmd)，使用 `build-battle-update/` 的程序与存档。本次切换前的实时角色为顾抚琴第120天，已恢复并保存到存档位1；角色、世界、随机数与传承档案逐项核对一致，旧自炼法宝自动补齐器型，旧秘境保留已得物资并迁移通关奖励。旧程序、前端、存档和切换前实时导出保存在 `build/release-backup-20261011-213813/`，验证记录见 [release-feature-verification.json](build/release-feature-verification.json)。本轮3390项规则、222项前端检查及实际浏览器验收通过。`build-ningzhou-latest/` 为此前的独立打包副本。
+源码启动可双击 [start-latest.cmd](start-latest.cmd)，脚本会构建并启动当前浏览器版本。灼烧叠加、秘境永久传承、法宝主动神通与声望来源均已实现。
 
 斗法固定携带普通攻击、防御各五张，不占额外神通槽。炼气至化神的额外槽位依次为 4/6/8/10/12，基础每回合回灵依次为 3/4/5/6/7；功法与战斗状态另行加减。神通搭配页显示境界门槛，忘机咒可将指定神通的全部副本移出本场战斗，下场恢复；换念诀可弃手牌重抽。人类对手使用宗门、大道、境界对应的真实牌组与功法悟道，初期散修采用较弱传承。原永久剑意转入剑道经验，不再提供额外战斗倍率。
 
@@ -134,7 +134,7 @@ ningzhou-cpp/
 │       ├── json.h/.cpp        极简 JSON 读写（无第三方依赖）
 │       └── save.h/.cpp        存档序列化、迁移、存档位管理
 │
-├── tests/                     分模块自测，全部与 JS 版逐值对照
+├── tests/                     分模块规则、接口与前端回归自测
 │   ├── harness.h              极简断言框架（check / checkEq / checkNear）
 │   ├── test_main.cpp          汇总入口
 │   ├── test_core.cpp          数据表、规则表、随机数、人物生成
@@ -325,7 +325,7 @@ cmake --build build
 
 ### 2. 数值不对时，用对照脚本查 JS 的原值
 
-`tools/*.mjs` 是直接 `import` JS 版模块、打印参考值的小脚本。
+`tools/*.mjs` 中的历史对照脚本会直接 `import` 仓库外的 JS 版模块，需要另备同级 `michangsheng-demo/`；当前 C++ 构建、游戏运行及回归自测无需该目录。
 当你不确定 C++ 算得对不对时，先跑对应的脚本拿到「标准答案」：
 
 ```powershell
