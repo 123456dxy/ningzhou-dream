@@ -1,0 +1,152 @@
+/* Scoped Tianji presentation: standard battles and desktop pages keep their own layouts. */
+.tianji-hub { min-width: 0; font-size: 15px; line-height: 1.7; }
+.tj-heading { margin-bottom: 18px; }
+.tj-heading h2 { font: 30px var(--serif); margin: 5px 0; }
+.tj-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+.tj-tabs [aria-current="page"] { background: var(--green); color: white; border-color: var(--green); }
+.tj-window, .tj-entry, .tj-section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.tj-window, .tj-entry, .tj-signup, .tj-battle, .tj-opponents, .tj-board { padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin-bottom: 16px; }
+.tj-window { border-left: 4px solid var(--gold); background: #f0eddf; }
+.tj-signup p, .tj-window p, .tj-entry p { margin: 7px 0; }
+.tj-signup > button { margin-top: 12px; }
+.tj-muted, .tj-section-head p, .tj-entry span { color: #596852; }
+.tj-note, .tj-notice, .tj-error { padding: 12px 14px; border-radius: 6px; margin: 12px 0; background: #e9eedf; }
+.tj-error { background: #f4e5de; color: #823e31; }
+.tj-error button { display: block; margin-top: 8px; }
+.tj-notice { border-left: 3px solid #617c50; }
+.tj-empty { padding: 24px 16px; border: 1px dashed #a8b49b; border-radius: 8px; margin: 16px 0; text-align: center; }
+.tj-empty h4 { font-size: 18px; margin-bottom: 6px; }
+.tj-opponent-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 12px; margin-top: 16px; }
+.tj-opponent-list article { padding: 16px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.tj-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.tj-rules summary, .tj-battle-log summary { cursor: pointer; padding: 10px 0; }
+.tj-rules { padding: 12px 16px; }
+.tj-rules p { margin-top: 8px; }
+.tj-board-list { list-style: none; padding: 0; margin: 16px 0; }
+.tj-board-list li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.tj-rank { color: #8d723c; font: 23px var(--serif); text-align: center; }
+.tj-board-list li > strong { color: var(--green); text-align: center; font-size: 24px; }
+.tj-board-list small { display: block; font-size: 13px; }
+.tj-board-list .tj-me { background: #ecf0e6; }
+.tj-combat-field { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 16px 0; }
+.tj-intent { padding: 12px; background: #f0ebdf; border-left: 3px solid #ac8a4c; }
+.tj-battle .combat-hand .card { min-width: 0; white-space: normal; }
+.tj-battle .combat-flow { flex-wrap: wrap; }
+.tj-battle .combat-flow > button { margin-left: auto; }
+.tj-battle .combat-status { min-height: 0; }
+.tj-battle-log { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
+.tj-battle-log p { margin: 6px 0; }
+.tj-battle-log details { max-height: 420px; overflow: auto; }
+.tj-result { padding: 16px; margin-top: 16px; border: 1px solid #c5ae77; background: #f1ead9; }
+.tj-result > b { font-size: 22px; margin-right: 18px; }
+#tianji-modal { width: min(820px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; }
+.tj-dialog .modal-heading { align-items: flex-start; gap: 16px; }
+.tj-dialog h2 { overflow-wrap: anywhere; }
+.tj-dialog .modal-heading > button { flex-shrink: 0; }
+.tj-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; position: sticky; bottom: -24px; margin-top: 18px; padding: 14px 0; background: var(--surface); }
+.tj-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
+.tj-stats > div { padding: 8px; text-align: center; background: #ecf0e5; border-radius: 6px; }
+.tj-stats span, .tj-stats b { display: block; }
+.tj-stats b { font-size: 20px; }
+.tj-build-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.tj-build-section h4 { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.tj-build-section ul { padding-left: 20px; margin: 8px 0; }
+.tj-build-section li { overflow-wrap: anywhere; margin: 4px 0; }
+.tj-build-section li span { display: block; color: var(--muted); }
+.tj-target-label { display: grid; gap: 8px; margin: 20px 0; }
+.tj-target-label select { padding: 10px; }
+.tj-reminder { display: block; margin: 12px 0; width: 100%; text-align: left; color: #395841; border-color: #9aa981; background: #e7eddc; }
+.tianji-hub button, .tj-dialog button, .tj-reminder { min-height: 44px; min-width: 44px; }
+@media (max-width: 690px) {
+  .tianji-hub, .tj-dialog { font-size: 16px; overflow-wrap: anywhere; }
+  .tianji-hub *, .tj-dialog * { min-width: 0; }
+  .tianji-hub .nz-fs14, .tj-dialog .nz-fs14 { font-size: 16px !important; }
+  .tianji-hub p, .tianji-hub small, .tianji-hub label, .tianji-hub button, .tianji-hub span, .tj-dialog p, .tj-dialog small, .tj-dialog span, .tj-dialog button, .tj-dialog select { font-size: 16px; }
+  .tj-window, .tj-entry, .tj-signup, .tj-battle, .tj-opponents, .tj-board { padding: 14px 12px; }
+  .tj-window, .tj-entry, .tj-section-head { flex-wrap: wrap; gap: 10px; }
+  .tj-heading h2 { font-size: 26px; }
+  .tj-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tj-tabs button { padding: 10px 6px; }
+  .tj-battle .combat-field { grid-template-columns: 1fr; }
+  .tj-battle .combat-actor { padding: 12px; }
+  .tj-battle .combat-hand { grid-template-columns: 1fr; }
+  .tj-battle .card { min-height: 0; padding: 14px; text-align: left; }
+  .tj-battle .card-top { display: flex; gap: 8px; align-items: center; }
+  .tj-battle .card-rule, .tj-battle .card-foot { display: block; padding: 8px 0 0; }
+  .tj-battle .combat-flow { display: grid; grid-template-columns: 48px minmax(0, 1fr) 94px; gap: 8px;
+    position: sticky; top: calc(var(--nz-status-height, 100px) + 6px); z-index: 5; padding: 10px 6px;
+    border: 1px solid var(--line); border-radius: 8px; background: #f5f1e7; box-shadow: 0 3px 12px #183c3720; }
+  .tj-battle .combat-flow .energy-orb { width: 44px; height: 44px; }
+  .tj-battle .combat-flow p { margin: 0; }
+  .tj-battle .combat-flow > button { margin-left: 0; width: 100%; padding: 10px 6px; }
+  .tj-battle .combat-artifact-list { grid-template-columns: 1fr; }
+  .tj-battle .combat-artifact { padding: 12px; }
+  .tianji-hub .combat-artifact-top strong, .tj-dialog .artifact-ability strong { font-size: 16px; }
+  .tj-battle .combat-bottom { gap: 10px; }
+  .tj-board-list li { grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; }
+  .tj-board-list li > strong { font-size: 22px; }
+  .tj-build-grid { grid-template-columns: 1fr; gap: 8px; }
+  #tianji-modal { width: calc(100vw - 20px); margin: auto; max-height: calc(100dvh - 28px); padding: 0; }
+  .tj-dialog { padding: 16px; }
+  .tj-dialog h2 { font-size: 22px; }
+  .tj-dialog-actions { bottom: -16px; flex-wrap: wrap; }
+  .tj-dialog-actions button { flex: 1; }
+  .tj-actions > button { flex: 1; }
+  .tj-reminder { font-size: 16px; }
+}
+
+/* Cards retain their desktop rules; mobile rules live in a separate, accessible disclosure. */
+.tj-card-wrap { min-width: 0; display: flex; flex-direction: column; }
+.tj-card-wrap > .card { flex: 1; width: 100%; }
+.tj-card-rules { display: none; }
+.tj-battle-details > summary, .tj-match-meta > summary, .tj-artifact-drawer > summary { padding: 10px 4px; cursor: pointer; }
+.tj-battle-details { margin: 10px 0; }
+@media (max-width: 690px) {
+  body.nz-mobile-ready:has(.tj-fighting) .sidebar:not(.nz-character-open) { position: static; }
+  body:has(.tj-fighting) #tianji-reminder { display: none; }
+  .tj-fighting .tj-heading { margin-bottom: 8px; }
+  .tj-fighting .tj-heading > .eyebrow, .tj-fighting .tj-heading > p { display: none; }
+  .tj-fighting .tj-tabs { margin-bottom: 10px; }
+  .tj-fighting .tj-battle { padding: 10px; margin-bottom: 10px; }
+  .tj-fighting .tj-section-head { gap: 4px; }
+  .tj-fighting .tj-battle > .tj-section-head { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 6px; }
+  .tj-fighting .tj-section-head h3 { font-size: 18px; }
+  .tj-fighting .tj-section-head p { margin: 0; }
+  .tj-match-meta { margin-top: 14px; border-top: 1px solid var(--line); }
+  .tj-match-meta > summary { font-size: 16px; }
+  .tj-battle .tj-desktop-flow { display: none; }
+  .tj-battle-hud { position: sticky; top: 6px; z-index: 30; background: #f5f1e7; border: 1px solid #839a79;
+    border-radius: 8px; box-shadow: 0 3px 10px #183c3728; padding: 8px; margin: 8px 0 12px; }
+  .tj-hud-vitals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+  .tj-hud-vitals > div { display: grid; grid-template-columns: 1fr auto; column-gap: 4px; align-items: center; }
+  .tj-hud-vitals b { grid-column: 1 / -1; font-size: 18px; line-height: 1.3; }
+  .tj-hud-vitals span, .tj-hud-vitals small { font-size: 14px; line-height: 1.3; }
+  .tj-hud-vitals small { grid-row: 1; grid-column: 2; }
+  .tj-hud-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-top: 6px; }
+  .tj-hud-actions > div { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+  .tj-hud-actions span { font-size: 14px; }
+  .tj-hud-actions > button { min-height: 44px; padding: 8px 12px; }
+  .tj-battle .combat-hand { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; gap: 8px; align-items: start; }
+  .tj-card-wrap { border: 1px solid #c2ceb7; border-radius: 8px; overflow: hidden; background: #f4f5e9; }
+  .tj-battle .tj-card-wrap > .card { display: flex; flex-direction: column; align-items: stretch; gap: 5px;
+    min-height: 110px; height: auto; padding: 10px; border: 0; border-radius: 0; margin: 0; text-align: left; line-height: 1.35; box-shadow: none; }
+  .tj-battle .tj-card-wrap .card-top { display: flex; flex-wrap: nowrap; gap: 6px; align-items: flex-start; margin: 0; }
+  .tj-battle .tj-card-wrap .card-top strong { font: 600 16px/1.4 var(--sans); overflow-wrap: anywhere; }
+  .tj-battle .tj-card-wrap .card-energy { width: 24px; height: 24px; flex: 0 0 24px; font-size: 16px; }
+  .tj-battle .tj-card-wrap .card-rule, .tj-battle .tj-card-wrap .card-school, .tj-battle .tj-card-wrap .card-kind { display: none; }
+  .tj-battle .tj-card-wrap .card-effect { display: block; margin: 0; padding: 0; font-size: 16px; line-height: 1.35; }
+  .tj-battle .tj-card-wrap .card-foot { display: block; margin: auto 0 0; padding: 0; font-size: 14px; line-height: 1.35; }
+  .tj-card-rules { display: block; border-top: 1px solid #d2dac8; }
+  .tj-card-rules > summary { min-height: 44px; padding: 10px 7px; font-size: 14px; cursor: pointer; line-height: 1.4; }
+  .tj-card-rules p { padding: 8px; margin: 0; font-size: 16px; }
+  .tj-artifact-drawer { margin: 8px 0; }
+  .tj-artifact-drawer .combat-artifacts { margin: 0 0 10px; padding: 10px; }
+}
+@media (max-width: 359px) {
+  .tj-battle .combat-hand { grid-template-columns: 1fr; }
+  .tj-battle .tj-card-wrap > .card { min-height: 82px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .tj-battle .tj-card-wrap .card-foot { grid-column: 1 / -1; }
+  .tj-card-rules > summary { padding-top: 9px; padding-bottom: 9px; }
+}
+
+[data-tianji-battle-heading] { scroll-margin-top: 16px; }

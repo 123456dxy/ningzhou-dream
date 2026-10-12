@@ -34,6 +34,7 @@
 #include "core/pwhash.h"
 #include "core/calendar.h"
 #include "core/model.h"
+#include "core/tianji.h"
 
 namespace {
 
@@ -149,6 +150,7 @@ struct SessionInfo { std::string id; std::string nickname; long long lastUsed = 
 std::string g_dataDir = "saves";
 std::string g_feedbackDir = "feedback";
 long long g_idleSeconds = 30 * 60;
+std::unique_ptr<nz::tianji::Store> g_tianji;
 std::map<std::string, std::unique_ptr<Player>> g_players;   // id -> player
 std::map<std::string, SessionInfo> g_sessions;              // sid -> info
 bool g_sessionsDirty = false;
@@ -487,6 +489,10 @@ Response handle(const Request& req) {
         return jsonResp(200, o);
     }
 
+    if (path == "/api/tianji/board") {
+        return g_tianji->handle(req, "", "", nullptr, nowSec());
+    }
+
     if (path == "/api/leaderboard") {
         if (req.method != "GET") return errorResp(405, "此操作需要 GET 请求。");
         return leaderboardResp(req);
@@ -559,6 +565,10 @@ Response handle(const Request& req) {
     SessionInfo& info = sit->second;
     if (nowSec() - info.lastUsed > 3600) { info.lastUsed = nowSec(); g_sessionsDirty = true; }
     Player& p = playerFor(info.id, info.nickname);
+
+    if (path.rfind("/api/tianji/", 0) == 0) {
+        return g_tianji->handle(req, p.id, p.nickname, p.s.started ? &p.s.g : nullptr, nowSec());
+    }
 
     if (path == "/api/whoami") {
         nz::json::Value o(nz::json::Object{});
@@ -642,6 +652,20 @@ Response handle(const Request& req) {
         return jsonResp(200, r);
     }
 
+    // 留影挑战独立存储，但进行中锁定本人的人生操作，避免跨标签页换档或换装。
+    if (g_tianji->active(p.id)) {
+        static const std::vector<std::string> reads = {
+            "/api/state", "/api/slots", "/api/export", "/api/arts/spells", "/api/arts/nodes",
+            "/api/social-actions", "/api/sects", "/api/achievements", "/api/legacy", "/api/legacy/draft",
+            "/api/conflict/preview", "/api/forge-options", "/api/forge-preview", "/api/eco-options",
+            "/api/npc-bag", "/api/tide", "/api/roster", "/api/build-options", "/api/build-check"
+        };
+        if (std::find(reads.begin(), reads.end(), path) == reads.end())
+            return errorResp(409, "请先回到天机大比完成或认输当前留影挑战，再操作人物存档。");
+    }
+    if (g_tianji->healthy() && !g_tianji->observe(p.id, p.s.started ? &p.s.g : nullptr))
+        return errorResp(503, "天机大比窗口记录保存失败，请稍后重试。");
+
     // 切到这个玩家的会话与存档目录，交给原有规则接口
     nz::api::bindSession(&p.s);
     nz::setSaveDirOverride(p.dir);
@@ -654,6 +678,17 @@ Response handle(const Request& req) {
         throw;
     }
     persist(p);
+    // 轻量提醒只包含时间窗口和状态，完整对手/斗法数据通过独立接口读取。
+    const bool tianjiSaved = !g_tianji->healthy() || g_tianji->observe(p.id, p.s.started ? &p.s.g : nullptr);
+    std::string responseError;
+    auto body = nz::json::Value::parse(r.body, &responseError);
+    if (responseError.empty() && body["state"].isObject()) {
+        auto state = body["state"];
+        state.set("tianji", g_tianji->hint(p.id, p.s.started ? &p.s.g : nullptr));
+        body.set("state", state);
+        if (!tianjiSaved) body.set("tianjiWarning", "天机大比窗口记录保存失败，请稍后重新打开天机大比。");
+        r.body = body.dump();
+    }
     nz::api::bindSession(nullptr);
     // 未绑定玩家时指向一个不存在的子目录，避免误写到数据根目录
     nz::setSaveDirOverride(g_dataDir + "/__unbound__");
@@ -723,6 +758,8 @@ int main(int argc, char** argv) {
     fs::create_directories(u8(g_dataDir + "/players"), ec);
     nz::setSaveDirOverride(g_dataDir + "/__unbound__");
     loadSessions();
+    g_tianji = std::make_unique<nz::tianji::Store>(g_dataDir + "/tianji");
+    if (!g_tianji->healthy()) std::fprintf(stderr, "%s\n", g_tianji->error().c_str());
     std::printf("数据目录：%s（已有会话 %zu 个）\n", g_dataDir.c_str(), g_sessions.size());
 
     if (openBrowser) {

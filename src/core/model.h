@@ -5,6 +5,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -268,6 +269,8 @@ struct Card {
     string spell;    // 神通 id；'strike' / 'defend' 为通用卡
 };
 
+struct Player;
+
 // 人类对手使用同一套神通效果、灵力和牌堆规则。
 struct EnemyCombat {
     bool enabled = false;
@@ -278,12 +281,13 @@ struct EnemyCombat {
     vector<Card> deck;
     vector<string> hand, draw, discard, exhausted, planned;
     map<string, int> cooldowns;
-    int mana = 0, maxMana = 3, shuffles = 0, played = 0;
+    int mana = 0, maxMana = 3, shuffles = 0, played = 0, turns = 0;
     bool attacked = false;
     int swordQi = 0, water = 0, soul = 0, charge = 0, lock = 0;
     int carryMana = 0, manaBonus = 0, manaPenalty = 0, drawNext = 0;
     int carryCap = 0, hpCostPct = 0, poison = 0, poisonTurns = 0;
     int burn = 0, burnTurns = 0, swordSequence = 0, comboDraws = 0;
+    int poisonDamage = -1;         // exact shadow poison tick; -1 keeps legacy stack semantics
     double buff = 0, reduction = 0, guard = 0, discardPower = 0;
     string last;
 };
@@ -292,6 +296,10 @@ struct EnemyCombat {
 // Demo 07 起改为卡牌斗法：每回合抽 5 张，出牌不触发反击，
 // 「结束回合」才结算持续伤害、敌方行动与护盾。
 struct Battle {
+    // Detached immutable human loadout; never refers to an account or NPC world.
+    // The pointed-to Player has no battle, preventing recursive snapshot graphs.
+    std::shared_ptr<const Player> shadowPlayer;
+    string shadowOutcome;          // empty / win / loss / draw / retreat
     EnemyCombat enemyCards;
     bool playerFirst = true;
     int playerSpeed = 0, enemySpeed = 0;
@@ -352,6 +360,7 @@ struct Battle {
     map<string, int> cooldowns;    // 神通 id -> 剩余回合数
     int poison = 0;
     int poisonTurns = 0;
+    int poisonDamage = -1;         // exact shadow poison tick after flat cleansing
     int playerPoison = 0;          // 敌方施加给玩家的每回合毒伤
     int playerPoisonTurns = 0;
     int burnTurns = 0;
@@ -463,7 +472,7 @@ struct Arts {
     // 已获得的功法抄本（对应 economy 的 books）
     vector<string> bookList;
 
-    bool battleActive() const { return battle.has_value(); }
+    bool battleActive() const { return battle && battle->shadowOutcome.empty(); }
 };
 
 // 玩家对某个 NPC 的往来记录。

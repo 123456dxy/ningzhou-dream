@@ -317,7 +317,14 @@ Intent battleIntent(const Battle& b) {
     return it;
 }
 
-bool battleActive(const Game& g) { return g.player.arts.battle.has_value(); }
+bool battleActive(const Game& g) {
+    return g.player.arts.battle && g.player.arts.battle->shadowOutcome.empty();
+}
+
+const string& battleShadowOutcome(const Game& g) {
+    static const string none;
+    return g.player.arts.battle ? g.player.arts.battle->shadowOutcome : none;
+}
 
 // ------------------------------------------------------------
 // 洗牌与抽牌
@@ -392,10 +399,7 @@ static int dungeonRelicValue(const Game& g, bool draw) {
     return amount;
 }
 
-static void battleInitCards(Game& g, bool migrate) {
-    Player& p = g.player;
-    Battle& b = *p.arts.battle;
-
+static vector<Card> battlePlayerDeck(const Player& p, const string& prefix) {
     // 额外神通各2张，普通攻防固定各5张，过滤旧档的基础牌和重复牌。
     vector<string> spells;
     vector<string> selected;
@@ -413,9 +417,16 @@ static void battleInitCards(Game& g, bool migrate) {
         spells.push_back("defend");
     }
 
-    b.deck.clear();
+    vector<Card> deck;
     for (size_t i = 0; i < spells.size(); ++i)
-        b.deck.push_back({"card-" + std::to_string(i), spells[i]});
+        deck.push_back({prefix + std::to_string(i), spells[i]});
+    return deck;
+}
+
+static void battleInitCards(Game& g, bool migrate) {
+    Player& p = g.player;
+    Battle& b = *p.arts.battle;
+    b.deck = battlePlayerDeck(p, "card-");
     if (g.dungeons.run && b.dungeonSite == g.dungeons.run->siteId)
         b.deck = g.dungeons.run->deck;
 
@@ -611,15 +622,27 @@ void battleStart(Game& g, const EnemySpec& enemy) {
 // 结算
 // ------------------------------------------------------------
 bool battleDefeatEndsLife(const Battle& b) {
-    return b.lethal || !b.dungeonSite.empty() || !b.advKind.empty() ||
+    return !b.shadowPlayer && (b.lethal || !b.dungeonSite.empty() || !b.advKind.empty() ||
         b.kind == "wild" || b.kind == "hunt" || b.kind == "tide" || b.kind == "ambush" ||
-        b.kind == "kill" || b.kind == "rob";
+        b.kind == "kill" || b.kind == "rob");
 }
 
 void battleFinish(Game& g, bool win, bool escape) {
     Player& p = g.player;
     Arts& a = p.arts;
     if (!a.battle.has_value()) return;
+    if (a.battle->shadowPlayer) {
+        Battle& result = *a.battle;
+        if (!result.shadowOutcome.empty()) return;
+        const bool draw = (result.turn >= 24 && result.hp > 0 && result.enemyHp > 0) ||
+                          (result.hp <= 0 && result.enemyHp <= 0);
+        result.shadowOutcome = escape ? "retreat" : draw ? "draw" : win ? "win" : "loss";
+        result.retreat = escape;
+        result.won = result.shadowOutcome == "win";
+        result.log.push_back(result.shadowOutcome == "draw" ? "天机切磋：平局。" :
+            escape ? "天机切磋：认输。" : win ? "天机切磋：获胜。" : "天机切磋：落败。");
+        return;
+    }
     Battle b = *a.battle;
 
     b.retreat = escape;
@@ -830,6 +853,7 @@ static string battleEffect(const Player& p, Battle& b, const SpellDef& spell,
             b.hp = std::min(b.max, b.hp + heal);
             b.playerPoison = std::max(0, b.playerPoison - jsFloor(m.poisonCleanse));
             if (b.playerPoison == 0) b.playerPoisonTurns = 0;
+            if (b.enemyCards.poisonDamage >= 0) b.enemyCards.poisonDamage = b.playerPoison;
             if (b.enemyCards.enabled && b.playerPoison == 0) {
                 b.enemyCards.poison = 0;
                 b.enemyCards.poisonTurns = 0;
@@ -889,6 +913,7 @@ static string battleEffect(const Player& p, Battle& b, const SpellDef& spell,
             if (kind == "poisonBurst") {
                 damage += jsRound((base + 12) * b.poison * 0.18);
                 b.poison = 0;
+                if (b.poisonDamage >= 0) b.poisonDamage = 0;
                 b.poisonTurns = 0;
             }
             if (kind == "soulBurst") {
@@ -947,6 +972,7 @@ static string battleEffect(const Player& p, Battle& b, const SpellDef& spell,
                 const int before = b.poison;
                 b.poison = std::min(BATTLE_POISON_CAP, b.poison + jsRound((add + jsFloor(m.poison)) * spell.statusScale));
                 b.poisonTurns = 3;
+                if (b.poisonDamage >= 0) b.poisonDamage = jsRound((base + 12) * 0.035 * b.poison);
                 if (b.hp > 0)
                     b.hp = std::min(b.max, b.hp + jsRound(b.max * (b.poison - before) * m.poisonHeal));
                 text += "毒+" + std::to_string(b.poison - before) + "层（共" + std::to_string(b.poison) +
@@ -1000,10 +1026,11 @@ static string battleEffect(const Player& p, Battle& b, const SpellDef& spell,
     X(mana) X(maxMana) X(shuffles) X(played) X(attacked) \
     X(swordQi) X(water) X(soul) X(charge) X(lock) X(carryMana) \
     X(manaBonus) X(manaPenalty) X(drawNext) X(carryCap) X(hpCostPct) \
-    X(poison) X(poisonTurns) X(burn) X(burnTurns) X(swordSequence) \
+    X(poison) X(poisonTurns) X(poisonDamage) X(burn) X(burnTurns) X(swordSequence) \
     X(comboDraws) X(buff) X(reduction) X(guard) X(discardPower) X(last)
 
 static Player battleEnemyPlayer(const Game& g, const Battle& b) {
+    if (b.shadowPlayer) return *b.shadowPlayer;
     const EnemyCombat& e = b.enemyCards;
     Player p;
     p.name = b.enemy; p.stage = e.stage; p.sect = e.sect; p.body = e.body;
@@ -1018,6 +1045,7 @@ static Player battleEnemyPlayer(const Game& g, const Battle& b) {
 }
 
 static ArtMods battleEnemyMods(const Battle& b) {
+    if (b.shadowPlayer) return talentMods(*b.shadowPlayer);
     Arts a;
     a.main = b.enemyCards.main; a.aux = b.enemyCards.aux;
     a.manuals = b.enemyCards.manuals; a.nodes = b.enemyCards.nodes;
@@ -1031,15 +1059,22 @@ static void battleTickStatuses(const Player& p, Battle& b, bool log) {
     const ArtMods m = talentMods(p);
     const int base = BATTLE_POWER[clampInt(p.stage, 0, 12)];
     const int dot =
-        (b.poisonTurns > 0 ? jsRound((base + 12) * 0.035 * b.poison) : 0) +
+        (b.poisonTurns > 0 ? (b.poisonDamage >= 0 ? b.poisonDamage : jsRound((base + 12) * 0.035 * b.poison)) : 0) +
         (b.burnTurns > 0 ? b.burn : 0);
     b.enemyHp -= dot;
     if (log && dot) b.log.push_back("回合结束：持续伤害" + std::to_string(dot) + "。");
-    if (b.poisonTurns > 0 && --b.poisonTurns == 0) b.poison = 0;
-    if (b.poisonTurns > 0)
-        b.poison = std::min(BATTLE_POISON_CAP, b.poison + jsFloor(m.poisonGrowth));
+    if (b.poisonTurns > 0 && --b.poisonTurns == 0) {
+        b.poison = 0;
+        if (b.poisonDamage >= 0) b.poisonDamage = 0;
+    }
+    if (b.poisonTurns > 0) {
+        const int growth = jsFloor(m.poisonGrowth);
+        b.poison = std::min(BATTLE_POISON_CAP, b.poison + growth);
+        if (growth > 0 && b.poisonDamage >= 0)
+            b.poisonDamage = jsRound((base + 12) * 0.035 * b.poison);
+    }
     if (b.burnTurns > 0 && --b.burnTurns == 0) b.burn = 0;
-    if (b.enemyHp <= 0) return;
+    if (b.enemyHp <= 0 && !b.shadowPlayer) return;
 
     // 敌方施加的毒与灼烧独立结算，不会反过来伤害施术者。
     const int burning = b.enemyCards.burnTurns > 0 ? b.enemyCards.burn : 0;
@@ -1052,12 +1087,14 @@ static void battleTickStatuses(const Player& p, Battle& b, bool log) {
     if (b.playerPoisonTurns > 0 && --b.playerPoisonTurns == 0) b.playerPoison = 0;
     if (!b.enemyCards.enabled) return;
     b.enemyCards.poisonTurns = b.playerPoisonTurns;
+    if (b.enemyCards.poisonDamage >= 0) b.enemyCards.poisonDamage = b.playerPoison;
     if (b.playerPoisonTurns == 0) b.enemyCards.poison = 0;
     else {
         const int growth = jsFloor(battleEnemyMods(b).poisonGrowth);
         if (growth > 0) {
             b.enemyCards.poison = std::min(BATTLE_POISON_CAP, b.enemyCards.poison + growth);
             b.playerPoison = jsRound((b.enemyPower + 12) * 0.035 * b.enemyCards.poison);
+            if (b.enemyCards.poisonDamage >= 0) b.enemyCards.poisonDamage = b.playerPoison;
         }
     }
 }
@@ -1070,7 +1107,8 @@ static Battle battleEnemyView(const Battle& b, int playerStage) {
     v.hp = b.enemyHp; v.max = b.enemyMax; v.shield = b.enemyShield;
     v.enemyHp = b.hp; v.enemyMax = b.max; v.enemyShield = b.shield;
     v.playerPoison = b.poisonTurns > 0
-        ? jsRound((BATTLE_POWER[clampInt(playerStage, 0, 12)] + 12) * 0.035 * b.poison) : 0;
+        ? (b.poisonDamage >= 0 ? b.poisonDamage :
+           jsRound((BATTLE_POWER[clampInt(playerStage, 0, 12)] + 12) * 0.035 * b.poison)) : 0;
     v.playerPoisonTurns = b.poisonTurns;
     return v;
 }
@@ -1084,11 +1122,17 @@ static void battleSaveEnemyView(Battle& b, const Battle& v, int playerStage) {
     b.enemyHp = v.hp; b.enemyMax = v.max; b.enemyShield = v.shield;
     b.hp = v.enemyHp; b.shield = v.enemyShield;
     if (v.poison <= 0 || v.poisonTurns <= 0) b.playerPoison = 0;
+    else if (v.poisonDamage >= 0) b.playerPoison = v.poisonDamage;
     else if (oldPoison != v.poison || oldPoisonTurns != v.poisonTurns)
         b.playerPoison = jsRound((b.enemyPower + 12) * 0.035 * v.poison);
     b.playerPoisonTurns = v.poisonTurns;
     b.enemyCd = v.cooldowns;
-    if (b.poisonTurns > 0) {
+    if (b.poisonDamage >= 0) {
+        b.poisonDamage = v.playerPoison;
+        if (b.poisonDamage == 0 || v.playerPoisonTurns == 0) {
+            b.poisonDamage = 0; b.poison = 0; b.poisonTurns = 0;
+        }
+    } else if (b.poisonTurns > 0) {
         const double quantum = (BATTLE_POWER[clampInt(playerStage, 0, 12)] + 12) * 0.035;
         if (v.playerPoison < jsRound(quantum * b.poison))
             b.poison = clampInt(jsFloor(v.playerPoison / quantum), 0, b.poison);
@@ -1121,15 +1165,17 @@ static string enemyRemoveTarget(const Battle& v, const SpellDef& spell) {
 
 static string battleEnemyPlay(Game* rng, const Player& p, Battle& v,
                               const string& uid, double reduction, double counter) {
+    const bool artifact = uid.rfind("artifact:", 0) == 0;
     auto held = std::find(v.hand.begin(), v.hand.end(), uid);
-    if (held == v.hand.end()) return "";
-    const Card* card = findCard(v, uid);
-    const SpellDef* sp = card ? battleSpell(card->spell) : nullptr;
-    if (!sp || sp->stage > p.stage || battleCooldown(v, sp->id) > 0 ||
+    if (!artifact && held == v.hand.end()) return "";
+    const Card* card = artifact ? nullptr : findCard(v, uid);
+    optional<ArtifactAbility> ability;
+    const SpellDef* sp = battleResolveSpell(p, artifact ? uid : card ? card->spell : "", ability);
+    if (v.played >= 24 || !sp || sp->stage > p.stage || battleCooldown(v, sp->id) > 0 ||
         v.mana < battleCost(p, *sp)) return "";
     const string target = enemyRemoveTarget(v, *sp);
     if (battleNeedsTarget(*sp) && target.empty()) return "";
-    v.hand.erase(held);
+    if (!artifact) v.hand.erase(held);
     if (!target.empty()) {
         auto removed = [&](const string& id) {
             const Card* c = findCard(v, id); return c && c->spell == target;
@@ -1150,7 +1196,8 @@ static string battleEnemyPlay(Game* rng, const Player& p, Battle& v,
         }
     }
     v.pendingDraw = 0;
-    v.discard.push_back(uid); ++v.played;
+    if (!artifact) v.discard.push_back(uid);
+    ++v.played;
     return text;
 }
 
@@ -1245,10 +1292,67 @@ static void battleEnemyInit(Game& g, const EnemySpec& spec, bool opening) {
     battleSaveEnemyView(b, v, g.player.stage);
 }
 
+void battleStartShadow(Game& encounter, const Player& challengerSnapshot,
+                       const Player& opponentSnapshot, uint32_t seed) {
+    // Copy before clearing the encounter, even if a caller passed its own player.
+    Player challenger = challengerSnapshot, opponent = opponentSnapshot;
+    challenger.arts.battle.reset(); opponent.arts.battle.reset();
+    encounter = Game{};
+    encounter.seed = encounter.rng = seed;
+    encounter.player = std::move(challenger);
+    encounter.clock.ageBase = encounter.player.age;
+    Battle b = battleReferenceState(encounter.player);
+    b.shadowPlayer = std::make_shared<const Player>(std::move(opponent));
+    const Player& foe = *b.shadowPlayer;
+    Battle v = battleReferenceState(foe);
+    b.kind = "tianji";
+    b.poisonDamage = v.poisonDamage = 0;
+    b.enemy = foe.name; b.enemyStage = foe.stage;
+    b.enemySect = foe.sect; b.enemyGender = foe.gender;
+    b.enemyPower = BATTLE_POWER[clampInt(foe.stage, 0, 12)];
+    b.enemySword = foe.sword; b.enemyDao = foe.arts.focus;
+    b.style = foe.arts.focus;
+    b.enemySwordCult = artHas(foe.arts, "剑", 1);
+    b.enemyMax = v.max; b.enemyHp = v.hp; b.enemyShield = v.shield;
+    b.enemySpeed = std::max(1, battleSpeed(foe) + v.speed);
+    b.playerSpeed = std::max(1, battleSpeed(encounter.player) + b.speed);
+    b.playerFirst = b.playerSpeed >= b.enemySpeed;
+    EnemyCombat& e = b.enemyCards;
+    e.enabled = true; e.stage = foe.stage; e.speed = b.enemySpeed;
+    e.body = foe.body; e.mind = foe.arts.mind; e.sect = foe.sect;
+    e.dao = foe.arts.focus; e.main = foe.arts.main; e.aux = foe.arts.aux;
+    e.manuals = foe.arts.manuals; e.nodes = foe.arts.nodes;
+    v.enemyHp = b.hp; v.enemyMax = b.max; v.enemyShield = b.shield;
+    v.deck = battlePlayerDeck(foe, "enemy-card-");
+    for (const auto& card : v.deck) {
+        v.draw.push_back(card.uid);
+        if (card.spell != "strike" && card.spell != "defend" &&
+            std::find(b.enemySpells.begin(), b.enemySpells.end(), card.spell) == b.enemySpells.end())
+            b.enemySpells.push_back(card.spell);
+    }
+    battleShuffle(encounter, v.draw); battleEnemyDraw(encounter, v, 5);
+    battleSaveEnemyView(b, v, encounter.player.stage);
+    b.log.push_back("天机大比留影切磋：独立气血与牌组，最多24回合，回合耗尽为平局。");
+    encounter.player.arts.battle = std::move(b);
+    battleInitCards(encounter, false);
+    encounter.player.arts.combatPrep.clear(); encounter.player.arts.combatBuff = 0;
+    Battle& started = *encounter.player.arts.battle;
+    if (!started.playerFirst) {
+        started.log.push_back("对方遁速更快，抢先施放首轮神通。");
+        battleEnemyAct(encounter);
+        if (started.hp <= 0 || started.enemyHp <= 0) {
+            battleFinish(encounter, started.hp > 0);
+            return;
+        }
+        battlePlan(encounter);
+    } else started.log.push_back("你的遁速取得先手，先行出牌。");
+}
+
 EnemyPreview battleEnemyPreview(const Game& g) {
     EnemyPreview out;
     if (!g.player.arts.battle) return out;
     const Battle& b = *g.player.arts.battle;
+    if (!b.shadowOutcome.empty()) { out.description = "天机切磋已经结束。"; return out; }
     Battle projected = b;
     battleDiscard(g.player, projected, static_cast<int>(projected.hand.size()));
     battleTickStatuses(g.player, projected, false);
@@ -1256,6 +1360,11 @@ EnemyPreview battleEnemyPreview(const Game& g) {
         out.damage = std::max(0, b.hp - projected.hp);
         out.description = projected.enemyHp <= 0
             ? "持续伤害将在敌方行动前击败对手。" : "毒与灼烧将在敌方行动前耗尽气血。";
+        return out;
+    }
+    if (b.shadowPlayer && !b.playerFirst && b.enemyCards.turns >= 24) {
+        out.damage = std::max(0, b.hp - projected.hp);
+        out.description = "双方各完成24回合后仍存活，切磋将判为平局。";
         return out;
     }
     if (!b.enemyCards.enabled) {
@@ -1273,14 +1382,18 @@ EnemyPreview battleEnemyPreview(const Game& g) {
     }
     const Player foe = battleEnemyPlayer(g, b);
     const ArtMods playerMods = talentMods(g.player);
-    const ArtMods mods = artModsOf(foe.arts);
+    const ArtMods mods = b.shadowPlayer ? talentMods(foe) : artModsOf(foe.arts);
     Battle v = battleEnemyView(projected, g.player.stage);
-    v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
+    if (!b.shadowPlayer || b.playerFirst || b.enemyCards.turns > 0) {
+        v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
+    }
     const int before = v.hp;
+    Game simulation; simulation.rng = g.rng;
     for (const auto& uid : b.enemyCards.planned) {
         const Card* card = findCard(v, uid);
-        const SpellDef* sp = card ? battleSpell(card->spell) : nullptr;
-        const string text = battleEnemyPlay(nullptr, foe, v, uid,
+        optional<ArtifactAbility> ability;
+        const SpellDef* sp = battleResolveSpell(foe, card ? card->spell : uid, ability);
+        const string text = battleEnemyPlay(b.shadowPlayer ? &simulation : nullptr, foe, v, uid,
                                             battleReduction(g.player, b), playerMods.bodyCounter);
         if (text.empty() || !sp) continue;
         out.spells.push_back(sp->id);
@@ -1294,6 +1407,8 @@ EnemyPreview battleEnemyPreview(const Game& g) {
             v.hp = std::min(v.max, v.hp + jsRound(v.max * std::min(0.05, mods.quietHeal)));
         if (artHas(foe.arts, "木", 2))
             v.hp = std::min(v.max, v.hp + jsRound(v.max * 0.01));
+        if (b.shadowPlayer && hasTalent(foe, "dragonBlood"))
+            v.hp = std::min(v.max, v.hp + jsRound(v.max * 0.03));
     }
     out.damage = std::max(0, b.hp - v.enemyHp);
     out.shield = v.shield;
@@ -1310,17 +1425,24 @@ static void battleEnemyPlan(Game& g) {
     EnemyCombat& e = b.enemyCards;
     const Player foe = battleEnemyPlayer(g, b);
     const ArtMods playerMods = talentMods(g.player);
-    const ArtMods mods = artModsOf(foe.arts);
+    const ArtMods mods = b.shadowPlayer ? talentMods(foe) : artModsOf(foe.arts);
     Battle v = battleEnemyView(b, g.player.stage);
-    v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
+    if (!b.shadowPlayer || b.playerFirst || b.enemyCards.turns > 0) {
+        v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
+    }
     e.planned.clear();
-    const int limit = e.sect.empty() ? 2 + e.stage / 6 : std::min(8, 3 + e.stage / 3);
+    Game simulation; simulation.rng = g.rng;
+    const int limit = b.shadowPlayer ? 24 : e.sect.empty() ? 2 + e.stage / 6 : std::min(8, 3 + e.stage / 3);
     for (int played = 0; played < limit; ++played) {
         string next;
         int priority = -1;
-        for (const auto& uid : v.hand) {
+        vector<string> candidates = v.hand;
+        if (b.shadowPlayer)
+            for (const auto& active : equippedArtifactAbilities(foe)) candidates.push_back(active.spell.id);
+        for (const auto& uid : candidates) {
             const Card* card = findCard(v, uid);
-            const SpellDef* sp = card ? battleSpell(card->spell) : nullptr;
+            optional<ArtifactAbility> ability;
+            const SpellDef* sp = battleResolveSpell(foe, card ? card->spell : uid, ability);
             if (!sp || sp->stage > foe.stage || battleCooldown(v, sp->id) > 0 ||
                 v.mana < battleCost(foe, *sp)) continue;
             if (battleNeedsTarget(*sp) && enemyRemoveTarget(v, *sp).empty()) continue;
@@ -1328,7 +1450,7 @@ static void battleEnemyPlan(Game& g) {
             if (candidate > priority) { next = uid; priority = candidate; }
         }
         if (next.empty()) break;
-        if (battleEnemyPlay(nullptr, foe, v, next, battleReduction(g.player, b), playerMods.bodyCounter).empty()) break;
+        if (battleEnemyPlay(b.shadowPlayer ? &simulation : nullptr, foe, v, next, battleReduction(g.player, b), playerMods.bodyCounter).empty()) break;
         e.planned.push_back(next);
         if (v.hp <= 0 || v.enemyHp <= 0) break;
     }
@@ -1336,7 +1458,9 @@ static void battleEnemyPlan(Game& g) {
     b.intentKind = "cards"; b.intentName.clear(); b.intentSpell.clear();
     for (const auto& id : preview.spells) {
         if (!b.intentName.empty()) b.intentName += " → ";
-        b.intentName += battleSpell(id)->name;
+        optional<ArtifactAbility> ability;
+        const SpellDef* spell = battleResolveSpell(foe, id, ability);
+        b.intentName += spell ? spell->name : id;
         if (b.intentSpell.empty()) b.intentSpell = id;
     }
     if (b.intentName.empty()) b.intentName = "调息";
@@ -1347,10 +1471,12 @@ static void battleEnemyAct(Game& g) {
     Battle& b = *g.player.arts.battle;
     if (!b.enemyCards.enabled) return;
     const Player foe = battleEnemyPlayer(g, b);
-    const ArtMods mods = artModsOf(foe.arts);
+    const ArtMods mods = b.shadowPlayer ? talentMods(foe) : artModsOf(foe.arts);
     const ArtMods playerMods = talentMods(g.player);
     Battle v = battleEnemyView(b, g.player.stage);
-    v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
+    if (!b.shadowPlayer || b.playerFirst || b.enemyCards.turns > 0) {
+        v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
+    }
     const vector<string> planned = b.enemyCards.planned;
     for (const auto& uid : planned) {
         const int hp = v.enemyHp, shield = v.enemyShield;
@@ -1376,6 +1502,12 @@ static void battleEnemyAct(Game& g) {
         v.hp = std::min(v.max, v.hp + jsRound(v.max * std::min(0.05, mods.quietHeal)));
     if (artHas(foe.arts, "木", 2))
         v.hp = std::min(v.max, v.hp + jsRound(v.max * 0.01));
+    if (b.shadowPlayer && hasTalent(foe, "dragonBlood")) {
+        const int recovered = std::min(v.max - v.hp, jsRound(v.max * 0.03));
+        v.hp += recovered;
+        if (recovered > 0) b.log.push_back("对方龙族血脉：恢复" + std::to_string(recovered) + "气血。");
+    }
+    ++b.enemyCards.turns;
     const int draws = 5 + v.drawNext; v.drawNext = 0;
     v.played = 0; v.attacked = false; v.swordSequence = 0; v.comboDraws = 0;
     battleEnemyDraw(g, v, draws);
@@ -1435,7 +1567,8 @@ static Preview battlePreviewSpell(const Player& p, const Battle& b, const SpellD
     status("soul", "震荡", "self", b.soul, copy.soul, 0, 6);
     const int base = BATTLE_POWER[clampInt(p.stage, 0, 12)];
     status("poison", "毒", "enemy", b.poison, copy.poison, copy.poisonTurns,
-           BATTLE_POISON_CAP, copy.poisonTurns > 0 ? jsRound((base + 12) * 0.035 * copy.poison) : 0);
+           BATTLE_POISON_CAP, copy.poisonTurns > 0 ? (copy.poisonDamage >= 0 ? copy.poisonDamage :
+               jsRound((base + 12) * 0.035 * copy.poison)) : 0);
     status("burn", "灼烧", "enemy", b.burn, copy.burn, copy.burnTurns,
            BATTLE_BURN_CAP, copy.burnTurns > 0 ? copy.burn : 0);
     out.text = text;
@@ -1522,6 +1655,13 @@ static void battleEndTurn(Game& g) {
     }
 
     if (b.hp <= 0) {
+        battleFinish(g, false);
+        return;
+    }
+
+    // A faster shadow already took the first phase; never grant a 25th phase.
+    if (b.shadowPlayer && !b.playerFirst && b.enemyCards.turns >= 24) {
+        b.turn = 24;
         battleFinish(g, false);
         return;
     }
@@ -1641,7 +1781,7 @@ static void battleEndTurn(Game& g) {
     battleDraw(g, 5 + extra + dungeonRelicValue(g, true));
     battlePlan(g);
 
-    if (b.log.size() > 12)
+    if (!b.shadowPlayer && b.log.size() > 12)
         b.log.erase(b.log.begin(), b.log.begin() + (b.log.size() - 12));
 }
 
@@ -1657,6 +1797,7 @@ TurnResult battleTurn(Game& g, const string& id, const string& target) {
         return out;
     }
     Battle& b = *p.arts.battle;
+    if (!b.shadowOutcome.empty()) return {false, "这场天机切磋已经结束。"};
 
     auto fail = [&](const string& msg) {
         TurnResult r;
@@ -1771,7 +1912,7 @@ TurnResult battleTurn(Game& g, const string& id, const string& target) {
                 (spell->kind == "human" ? "，消耗全部剑气与当前8%气血" : "");
     }
     b.log.push_back(text + extra);
-    if (b.log.size() > 12)
+    if (!b.shadowPlayer && b.log.size() > 12)
         b.log.erase(b.log.begin(), b.log.begin() + (b.log.size() - 12));
 
     if (b.hp <= 0) battleFinish(g, false);
