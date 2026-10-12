@@ -297,10 +297,11 @@ http::Response Store::handle(const http::Request& req, const std::string& owner,
     const auto requestId = in["requestId"].asString();
     if (!identifier(requestId)) return failure(400, "requestId需为1至64位字母、数字或下划线、短横线、点。", "request_id");
     if (!observe(owner, source)) return failure(503, "天机大比记录写入失败，请稍后重试。", "storage");
-    const auto entriesBefore = entries_; const auto encountersBefore = encounters_; const auto nextBefore = nextId_;
-    auto commit = [&](bool terminalReserve = false) {
+    // Validate first, then retain only the records this operation can change.
+    // Other owners' snapshots/encounters never need a rollback copy.
+    auto commit = [&](auto&& rollback, bool terminalReserve = false) {
         if (persist(terminalReserve)) return response(200, status(owner, source));
-        entries_ = entriesBefore; encounters_ = encountersBefore; nextId_ = nextBefore;
+        rollback();
         return failure(503, "天机大比记录写入失败，本次操作未提交，请使用相同requestId重试。", "storage");
     };
     const Window w = source ? windowFor(*source) : Window{};
@@ -315,9 +316,16 @@ http::Response Store::handle(const http::Request& req, const std::string& owner,
     if (joining) {
         if (entries_.size() >= MAX_ENTRIES) return failure(503, "本服留影存储已达上限，请联系管理员扩容。", "capacity");
         Player frozen; std::string why; if (!freezePlayer(source->player, frozen, why)) return failure(400, why, "build");
+        const auto nextBefore = nextId_;
         Entry e; e.id = "shadow-" + std::to_string(nextId_++); e.owner = owner; e.nickname = nickname;
         e.sourceLife = source->lifeId.substr(0, 128); e.eventId = w.eventId; e.registeredYear = w.year; e.group = std::min(4, frozen.stage / 3);
-        e.createdAt = now; e.snapshot = snapshotGame(frozen); entries_.emplace(e.id, std::move(e)); return commit();
+        e.createdAt = now; e.snapshot = snapshotGame(frozen);
+        const auto id = e.id;
+        if (!entries_.emplace(id, std::move(e)).second) {
+            nextId_ = nextBefore;
+            return failure(503, "天机大比留影编号冲突，请联系服务器管理员。", "store_unavailable");
+        }
+        return commit([&] { entries_.erase(id); nextId_ = nextBefore; });
     }
     if (challenging) {
         if (!entry) return failure(409, "请先报名并留下构筑留影。", "not_joined");
@@ -332,10 +340,18 @@ http::Response Store::handle(const http::Request& req, const std::string& owner,
             if (prior->second.requestId == requestId) return response(200, status(owner, source));
             return failure(409, "本届对同一留影仅能挑战一次。", "already_attempted");
         }
+        const auto nextBefore = nextId_;
         Encounter e; e.id = "duel-" + std::to_string(nextId_++); e.owner = owner; e.entryId = entry->id; e.targetId = targetId;
         e.requestId = requestId; e.startedAt = now; std::random_device random;
         battleStartShadow(e.game, entry->snapshot.player, target->second.snapshot.player, random());
-        entry->attempts[targetId] = {"pending", requestId}; encounters_[owner] = std::move(e); settle(encounters_.at(owner), now); return commit();
+        // Keep the previous (settled) encounter node intact until the write commits.
+        auto previous = encounters_.extract(owner);
+        entry->attempts[targetId] = {"pending", requestId}; encounters_.emplace(owner, std::move(e)); settle(encounters_.at(owner), now);
+        return commit([&] {
+            encounters_.erase(owner);
+            if (!previous.empty()) encounters_.insert(std::move(previous));
+            entry->attempts.erase(targetId); nextId_ = nextBefore;
+        });
     }
     auto it = encounters_.find(owner);
     if (it == encounters_.end() || it->second.id != in["encounterId"].asString()) return failure(409, "此挑战不属于当前账号或已不是当前挑战。", "encounter");
@@ -349,9 +365,13 @@ http::Response Store::handle(const http::Request& req, const std::string& owner,
     if (revision.asInt() != e.revision) return failure(409, "挑战状态已更新，请重新读取状态后操作。", "stale_revision");
     if (!e.result.empty()) return failure(409, "此挑战已经结算。", "settled");
     if (e.receipts.size() >= MAX_STEPS || (e.receipts.size() >= MAX_STEPS - 1 && action != "forfeit")) return failure(409, "行动次数已达安全上限，请认输结束。", "step_limit");
+    auto before = e;
+    auto& attempt = entries_.at(e.entryId).attempts.at(e.targetId);
+    auto resultBefore = attempt.result;
+    auto rollback = [&] { e = std::move(before); attempt.result = std::move(resultBefore); };
     if (action == "forfeit") battleFinish(e.game, false, true);
-    else { const auto result = battleTurn(e.game, action, target); if (!result.ok) { entries_ = entriesBefore; encounters_ = encountersBefore; return failure(400, result.error, "illegal_action"); } }
-    ++e.revision; e.receipts[requestId] = fingerprint; settle(e, now); return commit(!e.result.empty());
+    else { const auto result = battleTurn(e.game, action, target); if (!result.ok) { rollback(); return failure(400, result.error, "illegal_action"); } }
+    ++e.revision; e.receipts[requestId] = fingerprint; settle(e, now); return commit(rollback, !e.result.empty());
 }
 
 Value Store::serialize() const {
