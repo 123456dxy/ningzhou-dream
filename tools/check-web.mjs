@@ -53,7 +53,7 @@ const state = {
 
 const cityMap = renderAtlas(state);
 verify(cityMap.includes('data-map-detail="wuling"') && cityMap.includes('当前城池')
-  && cityMap.includes('assets/map/locations/wuling.png') && !cityMap.includes('id="map-travel-start"'), '舆图默认显示当前城池详情与武陵城独立插画，无须先点一次地点');
+  && cityMap.includes('assets/map/locations/wuling.webp') && !cityMap.includes('id="map-travel-start"'), '舆图默认显示当前城池详情与武陵城独立插画，无须先点一次地点');
 const destination = state.locations[1];
 const routeMap = renderAtlas(state, { focus: destination.id, mode: 'walk' });
 verify(selectedTravelMode(destination).id === 'boat' && selectedTravelMode(destination, 'walk').id === 'walk', '可用灵舟为默认方式，选定的步行方式保留');
@@ -65,8 +65,8 @@ verify(/data-travel-mode="flight"[^>]*disabled/.test(routeMap)
 const seaMap = renderAtlas(state, { focus: 'sea', mode: 'walk' });
 verify(/data-travel-mode="walk"[^>]*disabled/.test(seaMap) && seaMap.includes('无尽海没有步行通路')
   && /id="map-travel-start"[^>]*disabled/.test(seaMap), '海路步行显示拒绝原因并阻止启程');
-verify(renderAtlas(state, { focus: 'jinhong' }).includes('assets/map/locations/jinhong.png')
-  && seaMap.includes('assets/map/locations/sea.png'), '金虹山门与无尽海使用各自地点插画');
+verify(renderAtlas(state, { focus: 'jinhong' }).includes('assets/map/locations/jinhong.webp')
+  && seaMap.includes('assets/map/locations/sea.webp'), '金虹山门与无尽海使用各自地点插画');
 
 // 读取引擎真实地点表作为测试输入，避免只检查一两个代表地点而漏掉其余地点。
 const modelSource = readFileSync(join(rootDir, 'src', 'core', 'model.h'), 'utf8');
@@ -88,12 +88,12 @@ for (const location of localLocations) {
   const imageTag = html.match(/<img\b[^>]*class="[^\"]*\bdestination-art\b[^\"]*"[^>]*>/)?.[0] || '';
   const src = imageTag.match(/\bsrc="([^\"]+)"/)?.[1];
   verify(src === expectedSrc
-    && html.includes(`data-map-detail="${location.id}"`) && !/(?:city|sect|wild)-scene\.png/.test(imageTag),
+    && html.includes(`data-map-detail="${location.id}"`) && !/(?:city|sect|wild)-scene\.(?:png|webp)/.test(imageTag),
     `${location.name} 详情映射到指定地点意象，旧地点仍使用各自独立图片`);
   const png = readFileSync(join(rootDir, 'web', expectedSrc));
-  verify(png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-    && png.readUInt32BE(16) > 0 && png.readUInt32BE(20) > 0, `${location.name} 的本地独立插画是有尺寸的真实 PNG`);
-  verify(src === `assets/map/locations/${location.id}.png`, `${location.name} 使用自己的独立插画`);
+  verify(png.subarray(0, 4).toString() === 'RIFF' && png.subarray(8, 12).toString() === 'WEBP'
+    && png.length > 1024, `${location.name} 的本地独立插画是真实的 WebP`);
+  verify(src === `assets/map/locations/${location.id}.webp`, `${location.name} 使用自己的独立插画`);
   artSources.push(src);
   artDigests.push(createHash('sha256').update(png).digest('hex'));
 }
@@ -194,9 +194,9 @@ const loadoutHTML = renderNpcLoadout({ id:'friend', dao:'金', loadout:{
 } });
 verify(loadoutHTML.includes('主修 金虹心诀 3 层') && loadoutHTML.includes('锐金诀') && loadoutHTML.includes('金道入门')
   && loadoutHTML.includes('data-npc-loadout="friend"'), 'NPC详情展示后端实际功法层数、神通与悟道');
-verify(portraits.portraitSource({gender:'女'}, 'player').endsWith('player-female.png')
-  && portraits.portraitSource({portrait:'assets/portraits/sect-xinghe.png'}).endsWith('sect-xinghe.png')
-  && portraits.portraitSource({stage:9}, 'beast').endsWith('beast-3.png'), '立绘优先读引擎路径，玩家性别和妖兽大境界回退正确');
+verify(portraits.portraitSource({gender:'女'}, 'player').endsWith('player-female.webp')
+  && portraits.portraitSource({portrait:'assets/portraits/sect-xinghe.webp'}).endsWith('sect-xinghe.webp')
+  && portraits.portraitSource({stage:9}, 'beast').endsWith('beast-3.webp'), '立绘优先读引擎路径，玩家性别和妖兽大境界回退正确');
 const battleBefore = {enemy:'道友',npcId:'friend',turn:0,hp:100,shield:5,enemyHp:100,enemyShield:8};
 verify(portraits.battleImpacts(null, battleBefore).length === 0
   && portraits.battleImpacts(battleBefore, {...battleBefore}).length === 0
@@ -232,9 +232,9 @@ const context = { ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...a
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
   fetch: async (path, options) => { requests.push({ path, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; } };
 for (const name of ['ningzhou-atlas']) {
-  const png = readFileSync(join(rootDir, 'web', 'assets', 'map', name + '.png'));
-  verify(png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-    && png.readUInt32BE(16) > 0 && png.readUInt32BE(20) > 0, `地图插画 ${name} 是有尺寸的真实 PNG`);
+  const img = readFileSync(join(rootDir, 'web', 'assets', 'map', name + '.webp'));
+  verify(img.subarray(0, 4).toString() === 'RIFF' && img.subarray(8, 12).toString() === 'WEBP'
+    && img.length > 1024, `地图插画 ${name} 是真实的 WebP`);
 }
 let source = readFileSync(join(rootDir, 'web', 'app.mjs'), 'utf8').replace(/^import[\s\S]*?;\r?\n/gm, '');
 source = source.slice(0, source.indexOf('(async function boot()'));
@@ -242,7 +242,7 @@ source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = {
 vm.runInNewContext(source, context);
 context.api.renderSidebar();
 verify(element('#player-card').innerHTML.includes('<strong>16</strong><span>岁</span>'), '年龄显示单位而不粘连月份');
-verify(element('#player-card').innerHTML.includes('player-female.png') && element('#player-card').innerHTML.includes('遁速')
+verify(element('#player-card').innerHTML.includes('player-female.webp') && element('#player-card').innerHTML.includes('遁速')
   && !element('#player-card').innerHTML.includes('<label>剑意</label>'), '角色侧栏使用性别立绘与遁速，移除旧永久剑意属性');
 context.api.setSub('market', 'brew');
 const brew = context.api.viewMarket();
@@ -296,7 +296,7 @@ context.api.getState().job = null;
 const beforeArtwork = requests.length;
 actionButton.dataset = { action: 'location-art', id: 'wuling' };
 await handlers.click({ target: { closest(sel) { return sel === '[data-action]' ? actionButton : null; } } });
-verify(element('#location-art-modal').open && element('#location-art-modal').innerHTML.includes('assets/map/locations/wuling.png')
+verify(element('#location-art-modal').open && element('#location-art-modal').innerHTML.includes('assets/map/locations/wuling.webp')
   && requests.length === beforeArtwork, '地点大图入口展示本地点图片且不发送推进请求');
 actionButton.dataset = { action: 'close-location-art' };
 await handlers.click({ target: { closest(sel) { return sel === '[data-action]' ? actionButton : null; } } });

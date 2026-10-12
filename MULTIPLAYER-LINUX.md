@@ -16,7 +16,7 @@ apt install cmake g++ webp
 tools/linux/package-linux.sh            # 输出到 dist/linux/app
 cd dist/linux/app && ./run.sh           # 监听 0.0.0.0:25001
 ```
-仓库里只保存 PNG 原图；WebP 在打包时由 `cwebp -q 82` 生成（约 151MB → 17MB）。服务端收到 `*.png` 请求时，若同目录下有同名 `.webp` 就返回 WebP，因此前端与规则代码里的 `.png` 引用无需修改。
+`web/assets` 下的地图与立绘已统一压缩为 WebP（`cwebp -q 82 -m 6`，约 152MB → 16MB），前端与规则代码直接引用 `.webp`。服务端收到旧的 `*.png` 请求时，若同目录下有同名 `.webp` 就返回 WebP，兼容旧存档里记录的立绘路径。新增图片可先放 PNG，打包脚本会自动转成 WebP。
 
 ## 测试
 ```bash

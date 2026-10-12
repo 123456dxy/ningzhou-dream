@@ -172,7 +172,7 @@ export function renderAtlas(state, { focus: focusId = null, search = '', filter 
     + `<div class="atlas-map-heading"><h3>宁州山川</h3><div class="atlas-controls"><button data-action="map-zoom" data-id="-.25" aria-label="缩小舆图" ${scale <= .75 ? 'disabled' : ''}>−</button>`
     + `<button data-action="map-zoom" data-id="fit">全览</button><button data-action="map-zoom" data-id=".25" aria-label="放大舆图" ${scale >= 2 ? 'disabled' : ''}>＋</button></div></div>`
     + `<div class="atlas-viewport" data-map-viewport data-zoom="${scale}" tabindex="0" aria-label="宁州舆图，可滚动查看">`
-    + `<div class="map-canvas atlas-canvas" data-map-atlas style="width:${scale * 100}%;min-width:${scale < 1 ? '100%' : `${Math.round(660 * scale)}px`}"><img class="atlas-art" src="assets/map/ningzhou-atlas.png" alt="宁州山川、河流与海岸舆图" width="1600" height="1000">`
+    + `<div class="map-canvas atlas-canvas" data-map-atlas style="width:${scale * 100}%;min-width:${scale < 1 ? '100%' : `${Math.round(660 * scale)}px`}"><img class="atlas-art" src="assets/map/ningzhou-atlas.webp" alt="宁州山川、河流与海岸舆图" width="1600" height="1000">`
     + routeDrawing(from, to, job ? (Number(job.elapsed) || 0) / Math.max(1, Number(job.total) || 1) : 0)
     + pins + dungeonPins + `<span class="atlas-compass" aria-hidden="true">北<br>↑</span></div></div>`
     + `<div class="atlas-legend"><span><i class="city"></i>城池</span><span><i class="sect"></i>宗门</span><span><i class="wild"></i>险地</span>`

@@ -3,7 +3,7 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g,
   ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 const artwork = (id, name, subtitle) => Object.freeze({
-  src: `assets/map/locations/${id}.png`,
+  src: `assets/map/locations/${id}.webp`,
   alt: `${name}景观插画：${subtitle}`,
   subtitle,
 });

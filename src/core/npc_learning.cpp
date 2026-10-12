@@ -108,13 +108,13 @@ void refundLesson(Game& g, const Job& job, const string& reason) {
 
 string personPortrait(const string& gender, const string& sect, bool player) {
     const string root = "/assets/portraits/";
-    if (player) return root + (gender == "女" ? "player-female.png" : "player-male.png");
-    if (sect.empty() || !findSect(sect)) return root + (gender == "女" ? "rogue-female.png" : "rogue.png");
+    if (player) return root + (gender == "女" ? "player-female.webp" : "player-male.webp");
+    if (sect.empty() || !findSect(sect)) return root + (gender == "女" ? "rogue-female.webp" : "rogue.webp");
     const bool femaleDefault = sect == "xinghe" || sect == "zhushan";
-    return root + "sect-" + sect + ((gender == "女") == femaleDefault ? "" : (gender == "女" ? "-female" : "-male")) + ".png";
+    return root + "sect-" + sect + ((gender == "女") == femaleDefault ? "" : (gender == "女" ? "-female" : "-male")) + ".webp";
 }
 string beastPortrait(int stage) {
-    return "/assets/portraits/beast-" + std::to_string(clampInt(stage / 3, 0, 4)) + ".png";
+    return "/assets/portraits/beast-" + std::to_string(clampInt(stage / 3, 0, 4)) + ".webp";
 }
 vector<NpcLesson> npcLessons(const Game& g, const string& npcId) {
     vector<NpcLesson> result;

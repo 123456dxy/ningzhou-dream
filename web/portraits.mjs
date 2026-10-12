@@ -5,16 +5,16 @@ const SECTS = { 金虹剑派: 'jinhong', 星河剑派: 'xinghe', 竹山宗: 'zhu
 
 export function portraitSource(person = {}, kind = 'npc') {
   if (person.portrait) return person.portrait;
-  if (kind === 'player') return `assets/portraits/player-${person.gender === '女' ? 'female' : 'male'}.png`;
-  if (kind === 'beast') return `assets/portraits/beast-${Math.max(0, Math.min(4, Math.floor((Number(person.stage) || 0) / 3)))}.png`;
+  if (kind === 'player') return `assets/portraits/player-${person.gender === '女' ? 'female' : 'male'}.webp`;
+  if (kind === 'beast') return `assets/portraits/beast-${Math.max(0, Math.min(4, Math.floor((Number(person.stage) || 0) / 3)))}.webp`;
   const sect = SECTS[person.sectName] || SECTS[person.sect] || person.sect;
   if (['jinhong', 'xinghe', 'zhushan', 'lihuo', 'huachen'].includes(sect)) {
     const female = person.gender === '女';
     const originalFemale = sect === 'xinghe' || sect === 'zhushan';
     const suffix = female === originalFemale ? '' : female ? '-female' : '-male';
-    return `assets/portraits/sect-${sect}${suffix}.png`;
+    return `assets/portraits/sect-${sect}${suffix}.webp`;
   }
-  return `assets/portraits/rogue${person.gender === '女' ? '-female' : ''}.png`;
+  return `assets/portraits/rogue${person.gender === '女' ? '-female' : ''}.webp`;
 }
 
 export function renderPortrait(person, kind = 'npc', className = '') {
