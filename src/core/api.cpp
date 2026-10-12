@@ -124,6 +124,29 @@ bool readOnlyRoute(const std::string& path) {
     return false;
 }
 
+// Shared with read-only action previews: keep the exact route guard order.
+string actionBlockReason(const Game& g, const string& path) {
+    if (g.dungeons.run && path.rfind("/api/dungeon/", 0) != 0 && path != "/api/battle/turn")
+        return "请先结束当前秘境探索。";
+    if (g.ended) return "这一世已经结束，请查看结局或开始新的一世。";
+    if (g.player.arts.battle.has_value() && path != "/api/battle/turn")
+        return "请先完成当前斗法。";
+    if (g.pending.has_value() && path != "/api/choose" && path != "/api/battle/turn")
+        return "请先处理当前抉择。";
+    if (g.job.has_value() && path != "/api/advance" && path != "/api/cancel-job" &&
+        path != "/api/plan" && path != "/api/choose" && path != "/api/battle/turn")
+        return "已有进行中的安排，请继续推进或先中止安排。";
+    return "";
+}
+string breakthroughReason(const Game& g, const BreakthroughInfo& info) {
+    const string blocked = actionBlockReason(g, "/api/breakthrough");
+    if (!blocked.empty()) return blocked;
+    if (!info.ready) return "修为尚未圆满。";
+    if (g.player.stones < info.cost) return "灵石不足。";
+    if (g.player.health < 35) return "伤势过重，请先休养至 35 气血。";
+    return "";
+}
+
 Value num(int v) { return Value(v); }
 Value num(double v) { return Value(v); }
 Value num(long long v) { return Value(static_cast<double>(v)); }
@@ -133,6 +156,15 @@ std::string decimal(double value) {
     std::ostringstream out; out << std::fixed << std::setprecision(1) << value;
     return out.str();
 }
+Value actionQuoteView(const Game& g, const string& path, const shop::ActionQuote& quote) {
+    Value out(json::Object{});
+    const string blocked = actionBlockReason(g, path);
+    const string reason = blocked.empty() ? quote.reason : blocked;
+    out.set("enabled", Value(reason.empty() && quote.enabled)); out.set("reason", str(reason));
+    out.set("costStones", num(quote.costStones)); out.set("returnStones", num(quote.returnStones));
+    return out;
+}
+
 Value previewView(const Player& player, const SpellDef& spell) {
     const Preview pv = battleReferencePreview(player, spell);
     const Battle opening = battleReferenceState(player);
@@ -526,6 +558,20 @@ Value buildState(const Game& g) {
         }
 
         o.set("health", num(p.health));
+        o.set("healthMax", num(100));
+        o.set("healthUnit", str("%"));
+        {
+            const Battle ref = battleReferenceState(p);
+            Value combat(json::Object{});
+            combat.set("reference", Value(true));
+            combat.set("context", str("按当前健康度、境界、天赋、功法、悟道、装备与已有丹药准备计算的普通斗法开局参考；不含敌方行动或秘境额外效果。战斗中请以实时斗法面板为准。"));
+            combat.set("hp", num(ref.hp)); combat.set("hpMax", num(ref.max));
+            combat.set("mana", num(ref.mana)); combat.set("manaRegen", num(battleEnergy(p)));
+            combat.set("manaCap", num(battleManaCap(p))); combat.set("shield", num(ref.shield));
+            combat.set("swordQi", num(ref.swordQi)); combat.set("reduction", num(battleReduction(p, ref)));
+            combat.set("speed", num(battleSpeed(p) + ref.speed)); combat.set("damageBuff", num(ref.buff));
+            o.set("combatReference", std::move(combat));
+        }
         o.set("lifespan", num(p.lifespan));
         o.set("lifeBonus", num(p.lifeBonus));
         o.set("stage", num(p.stage));
@@ -639,6 +685,10 @@ Value buildState(const Game& g) {
         o.set("points", num(a.points));
         o.set("poison", num(a.poison));
         o.set("heart", num(a.heart));
+        o.set("mind", num(a.mind)); o.set("speed", num(a.speed));
+        o.set("hpBonus", num(a.hpBonus)); o.set("combatBuff", num(a.combatBuff));
+        o.set("repel", num(a.repel));
+        o.set("repelDescription", str("每逢岁末效力递减1；有效时降低游历受伤风险。"));
         o.set("furnace", str(a.furnace));
         o.set("durability", num(a.durability));
         {
@@ -772,6 +822,50 @@ Value buildState(const Game& g) {
             mo.set("hp", num(m.hp));
             mo.set("mana", num(m.mana));
             mo.set("sword", num(m.sword));
+            mo.set("heal", num(m.heal));
+            mo.set("shield", num(m.shield));
+            mo.set("brew", num(m.brew));
+            mo.set("forge", num(m.forge));
+            mo.set("reduction", num(m.reduction));
+            mo.set("charge", num(m.charge));
+            mo.set("water", num(m.water));
+            mo.set("poison", num(m.poison));
+            mo.set("soul", num(m.soul));
+            mo.set("drain", num(m.drain));
+            mo.set("fire", num(m.fire));
+            mo.set("steal", num(m.steal));
+            mo.set("roundShield", num(m.roundShield));
+            mo.set("openingShield", num(m.openingShield));
+            mo.set("openingMana", num(m.openingMana));
+            mo.set("openingQi", num(m.openingQi));
+            mo.set("quietHeal", num(m.quietHeal));
+            mo.set("combo", num(m.combo));
+            mo.set("burnBonus", num(m.burnBonus));
+            mo.set("thirdHeal", num(m.thirdHeal));
+            mo.set("qiGain", num(m.qiGain));
+            mo.set("discardShield", num(m.discardShield));
+            mo.set("discardPower", num(m.discardPower));
+            mo.set("waterMana", num(m.waterMana));
+            mo.set("waterKeep", num(m.waterKeep));
+            mo.set("burnStack", num(m.burnStack));
+            mo.set("burnExplosion", num(m.burnExplosion));
+            mo.set("poisonHeal", num(m.poisonHeal));
+            mo.set("poisonGrowth", num(m.poisonGrowth));
+            mo.set("shieldCharge", num(m.shieldCharge));
+            mo.set("shieldStrike", num(m.shieldStrike));
+            mo.set("swordCombo", num(m.swordCombo));
+            mo.set("swordMana", num(m.swordMana));
+            mo.set("drawCost", num(m.drawCost));
+            mo.set("drawBonus", num(m.drawBonus));
+            mo.set("carryBonus", num(m.carryBonus));
+            mo.set("quietMana", num(m.quietMana));
+            mo.set("comboMana", num(m.comboMana));
+            mo.set("comboDraw", num(m.comboDraw));
+            mo.set("bodyCounter", num(m.bodyCounter));
+            mo.set("poisonCleanse", num(m.poisonCleanse));
+            Value elements(json::Object{});
+            for (int i = 0; i < 12; ++i) elements.set(ART_DAOS[i], num(m.elements[i]));
+            mo.set("elements", std::move(elements));
             mo.set("brewYield", num(m.brewYield));
             mo.set("forgeSpeed", num(m.forgeSpeed));
             mo.set("craftedSale", num(m.craftedSale));
@@ -1078,6 +1172,12 @@ Value buildState(const Game& g) {
         o.set("cost", num(b.cost));
         o.set("ready", Value(b.ready));
         o.set("major", Value(b.major));
+        const string reason = breakthroughReason(g, b);
+        o.set("enabled", Value(reason.empty())); o.set("reason", str(reason));
+        o.set("days", num(b.major ? 90 : 30)); o.set("failureLoss", num(b.failureLoss));
+        o.set("pillsConsumed", num(b.major && g.player.pills > 0 ? 1 : 0));
+        o.set("coresConsumed", num(b.major && g.player.cores > 0 ? 1 : 0));
+        o.set("breakBuffConsumed", Value(b.major && !g.player.arts.breakBuff.empty()));
         s.set("breakthrough", std::move(o));
     }
 
@@ -1138,6 +1238,32 @@ Value buildState(const Game& g) {
             arr.push_back(std::move(o));
         }
         s.set("nearby", Value(std::move(arr)));
+    }
+
+    // Full current-player catalog, including unowned and high-grade pills.
+    // enabled/reason describe using one pill, not buying or brewing it.
+    {
+        json::Array catalog;
+        const string blocked = actionBlockReason(g, "/api/use-pill");
+        for (const auto& recipe : data::RecipeDef_TABLE()) {
+            const PillUseInfo info = artPillUseInfo(g.player, recipe);
+            Value item(json::Object{});
+            item.set("id", str(recipe.id)); item.set("name", str(recipe.name));
+            item.set("kind", str(recipe.kind)); item.set("grade", num(recipe.grade)); item.set("dao", str(recipe.dao));
+            item.set("owned", num(info.owned)); item.set("effect", str(info.effect));
+            item.set("effectValue", num(info.effectValue)); item.set("baseEffect", str(info.baseEffect.text));
+            item.set("usage", str(info.usage)); item.set("used", num(info.used));
+            item.set("toleranceLimit", num(info.toleranceLimit)); item.set("toleranceRemaining", num(info.toleranceRemaining));
+            item.set("toleranceUnlimited", Value(info.toleranceUnlimited)); item.set("overTier", Value(info.overTier));
+            item.set("basePoison", num(recipe.poison)); item.set("poison", num(info.poison));
+            item.set("poisonAfter", num(info.poisonAfter)); item.set("poisonDelta", num(info.poisonDelta));
+            item.set("requiredStage", num(info.requiredStage));
+            item.set("requiredRealm", str(info.requiredStage >= 0 ? realmName(info.requiredStage) : ""));
+            const string reason = blocked.empty() ? info.reason : blocked;
+            item.set("enabled", Value(reason.empty())); item.set("reason", str(reason));
+            catalog.push_back(std::move(item));
+        }
+        s.set("pillCatalog", Value(std::move(catalog)));
     }
 
     // ---- 坊市（只在城池有货）----
@@ -1201,6 +1327,14 @@ Value buildState(const Game& g) {
             o.set("price", num(gr.price));
             o.set("element", str(gr.element)); o.set("polarity", str(gr.polarity));
             o.set("crafted", Value(gr.crafted)); o.set("shape", str(artifactShape(gr)));
+            {
+                Value actions(json::Object{});
+                for (const string action : {"equip", "unequip", "inscribe", "salvage", "sell"}) {
+                    const string path = action == "equip" ? "/api/equip" : action == "sell" ? "/api/sell" : "/api/gear/" + action;
+                    actions.set(action, actionQuoteView(g, path, shop::gearActionQuote(g, action, gr.id)));
+                }
+                o.set("actions", std::move(actions));
+            }
             o.set("inscribed", Value(gr.inscribed)); o.set("passive", artifactPassiveView(g.player, gr));
             const ArtifactAbility ability = artifactAbility(gr);
             o.set("shapeName", str(ability.shapeName)); o.set("ability", artifactView(g.player, ability));
@@ -1316,6 +1450,7 @@ Value buildState(const Game& g) {
             arr.push_back(std::move(o));
         }
         s.set("furnaces", Value(std::move(arr)));
+        s.set("furnaceRepair", actionQuoteView(g, "/api/furnace/repair", shop::furnaceRepairQuote(g)));
     }
     {
         json::Array arr;
@@ -1387,6 +1522,7 @@ Value buildState(const Game& g) {
         o.set("cause", str(e.cause));
         const auto archive=legacyLoad();
         const bool claimed=std::find(archive.claimed.begin(),archive.claimed.end(),g.lifeId)!=archive.claimed.end();
+        o.set("settled", Value(claimed));
         o.set("canRestore",Value(e.cause!="寿终正寝" && g.checkpoint.enabled && !claimed));
         o.set("year", num(e.year));
         o.set("age", num(e.age));
@@ -1574,16 +1710,8 @@ http::Response handle(const http::Request& req) {
         if (!started()) return jsonError("请先创建角色或读取存档。");
         const bool persist = path == "/api/save" || path == "/api/legacy/settle" || path == "/api/checkpoint/restore";
         if (!persist) {
-            if (g.dungeons.run && path.rfind("/api/dungeon/",0) != 0 && path != "/api/battle/turn")
-                return jsonError("请先结束当前秘境探索。");
-            if (g.ended) return jsonError("这一世已经结束，请查看结局或开始新的一世。");
-            if (g.player.arts.battle.has_value() && path != "/api/battle/turn")
-                return jsonError("请先完成当前斗法。");
-            if (g.pending.has_value() && path != "/api/choose" && path != "/api/battle/turn")
-                return jsonError("请先处理当前抉择。");
-            if (g.job.has_value() && path != "/api/advance" && path != "/api/cancel-job" &&
-                path != "/api/plan" && path != "/api/choose" && path != "/api/battle/turn")
-                return jsonError("已有进行中的安排，请继续推进或先中止安排。");
+            const string blocked = actionBlockReason(g, path);
+            if (!blocked.empty()) return jsonError(blocked);
         }
     }
     if (path == "/api/export" && !started())
@@ -1767,11 +1895,8 @@ http::Response handle(const http::Request& req) {
     // ---- 突破 ----
     if (path == "/api/breakthrough") {
         const BreakthroughInfo info = breakthroughInfo(g);
-        if (!info.ready) return jsonError("修为尚未圆满。");
-        if (g.player.stones < info.cost) return jsonError("灵石不足。");
-        // 重伤不许强冲（对应 JS ordinaryActionError）
-        if (g.player.health < 35)
-            return jsonError("伤势过重，请先休养至 35 气血。");
+        const string blocked = breakthroughReason(g, info);
+        if (!blocked.empty()) return jsonError(blocked);
         g.player.stones -= info.cost;
         // 大境界要消耗凝元丹与灵核各一枚。
         // 之前不扣，但成功率公式仍然吃 +18% / +10% 的加成，
@@ -2300,105 +2425,8 @@ http::Response handle(const http::Request& req) {
 
     // ---- 服用丹药 ----
     if (path == "/api/use-pill") {
-        const std::string pid = strOf(in, "id");
-        Player& p = g.player;
-        Arts& a = p.arts;
-        if (a.potions.count(pid) == 0 || a.potions[pid] <= 0)
-            return jsonError("没有这味丹药。");
-        const data::RecipeDef* r = findRecipe(pid);
-        if (!r) return jsonError("没有这张丹方。");
-        if (r->kind == "xp" && hasTalent(p, "oddMeridian"))
-            return jsonError("经脉异变无法吸收修为丹药；可通过修炼增长修为。");
-
-        // ---- 门槛（对应 JS arts.mjs 的 eat 分支）----
-        // 1) 耐药上限：丹道三层翻倍
-        const int limit = r->tolerance * (artHas(a, "丹", 3) ? 2 : 1);
-        const auto usedEntry = a.used.find(pid);
-        const int used = usedEntry == a.used.end() ? 0 : usedEntry->second;
-        if (r->tolerance > 0 && used >= limit)
-            return jsonError("已达到此丹耐药上限（" +
-                             std::to_string(used) + "/" +
-                             std::to_string(limit) + "）。");
-        // 2) 丹毒过高时不能乱吃，化毒丹除外
-        if (a.poison >= 80 && r->kind != "detox")
-            return jsonError("丹毒过高（" + std::to_string(a.poison) +
-                             "），请先化毒。");
-        // 3) 资质丹本世最多提升 10 点
-        if (r->kind == "apt" && a.aptPills >= 10)
-            return jsonError("本世资质丹药提升已达 10 点，不能反复洗炼。");
-
-        const PillEffect ef = artPillEffect(p, *r);
-        if (r->kind == "apt" && ef.value <= 0)
-            return jsonError("资质已达上限，此丹无法继续提升。");
-
-        // ---- 效果结算（原来只扣丹加毒，效果全都没生效）----
-        const string kind = r->kind;
-        if (kind == "breakthrough") {
-            // 大境界准备：给一次突破增益
-            const int stage = r->sourceEffect.find("结婴") != string::npos ? 8
-                              : r->sourceEffect.find("化神") != string::npos ? 11
-                              : r->name == "筑基丹" ? 2
-                                                    : 5;
-            if (p.stage != stage)
-                return jsonError("该丹只用于对应的大境界准备。");
-            a.breakBuff = "stage";
-        } else if (kind == "xp") {
-            const int need = realmOf(p.stage).need;
-            p.xp = std::min(need, p.xp + ef.value);
-        } else if (kind == "heal") {
-            p.health = std::min(100, p.health + ef.value);
-        } else if (kind == "detox") {
-            a.poison = std::max(0, a.poison - ef.value);
-        } else if (kind == "points") {
-            a.points += ef.value;
-        } else if (kind == "dao") {
-            if (daoIndex(r->dao) < 0) return jsonError("此道尚未开放。");
-            artGain(p, r->dao, ef.value);
-        } else if (kind == "life") {
-            p.lifeBonus = std::min(250, p.lifeBonus + ef.value);
-            const int base[5] = {100, 200, 500, 1000, 2000};
-            p.lifespan = std::min(3000, base[std::min(4, p.stage / 3)] +
-                                            p.lifeBonus);
-        } else if (kind == "apt") {
-            const int inc = std::min({ef.value, 10 - a.aptPills, APT_MAX - p.apt});
-            if (inc > 0) {
-                p.apt += inc;
-                a.aptPills += inc;
-            }
-        } else if (kind == "insight") {
-            p.insight = std::min(INSIGHT_MAX, p.insight + ef.value);
-        } else if (kind == "body") {
-            a.hpBonus = std::min(200, a.hpBonus + ef.value);
-        } else if (kind == "heart" || kind == "mind" || kind == "speed") {
-            if (kind == "heart") a.heart = std::min(500, a.heart + ef.value);
-            else if (kind == "mind") a.mind = std::min(500, a.mind + ef.value);
-            else a.speed = std::min(500, a.speed + ef.value);
-        } else if (kind == "repel") {
-            a.repel = 2;
-        } else if (kind == "lure") {
-            // 引兽丹：给同阶炼器材料
-            const int grade = ordinaryMaterialGradeLimit(p);
-            for (const auto& mt : data::MaterialDef_TABLE()) {
-                if (mt.grade != grade) continue;
-                a.materials[mt.id] += 2;
-                break;
-            }
-        } else {
-            // 其余归入战斗准备（斗法起手生效）
-            const CombatPill prep = artCombatPill(*r);
-            a.combatPrep[prep.key] = prep.value;
-            if (prep.key == "attack") a.combatBuff = 0.1;
-        }
-
-        a.potions[pid] -= 1;
-        a.used[pid] += 1;
-        // 丹毒：丹药本身 + 越阶服用的额外惩罚
-        const bool overTier = (r->grade > artTier(p));
-        a.poison = std::min(100, a.poison + r->poison + (overTier ? 2 : 0));
-
-        logEvent(g, "self",
-                 "服下" + std::string(r->name) + "：" + ef.text, true, "",
-                 "丹毒 +" + std::to_string(r->poison + (overTier ? 2 : 0)));
+        const string error = artUsePill(g, strOf(in, "id"));
+        if (!error.empty()) return jsonError(error);
         return jsonOk(okWithState(g));
     }
 
@@ -2529,6 +2557,7 @@ http::Response handle(const http::Request& req) {
             e.set("friends", num(g.ending->friends));
             e.set("score", num(g.ending->score));
             const bool claimed = std::find(a.claimed.begin(),a.claimed.end(),g.lifeId)!=a.claimed.end();
+            e.set("settled", Value(claimed));
             e.set("canRestore",Value(g.ending->cause!="寿终正寝" && g.checkpoint.enabled && !claimed));
             o.set("ending", std::move(e));
         }

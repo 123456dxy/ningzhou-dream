@@ -198,6 +198,22 @@ struct PillEffect {
 };
 PillEffect artPillEffect(const Player& p, const data::RecipeDef& r);
 
+// 只读服药计划与实际服药共用结算；不复制角色、不消耗随机数。
+// enabled 只表示场外服药自身条件，API 另叠加任务/抉择/斗法等全局阻塞。
+struct PillUseInfo {
+    PillEffect baseEffect;
+    string effect, usage, reason;
+    double effectValue = 0;
+    int owned = 0, used = 0, toleranceLimit = 0, toleranceRemaining = 0;
+    bool toleranceUnlimited = false, overTier = false;
+    int poison = 0, poisonAfter = 0, poisonDelta = 0;
+    int requiredStage = -1;
+};
+PillUseInfo artPillUseInfo(const Player& p, const data::RecipeDef& r);
+// 空字符串表示成功；失败不修改任何资源，成功保留原有服药日志。
+string artUsePill(Game& g, const string& id);
+
+
 // 丹药战斗准备（对应 JS 的 artCombatPill）
 struct CombatPill {
     string key;
@@ -222,6 +238,7 @@ struct ActionError {
     string error;
 };
 ActionError artInstant(Game& g, const string& type, const string& id);
+string artEquipError(const Player& p, const string& id);
 
 // 进度查询（对应 artProgress）
 int artProgress(const Player& p, const string& key);

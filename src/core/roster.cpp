@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "core/arts.h"
+#include "core/calendar.h"
 #include "core/play.h"
 #include "core/sim.h"
 #include "core/sword.h"
@@ -275,9 +276,11 @@ PoisonInfo poisonInfo(const Game& g) {
     p.cultPenalty = std::max(0.5, 1.0 - std::max(0, a.poison - 20) / 160.0);
 
     // 自然化解速度（对应 calendar.cpp 的 detox 速率）
-    const double rate = 0.333333;              // 每天 1/3 点
-    p.detoxPerYear = rate * 360.0;
-    p.daysToClear = static_cast<int>(std::ceil(a.poison / rate));
+    p.detoxPerYear = calendarDetoxPerYear(g.player);
+    const auto stored = g.clock.carry.find("detox");
+    const double carry = stored == g.clock.carry.end() ? 0.0 : stored->second;
+    p.daysToClear = a.poison <= 0 ? 0 : static_cast<int>(std::ceil(
+        std::max(0.0, a.poison - carry - 1e-9) * 360.0 / p.detoxPerYear));
 
     if (a.poison == 0) {
         p.summary = "体内清明，无丹毒积存。";
@@ -287,7 +290,7 @@ PoisonInfo poisonInfo(const Game& g) {
                     " 才开始拖慢）。";
     } else {
         p.summary = "丹毒 " + std::to_string(a.poison) + "，修炼效率降到 ×" +
-                    std::to_string(static_cast<int>(std::round(p.cultPenalty * 100) / 100.0)).substr(0, 4) +
+                    std::to_string(std::round(p.cultPenalty * 100) / 100.0).substr(0, 4) +
                     "。自然化解约需 " + std::to_string(p.daysToClear) + " 天。";
     }
     return p;

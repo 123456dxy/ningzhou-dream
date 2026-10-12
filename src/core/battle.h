@@ -130,6 +130,8 @@ Preview battlePreview(const Player& p, const Battle& b, const string& id);
 // 目录和炼器的参考环境与真实斗法使用相同的开局属性、结算函数。
 // 不抽牌、不生成对手、不消耗 RNG；参考手牌固定五张，仅用于说明换念。
 Battle battleReferenceState(const Player& p);
+// Pure next-battle preview with one preparation replaced; no Player copy or RNG.
+Battle battleReferenceWithPreparation(const Player& p, const string& key, double value);
 Preview battleReferencePreview(const Player& p, const SpellDef& spell);
 string battlePreviewConditions(const Player& p, const SpellDef& spell);
 

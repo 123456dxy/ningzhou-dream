@@ -28,6 +28,20 @@ namespace nz::shop {
 //   gear:   (craftCost × 1.45 + 品阶×20) × (铭刻?1.12) × 行情
 int salePrice(const Game& g, const std::string& kind, const std::string& id);
 
+// Read-only quotes share price/eligibility with the corresponding action.
+// The API additionally applies its common job/event/battle/dungeon guards.
+struct ActionQuote {
+    bool enabled = false;
+    std::string reason;
+    int costStones = 0, returnStones = 0;
+    // Preserve legacy failed-sale map insertion order in the mutating action.
+    bool demandChecked = false, potionChecked = false;
+};
+ActionQuote saleQuote(const Game& g, const std::string& kind, const std::string& id);
+ActionQuote gearActionQuote(const Game& g, const std::string& action, const std::string& id);
+ActionQuote furnaceRepairQuote(const Game& g);
+
+
 struct SellResult {
     bool ok = false;
     std::string error;

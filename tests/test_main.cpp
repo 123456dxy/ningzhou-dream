@@ -41,6 +41,7 @@ int main() {
     nztest::runRewardApiTests();
     nztest::runEventRewardTests();
     nztest::runNumericPreviewTests();
+    nztest::runDisplayContractTests();
     nztest::runSectCompletionTests();
     nztest::runTianjiTests();
     nztest::runShadowCombatTests();

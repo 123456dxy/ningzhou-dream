@@ -82,6 +82,7 @@ void runRenownArtifactApiTests();
 void runRewardApiTests();
 void runEventRewardTests();
 void runNumericPreviewTests();
+void runDisplayContractTests();
 void runSectCompletionTests();
 void runTianjiTests();
 void runShadowCombatTests();

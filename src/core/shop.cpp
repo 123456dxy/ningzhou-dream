@@ -89,38 +89,56 @@ int salePrice(const Game& g, const string& kind, const string& id) {
     return 0;
 }
 
+ActionQuote saleQuote(const Game& g, const string& kind, const string& id) {
+    ActionQuote quote;
+    quote.returnStones = salePrice(g, kind, id);
+    const auto reject = [&](const string& error) { auto out = quote; out.reason = error; return out; };
+    const auto& p = g.player;
+    const auto& a = p.arts;
+    const auto& e = g.economy;
+    if (g.ended) return reject("这一世已经结束。");
+    if (g.pending.has_value()) return reject("请先完成当前事件。");
+    if (a.battle.has_value()) return reject("斗法中无法交易。");
+    if (!ecoIsCity(p.location)) return reject("此处没有坊市。请前往五城之一。");
+    if (quote.returnStones <= 0) return reject("此物无法出售。");
+    if (e.marketCash < quote.returnStones)
+        return reject("坊市收购资金不足（余 " + std::to_string(e.marketCash) + "），请下月再来。");
+    const int limit = renown::sellLimit(p.renown);
+    const auto sold = e.sold.find(kind + ":" + id);
+    quote.demandChecked = true;
+    if (sold != e.sold.end() && sold->second >= limit)
+        return reject("本月此类货品需求已满（" + std::to_string(limit) + " 件），请下月出售。");
+    if (kind == "potion") {
+        quote.potionChecked = true;
+        const auto owned = a.potions.find(id);
+        if (owned == a.potions.end() || owned->second <= 0) return reject("没有这枚丹药。");
+    } else if (kind == "gear") {
+        if (!findGear(g, id)) return reject("没有这件法器。");
+        if (isEquipped(g, id)) return reject("请先卸下装备再出售。");
+    } else return reject("此物无法出售。");
+    quote.enabled = true;
+    return quote;
+}
+
 SellResult sell(Game& g, const string& kind, const string& id) {
     Player& p = g.player;
     Arts& a = p.arts;
     Economy& e = g.economy;
-
-    if (g.ended) return fail("这一世已经结束。");
-    if (g.pending.has_value()) return fail("请先完成当前事件。");
-    if (a.battle.has_value()) return fail("斗法中无法交易。");
-    if (!ecoIsCity(p.location)) return fail("此处没有坊市。请前往五城之一。");
-
-    const int price = salePrice(g, kind, id);
-    if (price <= 0) return fail("此物无法出售。");
-    if (e.marketCash < price)
-        return fail("坊市收购资金不足（余 " + std::to_string(e.marketCash) +
-                    "），请下月再来。");
-
+    const ActionQuote quote = saleQuote(g, kind, id);
     const string key = kind + ":" + id;
-    const int limit = renown::sellLimit(g.player.renown);
-    if (e.sold[key] >= limit)
-        return fail("本月此类货品需求已满（" + std::to_string(limit) +
-                    " 件），请下月出售。");
-
+    // Old sell() touched these maps before ownership checks; keep its exact
+    // persisted behavior, while a quote itself is strictly non-mutating.
+    if (quote.demandChecked) (void)e.sold[key];
+    if (quote.potionChecked) (void)a.potions[id];
+    if (!quote.enabled) return fail(quote.reason);
+    const int price = quote.returnStones;
     string label;
     if (kind == "potion") {
-        if (a.potions[id] <= 0) return fail("没有这枚丹药。");
         const data::RecipeDef* r = findRecipe(id);
         label = r ? r->name : id;
         a.potions[id] -= 1;
     } else if (kind == "gear") {
         const Gear* gr = findGear(g, id);
-        if (!gr) return fail("没有这件法器。");
-        if (isEquipped(g, id)) return fail("请先卸下装备再出售。");
         label = gr->name;
         a.gear.erase(std::remove_if(a.gear.begin(), a.gear.end(),
                                     [&](const Gear& x) { return x.id == id; }),
@@ -497,7 +515,40 @@ SellResult librarySpellExchange(Game& g, const string& id) {
 // ============================================================
 // 法器
 // ============================================================
+ActionQuote gearActionQuote(const Game& g, const string& action, const string& id) {
+    if (action == "sell") return saleQuote(g, "gear", id);
+    ActionQuote quote;
+    const Gear* gear = findGear(g, id);
+    if (action == "equip") quote.reason = artEquipError(g.player, id);
+    else if (action == "unequip") {
+        if (!isEquipped(g, id)) quote.reason = "这件法器并未装备。";
+    } else if (action == "salvage") {
+        quote.returnStones = gear ? 5 * gear->grade : 0;
+        if (!gear) quote.reason = "没有这件法器。";
+        else if (isEquipped(g, id)) quote.reason = "请先卸下装备再分解。";
+    } else if (action == "inscribe") {
+        quote.costStones = gear ? 30 * gear->grade : 0;
+        if (!artHas(g.player.arts, "器", 1)) quote.reason = "需先领悟「器道入门」才能铭刻。";
+        else if (!gear) quote.reason = "没有这件法器。";
+        else if (gear->inscribed) quote.reason = "这件法器已经铭刻过了。";
+        else if (g.player.stones < quote.costStones)
+            quote.reason = "铭刻需 " + std::to_string(quote.costStones) + " 灵石。";
+    } else quote.reason = "未知法器操作。";
+    quote.enabled = quote.reason.empty();
+    return quote;
+}
+
+ActionQuote furnaceRepairQuote(const Game& g) {
+    ActionQuote quote; quote.costStones = 20;
+    if (g.player.arts.durability >= 40) quote.reason = "丹炉完好，无需修理。";
+    else if (g.player.stones < quote.costStones) quote.reason = "修炉需 20 灵石。";
+    quote.enabled = quote.reason.empty();
+    return quote;
+}
+
 SellResult unequip(Game& g, const string& id) {
+    const auto quote = gearActionQuote(g, "unequip", id);
+    if (!quote.enabled) return fail(quote.reason);
     Arts& a = g.player.arts;
     for (auto it = a.equipped.begin(); it != a.equipped.end(); ++it) {
         if (it->second != id) continue;
@@ -512,10 +563,10 @@ SellResult salvage(Game& g, const string& id) {
     Player& p = g.player;
     Arts& a = p.arts;
     const Gear* gr = findGear(g, id);
-    if (!gr) return fail("没有这件法器。");
-    if (isEquipped(g, id)) return fail("请先卸下装备再分解。");
+    const auto quote = gearActionQuote(g, "salvage", id);
+    if (!quote.enabled) return fail(quote.reason);
 
-    const int back = 5 * gr->grade;
+    const int back = quote.returnStones;
     const string name = gr->name;
     a.gear.erase(std::remove_if(a.gear.begin(), a.gear.end(),
                                 [&](const Gear& x) { return x.id == id; }),
@@ -529,14 +580,11 @@ SellResult salvage(Game& g, const string& id) {
 SellResult inscribe(Game& g, const string& id) {
     Player& p = g.player;
     Arts& a = p.arts;
-    if (!artHas(a, "器", 1))
-        return fail("需先领悟「器道入门」才能铭刻。");
+    const auto quote = gearActionQuote(g, "inscribe", id);
+    if (!quote.enabled) return fail(quote.reason);
     for (auto& gr : a.gear) {
         if (gr.id != id) continue;
-        if (gr.inscribed) return fail("这件法器已经铭刻过了。");
-        const int cost = 30 * gr.grade;
-        if (p.stones < cost)
-            return fail("铭刻需 " + std::to_string(cost) + " 灵石。");
+        const int cost = quote.costStones;
         p.stones -= cost;
         gr.inscribed = true;
         const string t = "为「" + gr.name + "」铭刻符文，效果 +12%。";
@@ -552,13 +600,13 @@ SellResult inscribe(Game& g, const string& id) {
 SellResult repairFurnace(Game& g) {
     Player& p = g.player;
     Arts& a = p.arts;
-    if (a.durability >= 40) return fail("丹炉完好，无需修理。");
-    if (p.stones < 20) return fail("修炉需 20 灵石。");
-    p.stones -= 20;
+    const auto quote = furnaceRepairQuote(g);
+    if (!quote.enabled) return fail(quote.reason);
+    p.stones -= quote.costStones;
     a.durability = 40;
     const string t = "修补丹炉，耐久回满。";
     logEvent(g, "self", t, false, "", "灵石 −20");
-    return ok(t, -20);
+    return ok(t, -quote.costStones);
 }
 
 vector<const data::FurnaceDef*> buyableFurnaces(const Game& g) {
