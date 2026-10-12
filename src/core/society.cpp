@@ -200,6 +200,21 @@ string storyChoiceError(const Game& g, const data::StoryDef& s, int optionIndex)
     return "";
 }
 
+string storyBegin(Game& g, const data::StoryDef& s, int optionIndex) {
+    if (g.ended || g.player.health <= 0 || g.player.age >= g.player.lifespan)
+        return "此世已结束。";
+    if (g.job || g.pending || g.player.arts.battle)
+        return "请先处理当前安排、抉择或斗法。";
+    if (const auto error = storyError(g, &s); !error.empty()) return error;
+    if (const auto error = storyChoiceError(g, s, optionIndex); !error.empty()) return error;
+    Job job;
+    job.actionType = "story"; job.name = s.name; job.plan = s.id;
+    job.kind = optionIndex == 0 ? "0" : "1"; job.origin = g.player.location;
+    job.total = job.remaining = s.days; job.started = g.clock.days; job.paid = true;
+    g.job = job;
+    return "";
+}
+
 void storyComplete(Game& g, const data::StoryDef& s, int optionIndex) {
     if (!storyChoiceError(g, s, optionIndex).empty()) return;
     const RewardReceipt receipt(g);

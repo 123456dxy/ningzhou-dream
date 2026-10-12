@@ -158,6 +158,9 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) +
                    "，你只有 " + std::to_string(p.stones) + "。";
+        const auto owned = a.potions.find(r->id);
+        if (owned != a.potions.end() && static_cast<long long>(owned->second) + count > 1000000000LL)
+            return "背包已无法收存更多丹药。";
         p.stones -= total;
         a.potions[r->id] += count;
         logEvent(g, "self",
@@ -180,6 +183,10 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) +
                    "，你只有 " + std::to_string(p.stones) + "。";
+        long long herbs = count;
+        for (const auto& [name, amount] : a.herbs) herbs += amount;
+        if (herbs > 1000000000LL || static_cast<long long>(p.herbs) + count > 1000000000LL)
+            return "背包已无法收存更多药材。";
         p.stones -= total;
         a.herbs[h->name] += count;
         p.herbs += count;
@@ -200,6 +207,9 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         const int total = unit * count;
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) + "，你只有 " + std::to_string(p.stones) + "。";
+        const auto owned = a.materials.find(material->id);
+        if (owned != a.materials.end() && static_cast<long long>(owned->second) + count > 1000000000LL)
+            return "背包已无法收存更多材料。";
         p.stones -= total;
         a.materials[material->id] += count;
         logEvent(g, "self", "在坊市购入" + material->name + " ×" + std::to_string(count) + "。",
@@ -482,7 +492,7 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         // 这条写在宗门说明里，但之前一直没接 —— 论道给的是固定 12 点。
         const int dao = (p.sect == "xinghe") ? 18 : 12;
         artGain(p, a.focus, dao);
-        b.bondDays += 5;
+        if (b.partner == npcId) b.bondDays += 5;
         r.relationDelta = gain;
         r.text = "你与" + who + "彻夜论道，彼此心意更近了一层。";
         logEvent(g, "npc",

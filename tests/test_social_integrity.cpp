@@ -12,6 +12,7 @@
 #include "core/play.h"
 #include "core/save.h"
 #include "core/sim.h"
+#include "core/society.h"
 
 using namespace nz;
 
@@ -93,6 +94,30 @@ void runSocialIntegrityTests() {
               play::socialDo(g, id, "travel").ok, "实际跨月后闲谈、讨论、结伴限额可再使用");
     }
     {
+        Game g = socialGame(); const string id = g.npcs[0].id;
+        g.player.relations[id] = 50;
+        check(play::socialDo(g, id, "deep").ok, "没有道侣时仍可与道友彻夜论道");
+        checkEq(g.bonds.bondDays, 0, "与普通道友论道不虚增道侣相伴天数");
+
+        g = socialGame(); g.player.relations[id] = 50;
+        g.bonds.partner = "another-partner"; g.bonds.bondDays = 85;
+        check(play::socialDo(g, id, "deep").ok, "已有道侣时仍可与其他道友论道");
+        checkEq(g.bonds.bondDays, 85, "与其他道友论道不推进现任道侣的相伴记录");
+        const auto& stories = data::StoryDef_TABLE();
+        const auto sharedMoon = std::find_if(stories.begin(), stories.end(), [](const auto& story) {
+            return story.id == "sharedmoon";
+        });
+        check(sharedMoon != stories.end() && !storyRequiresMet(g, *sharedMoon),
+              "与别人论道不能绕过同看一轮月的九十天相伴门槛");
+
+        g = socialGame(); g.player.relations[id] = 50;
+        g.bonds.partner = id; g.bonds.bondDays = 85;
+        check(play::socialDo(g, id, "deep").ok, "仍可与现任道侣彻夜论道");
+        checkEq(g.bonds.bondDays, 90, "与现任道侣论道真实累计五天相伴");
+        check(sharedMoon != stories.end() && storyRequiresMet(g, *sharedMoon),
+              "真实相伴满九十天才满足同看一轮月门槛");
+    }
+    {
         Game g = socialGame(); Npc& n = g.npcs[0]; const string id = n.id;
         n.stage = 9; n.lifespan = realmOf(9).life; n.sect = "zhushan";
         const auto preferred = friendship::giftOutcome(g, n, 100, "herb", "恒心草");
@@ -169,6 +194,158 @@ void runSocialIntegrityTests() {
         const auto repeated = friendship::giftItem(g, n.id, "herb", "恒心草");
         check(repeated.ok && repeated.affinityDelta == 0 && repeated.creditDelta > 0,
               "反复小额赠礼的好感最终为0，仍允许送礼并保留实际交情");
+    }
+    {
+        for (const string& kind : {string("herb"), string("potion"), string("material")}) {
+            Game g = socialGame(); const string npcId = g.npcs[0].id;
+            const string itemId = kind == "herb" ? "恒心草" : kind == "potion" ? "5001" : "iron";
+            if (kind == "potion") g.player.arts.potions[itemId] = 2;
+            if (kind == "material") g.player.arts.materials[itemId] = 2;
+            g.npcs[0].bag[kind + ":" + itemId] = 1000000000;
+            const string before = saveToJson(g);
+            Game restored; string error;
+            check(loadFromJson(before, restored, &error), kind + "赠礼边界使用可读取的合法库存");
+            check(!friendship::giftItem(g, npcId, kind, itemId).ok,
+                  kind + "单件赠礼拒绝让NPC库存超过存档上限");
+            check(saveToJson(g) == before, kind + "NPC库存已满时不扣物品、不发好感或交情");
+            check(loadFromJson(saveToJson(g), restored, &error), kind + "拒绝赠礼后存档仍可读取");
+
+            g = socialGame();
+            if (kind == "potion") g.player.arts.potions[itemId] = 2;
+            if (kind == "material") g.player.arts.materials[itemId] = 2;
+            g.npcs[0].bag[kind + ":" + itemId] = 999999999;
+            check(friendship::giftItem(g, npcId, kind, itemId).ok,
+                  kind + "NPC剩一份容量时仍可正常赠礼");
+            checkEq(g.npcs[0].bag[kind + ":" + itemId], 1000000000,
+                    kind + "正常赠礼可到达库存上限");
+            check(loadFromJson(saveToJson(g), restored, &error), kind + "上限赠礼结果仍可存档读取");
+        }
+    }
+    {
+        for (const string& kind : {string("herb"), string("potion"), string("material")}) {
+            Game g = socialGame(); const string npcId = g.npcs[0].id;
+            const string itemId = kind == "herb" ? "恒心草" : kind == "potion" ? "5001" : "iron";
+            auto& inventory = kind == "herb" ? g.player.arts.herbs :
+                kind == "potion" ? g.player.arts.potions : g.player.arts.materials;
+            inventory[itemId] = 1000000000;
+            if (kind == "herb") g.player.herbs = 1000000000;
+            g.npcs[0].bag[kind + ":" + itemId] = 1;
+            friendship::addCredit(g, npcId, 10000);
+            const auto bag = friendship::npcBag(g, npcId);
+            const auto quote = std::find_if(bag.begin(), bag.end(), [&](const auto& item) {
+                return item.kind == kind && item.id == itemId;
+            });
+            check(quote != bag.end() && !quote->affordable && !quote->reason.empty(),
+                  kind + "玩家库存已满时NPC报价显示不可换物原因");
+            const string before = saveToJson(g);
+            Game restored; string error;
+            check(loadFromJson(before, restored, &error), kind + "换物边界使用可读取的合法库存");
+            check(!friendship::takeFromNpc(g, npcId, kind, itemId).ok,
+                  kind + "换物拒绝让玩家库存超过存档上限");
+            check(saveToJson(g) == before, kind + "玩家库存已满时不扣交情或NPC物品");
+            check(loadFromJson(saveToJson(g), restored, &error), kind + "拒绝换物后存档仍可读取");
+
+            Game boundary = socialGame();
+            auto& boundaryInventory = kind == "herb" ? boundary.player.arts.herbs :
+                kind == "potion" ? boundary.player.arts.potions : boundary.player.arts.materials;
+            boundaryInventory[itemId] = 999999999;
+            if (kind == "herb") boundary.player.herbs = 999999999;
+            boundary.npcs[0].bag[kind + ":" + itemId] = 1;
+            friendship::addCredit(boundary, npcId, 10000);
+            check(friendship::takeFromNpc(boundary, npcId, kind, itemId).ok,
+                  kind + "玩家剩一份容量时仍可正常换物");
+            checkEq(boundaryInventory[itemId], 1000000000, kind + "正常换物可到达库存上限");
+            check(loadFromJson(saveToJson(boundary), restored, &error), kind + "上限换物结果仍可存档读取");
+        }
+    }
+    {
+        Game g = socialGame(); const string npcId = g.npcs[0].id;
+        g.player.arts.herbs = {{"恒心草", 999999999}, {"银月花", 1}};
+        g.player.herbs = 1000000000;
+        friendship::addCredit(g, npcId, 10000);
+        const auto bag = friendship::npcBag(g, npcId);
+        const auto quote = std::find_if(bag.begin(), bag.end(), [](const auto& item) {
+            return item.kind == "herb" && item.id == "恒心草";
+        });
+        check(quote != bag.end() && !quote->affordable && !quote->reason.empty(),
+              "药材分类数量未满但总量已满时NPC报价同样不可换物");
+        const string before = saveToJson(g);
+        check(!friendship::takeFromNpc(g, npcId, "herb", "恒心草").ok,
+              "分类药材还有容量但药材总量已满时仍拒绝换物");
+        check(saveToJson(g) == before, "药材总量上限同样保护NPC库存和玩家交情");
+    }
+    {
+        struct PurchaseBoundary { int owned, count; bool allowed; };
+        const PurchaseBoundary boundaries[] = {
+            {1000000000, 1, false}, {999999999, 2, false}, {999999999, 1, true}
+        };
+        for (const string& kind : {string("herb"), string("potion"), string("material")}) {
+            const string itemId = kind == "herb" ? "恒心草" : kind == "potion" ? "5001" : "iron";
+            for (const auto& boundary : boundaries) {
+                Game g = socialGame();
+                auto& inventory = kind == "herb" ? g.player.arts.herbs :
+                    kind == "potion" ? g.player.arts.potions : g.player.arts.materials;
+                inventory[itemId] = boundary.owned;
+                if (kind == "herb") g.player.herbs = boundary.owned;
+                const string before = saveToJson(g);
+                const int stones = g.player.stones;
+                const auto error = play::marketBuy(g, kind, itemId, boundary.count);
+                const string label = kind + "坊市购买" + std::to_string(boundary.count) + "份";
+                check(error.empty() == boundary.allowed, label + "按实际背包剩余容量执行");
+                if (boundary.allowed) {
+                    checkEq(inventory[itemId], 1000000000, label + "允许恰好达到存档上限");
+                    check(g.player.stones < stones, label + "仍支付真实灵石价款");
+                } else {
+                    check(saveToJson(g) == before, label + "超过容量时不扣灵石、不增加物品");
+                }
+                Game restored; string loadError;
+                check(loadFromJson(saveToJson(g), restored, &loadError), label + "执行后存档仍可读取");
+            }
+        }
+    }
+    {
+        Game g = socialGame();
+        g.player.arts.herbs = {{"恒心草", 999999999}, {"银月花", 1}};
+        g.player.herbs = 1000000000;
+        const string before = saveToJson(g);
+        check(!play::marketBuy(g, "herb", "恒心草", 1).empty(),
+              "坊市买药材同样受分类药材合计的存档上限约束");
+        check(saveToJson(g) == before, "总药材已满时购买不扣灵石或制造不可读存档");
+    }
+    {
+        Game g = socialGame(); g.player.herbs = 1000000000;
+        Game restored; string error;
+        const string before = saveToJson(g);
+        check(loadFromJson(before, restored, &error), "保留未分类药材总量的旧库存记录可读取");
+        check(!play::marketBuy(g, "herb", "恒心草", 1).empty(),
+              "分类记录不足的旧库存仍不能让药材总数购买后超过上限");
+        check(saveToJson(g) == before, "旧库存总数已满时拒绝购买不产生任何扣款");
+    }
+    {
+        Game g = socialGame(); const string npcId = g.npcs[0].id;
+        Gear gear; gear.id = "quote-equipped"; gear.name = "道友佩剑";
+        gear.slot = "weapon"; gear.grade = 1; gear.bonus = 0.1;
+        g.npcs[0].gear.push_back(gear); g.npcs[0].equipped["weapon"] = gear.id;
+        friendship::addCredit(g, npcId, 10000);
+        const auto bag = friendship::npcBag(g, npcId);
+        const auto quote = std::find_if(bag.begin(), bag.end(), [&](const auto& item) {
+            return item.kind == "gear" && item.id == gear.id;
+        });
+        check(quote != bag.end() && !quote->affordable && !quote->reason.empty(),
+              "NPC正装备的法器报价显示不可取用并说明原因");
+        const string before = saveToJson(g);
+        check(!friendship::takeFromNpc(g, npcId, "gear", gear.id).ok,
+              "报价与执行一致拒绝取走NPC正在使用的法器");
+        check(saveToJson(g) == before, "拒取装备中的法器不扣交情、不转移装备");
+        g.npcs[0].equipped.clear();
+        const auto spare = friendship::npcBag(g, npcId);
+        const auto spareQuote = std::find_if(spare.begin(), spare.end(), [&](const auto& item) {
+            return item.kind == "gear" && item.id == gear.id;
+        });
+        check(spareQuote != spare.end() && spareQuote->affordable && spareQuote->reason.empty(),
+              "NPC卸下法器后报价恢复可取用");
+        check(friendship::takeFromNpc(g, npcId, "gear", gear.id).ok,
+              "报价可用的闲置法器仍可支付交情真实取走");
     }
     {
         Game g = socialGame(); const string id = g.npcs[0].id;

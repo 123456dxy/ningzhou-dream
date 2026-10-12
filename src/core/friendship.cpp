@@ -313,6 +313,13 @@ GiftResult giftItem(Game& g, const string& npcId, const string& kind,
         return r;
     }
 
+    if (kind != "gear") {
+        const auto stored = n->bag.find(kind + ":" + id);
+        if (stored != n->bag.end() && stored->second >= 1000000000) {
+            r.error = "对方已无法收存更多物品。";
+            return r;
+        }
+    }
     const GiftOutcome o = giftOutcome(g, *n, value, kind, id);
     addRelation(g, npcId, o.affinity);
     addCredit(g, npcId, o.credit);
@@ -557,6 +564,21 @@ std::vector<BagItem> npcBag(const Game& g, const string& npcId) {
         if (!it.affordable)
             it.reason = "交情不足（需 " + std::to_string(it.creditCost) +
                         "，有 " + std::to_string(credit) + "）";
+        if (it.affordable) {
+            const auto& inventory = kind == "herb" ? g.player.arts.herbs :
+                kind == "potion" ? g.player.arts.potions : g.player.arts.materials;
+            const auto owned = inventory.find(id);
+            if (owned != inventory.end() && owned->second >= 1000000000) {
+                it.affordable = false; it.reason = "背包已无法收存更多物品。";
+            }
+            if (kind == "herb") {
+                long long herbs = 0;
+                for (const auto& [name, count] : inventory) herbs += count;
+                if (herbs >= 1000000000LL) {
+                    it.affordable = false; it.reason = "背包已无法收存更多药材。";
+                }
+            }
+        }
         out.push_back(it);
     }
 
@@ -574,6 +596,10 @@ std::vector<BagItem> npcBag(const Game& g, const string& npcId) {
         if (!it.affordable)
             it.reason = "交情不足（需 " + std::to_string(it.creditCost) +
                         "，有 " + std::to_string(credit) + "）";
+        if (std::any_of(n->equipped.begin(), n->equipped.end(),
+                        [&](const auto& worn) { return worn.second == gr.id; })) {
+            it.affordable = false; it.reason = "对方正用着这件，不肯给。";
+        }
         out.push_back(it);
     }
 
@@ -633,6 +659,21 @@ TradeResult takeFromNpc(Game& g, const string& npcId, const string& kind,
         } else {
             r.error = "讨不了这种东西。";
             return r;
+        }
+        const auto& inventory = kind == "herb" ? g.player.arts.herbs :
+            kind == "potion" ? g.player.arts.potions : g.player.arts.materials;
+        const auto owned = inventory.find(id);
+        if (owned != inventory.end() && owned->second >= 1000000000) {
+            r.error = "背包已无法收存更多物品。";
+            return r;
+        }
+        if (kind == "herb") {
+            long long herbs = 0;
+            for (const auto& [name, count] : inventory) herbs += count;
+            if (herbs >= 1000000000LL) {
+                r.error = "背包已无法收存更多药材。";
+                return r;
+            }
         }
         r.cost = tradeCost(value);
         if (!spendCredit(g, npcId, r.cost)) {

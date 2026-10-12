@@ -573,7 +573,7 @@ void battleStart(Game& g, const EnemySpec& enemy) {
     a.combatBuff = 0;
 
     logEvent(g, "self",
-             "与" + enemy.name + "开始" + (b.lethal ? "生死斗法" : "斗法") +
+             "与" + enemy.name + "开始" + (battleDefeatEndsLife(b) ? "生死斗法" : "斗法") +
                  "，月历暂停。",
              true);
     if (!a.battle->playerFirst) {
@@ -584,6 +584,11 @@ void battleStart(Game& g, const EnemySpec& enemy) {
             const int loss = battleIncomingLoss(p, *a.battle, blocked);
             a.battle->hp -= loss;
             a.battle->shield -= blocked;
+            const int counter = jsRound(blocked * talentMods(p).bodyCounter);
+            if (counter > 0) {
+                a.battle->enemyHp -= counter;
+                a.battle->log.push_back("盾挡反震：伤害" + std::to_string(counter) + "。");
+            }
             a.battle->log.push_back("对方先手" + a.battle->intentName + "：气血−" +
                                    std::to_string(loss) + "。");
         }
@@ -605,6 +610,12 @@ void battleStart(Game& g, const EnemySpec& enemy) {
 // ------------------------------------------------------------
 // 结算
 // ------------------------------------------------------------
+bool battleDefeatEndsLife(const Battle& b) {
+    return b.lethal || !b.dungeonSite.empty() || !b.advKind.empty() ||
+        b.kind == "wild" || b.kind == "hunt" || b.kind == "tide" || b.kind == "ambush" ||
+        b.kind == "kill" || b.kind == "rob";
+}
+
 void battleFinish(Game& g, bool win, bool escape) {
     Player& p = g.player;
     Arts& a = p.arts;
@@ -613,16 +624,14 @@ void battleFinish(Game& g, bool win, bool escape) {
 
     b.retreat = escape;
     b.won = win;
-    const bool wildLoss = b.lethal || !b.dungeonSite.empty() || !b.advKind.empty() ||
-        b.kind == "wild" || b.kind == "hunt" || b.kind == "tide" || b.kind == "ambush" ||
-        b.kind == "kill" || b.kind == "rob";
-    if (!win && !escape && wildLoss && g.checkpoint.enabled) {
+    const bool fatalDefeat = battleDefeatEndsLife(b);
+    if (!win && !escape && fatalDefeat) {
         p.health=0;
         finish(g,"野外战败：" + b.enemy);
         return;
     }
-    // 生死斗战败即身死；其余情况保留 1 点气血
-    p.health = std::max((b.lethal && !win && !escape) ? 0 : 1,
+    // 生死斗战败已结束该世；胜利、撤离与非致命斗法保留 1 点气血。
+    p.health = std::max(1,
                         std::min(100, jsRound(b.hp * 100.0 / b.max)));
 
     if (win && b.kind != "sectTrial") {
@@ -652,7 +661,7 @@ void battleFinish(Game& g, bool win, bool escape) {
                                          : (b.turn >= 24 ? "回合耗尽" : "落败");
     logEvent(g, "self",
              b.enemy + "之战：" + outcome + "。" +
-                 (b.lethal ? "此战有陨落风险。" : "本场不致死。"),
+                 (fatalDefeat ? "此战有陨落风险。" : "本场不致死。"),
              true);
 
 
@@ -669,12 +678,7 @@ void battleFinish(Game& g, bool win, bool escape) {
     if (b.kind == "sectTrial") sectTrialBattleComplete(g, b, win, escape);
     if (!b.dungeonSite.empty()) dungeonBattleComplete(g, b, win);
 
-    // 生死斗落败 = 这一世到此为止。
-    // 之前只把气血设成 0 就收尾了，玩家其实不会死，
-    // 要等下一次工作结算才以「游历遇险」草草结束。
-    if (b.lethal && !win && !escape) {
-        finish(g, "陨落于" + b.enemy + "之手");
-    } else if (b.kind == "ambush" && g.job && g.job->actionType == "travel") {
+    if (b.kind == "ambush" && g.job && g.job->actionType == "travel") {
         logEvent(g, "self", "摆脱途中遭遇，可以继续未完成的行程。", true);
     }
 }

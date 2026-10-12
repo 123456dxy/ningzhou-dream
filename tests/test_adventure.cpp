@@ -6,6 +6,8 @@
 #include "core/adventure.h"
 #include "core/arts.h"
 #include "core/economy.h"
+#include "core/save.h"
+#include "core/shop.h"
 #include "core/sim.h"
 
 using namespace nz;
@@ -217,6 +219,18 @@ void runAdventureTests() {
             checkEq(g.job->total, 7, "探访需 7 天");
             checkStr(g.job->name, "探访后山", "工作名为探访后山");
         }
+    }
+    {
+        CreateOptions options; options.seed = 20261012;
+        Game g = createGame(options);
+        g.player.location = "wuling";
+        g.pending.reset(); g.job.reset();
+        adventureBegin(g, "backhill");
+        Game loaded; string error;
+        check(loadFromJson(saveToJson(g), loaded, &error), "第0天后山探访的在途状态可读回：" + error);
+        checkEq(loaded.adventure.backhillMonth, 0, "读档保留第一个月已探访后山的记录");
+        check(shop::cancelJob(loaded).ok, "读档后可正常中止后山探访");
+        check(!adventureActionError(loaded, "backhill").empty(), "第0天读档并中止不能绕过同月探访限制");
     }
     {
         // 探访完成直接进入后山遗藏遇事

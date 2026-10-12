@@ -252,7 +252,7 @@ export function renderBondActions(state, kinds) {
 // ------------------------------------------------------------
 // 兽潮：全图事件面板
 // ------------------------------------------------------------
-export function renderTidePanel(tide) {
+export function renderTidePanel(tide, checkpoint) {
   if (!tide) return '';
   if (!tide.active) {
     return `<div class="tide-panel calm">
@@ -283,7 +283,8 @@ export function renderTidePanel(tide) {
       <button class="primary" data-action="tide-fight">迎战兽潮</button>
       <button data-action="tide-hunker">固守不出</button>
     </div>
-    <p class="tp-hint">迎战不致死，胜后有厚赏（灵石、声望、材料）；
+    <p class="tp-hint">迎战战败会陨落，胜后有厚赏（灵石、声望、材料）。
+      ${checkpoint?.enabled ? '意外陨落后可选择接受结局，或回到最近存档；回档会撤回保存之后的进度。' : '战败将结束这一世。'}
       兽潮波及全州，你认识的人也可能死。</p>
   </div>`;
 }

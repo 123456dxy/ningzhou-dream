@@ -172,7 +172,7 @@ FightResult fight(Game& g) {
     const char* names[3] = {"兽潮先锋", "妖将", "妖王麾下"};
     const string nm = names[clampInt(g.tide.severity - 1, 0, 2)];
 
-    // 开一场不致命的斗法（输了重伤，但不会死 —— 迎战是「机缘」不是「送死」）
+    // 迎战有陨落风险；战败后由结局入口选择接受死亡或恢复最近存档。
     EnemySpec e;
     e.name = nm;
     e.kind = "tide";

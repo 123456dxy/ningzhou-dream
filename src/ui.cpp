@@ -18,6 +18,7 @@
 #include "core/battle.h"
 #include "core/calendar.h"
 #include "core/economy.h"
+#include "core/legacy.h"
 #include "core/save.h"
 #include "core/society.h"
 #include "core/travel.h"
@@ -229,6 +230,7 @@ static Game newGameFlow() {
     opts.name = name;
     opts.gender = gender;
     opts.seed = seed;
+    opts.lifeId = legacy::newLifeId(seed);
     opts.traits = traits;
     // 属性点自动补到资质上，简化建号流程
     opts.allocation = {};
@@ -941,8 +943,15 @@ void doStoryMenu(Game& g) {
     const int choice = readInt(0, 2, 0);
     if (choice == 0) return;
 
-    storyComplete(g, *s, choice - 1);
-    std::cout << "\n  已结算。\n  （按回车继续）";
+    const auto error = storyBegin(g, *s, choice - 1);
+    if (!error.empty()) std::cout << "\n  " << error << "\n";
+    else {
+        doAdvance(g, s->days);
+        std::cout << (g.bonds.stories.count(s->id) ? "\n  支线已完成并结算。\n" :
+                      g.ended ? "\n  此世已结束，未完成支线不发放奖励。\n" :
+                      "\n  支线尚未完成，请继续当前安排。\n");
+    }
+    std::cout << "  （按回车继续）";
     std::string d;
     readLine(d);
 }

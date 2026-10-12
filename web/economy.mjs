@@ -127,7 +127,7 @@ export function renderEconomy(state, opts, forge, selected = {}, preview = null)
         <label>辅料<select data-forge="aux">${matOptions(selected.aux || 'jade')}</select></label>
         <label>灵核<select data-forge="core">${matOptions(selected.core || 'wood')}</select></label>
         <label>器型<select data-forge="shape">
-          ${shapes.map(s => `<option value="${esc(s.id)}" ${s.id === selected.shape ? 'selected' : ''}>${esc(s.name)}（${esc(s.slot)}）</option>`).join('')}
+          ${shapes.map(s => `<option value="${esc(s.id)}" ${s.id === selected.shape ? 'selected' : ''}>${esc(s.name)}（${esc({ weapon: '武器', armor: '防具', accessory: '佩饰' }[s.slot] || s.slot)}）</option>`).join('')}
         </select></label>
       </div>
       ${renderForgeRequirements(requirements)}

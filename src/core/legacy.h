@@ -26,6 +26,9 @@ struct Archive {
 
 Archive create();
 
+// 用户实际新开一世时使用；世界种子仍只负责可复现的游戏随机数。
+std::string newLifeId(uint32_t seed);
+
 // 建号预算 = min(40, 10 + earned)
 int talentBudget(const Archive& a);
 
