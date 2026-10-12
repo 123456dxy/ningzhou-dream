@@ -327,7 +327,7 @@ function viewChronicle() {
 
   // 兽潮是全图大事：起了就摆在最上面，玩家一眼看到
   const tideBlock = (S.tide && S.tide.active)
-    ? `<div style="padding:0 0 16px">${renderTidePanel(S.tide)}</div>` : '';
+    ? `<div style="padding:0 0 16px">${renderTidePanel(S.tide, S.checkpoint)}</div>` : '';
 
   return tideBlock
        + heading('这一世的山河与因缘',
@@ -920,8 +920,9 @@ function viewQuests() {
                          `<div style="padding:16px 22px 20px">${renderAchievements(achData)}</div>`);
 
   // 野外悬赏与原创支线挪到这里 —— 它们是「出门闯荡」的事，与宗门无关。
-  const wildPanel = panel('野外悬赏', '不致死的斗法',
+  const wildPanel = panel('野外悬赏', '战败会陨落',
     `<div style="padding:14px 22px 18px">
+       <p class="panel-note">战败将结束这一世。${S.checkpoint?.enabled ? '意外陨落后可选择接受结局，或回到最近存档；回档会撤回保存之后的进度。' : '请留意双方气血与敌方意图，及时判断能否继续迎战。'}</p>
        <div class="arts-grid" style="margin:0">${
          (S.wildTasks || []).map(t =>
            `<button class="card" data-action="wild" data-id="${escape(t.id)}" ${t.enabled === false ? 'disabled' : ''}>
@@ -1308,10 +1309,10 @@ function viewBattle() {
     + `<header class="combat-round">`
     + `<span>${b.lethal
         ? '<b class="lethal-tag">生死斗法</b>'
-        : '切磋 / 悬赏'} · 第 <b>${b.turn + 1}</b> / 24 回合</span>`
+        : '切磋 / 考核'} · 第 <b>${b.turn + 1}</b> / 24 回合</span>`
     + `<span>月历暂停 · 出牌阶段${b.playerFirst != null ? ` · ${b.playerFirst ? '你方先手' : '敌方先手'}` : ''}</span></header>`
     + (b.lethal
-        ? `<div class="lethal-warn">${S.checkpoint?.enabled ? '此战有陨落风险。意外死亡后可选择接受结局，或回到最近存档。' : '此战有陨落风险，请留意双方气血与敌方意图。'}</div>`
+        ? `<div class="lethal-warn">${S.checkpoint?.enabled ? '战败会陨落。意外死亡后可选择接受结局，或回到最近存档；回档会撤回保存之后的进度。' : '战败会陨落并结束这一世，请留意双方气血与敌方意图。'}</div>`
         : '')
 
     + `<div class="combat-field">`
@@ -1340,7 +1341,7 @@ function viewBattle() {
     + `<div class="combat-piles"><span>抽牌堆 ${b.draw}</span>`
     + `<span>弃牌堆 ${b.discard}</span></div>`
     + `<button class="subtle" data-action="escape">${b.lethal
-        ? '尝试逃离（失败由敌方行动）'
+        ? Number.isFinite(b.escapeChance) && b.escapeChance >= 1 ? '撤离本场' : '尝试逃离（失败由敌方行动）'
         : '退出本场'}${b.lethal && Number.isFinite(b.escapeChance) ? ` · ${pct(b.escapeChance)}` : ''}</button></footer>`
 
     + `<details class="exhausted-pile" ${(b.exhaustedSpells || []).length ? 'open' : ''}><summary>本场移除 ${typeof b.exhausted === 'number' ? b.exhausted : (b.exhausted || []).length} 张 · 下一场恢复</summary>`
@@ -1722,6 +1723,7 @@ document.addEventListener('click', async e => {
       render();
     });
     render();
+    if (globalThis.innerWidth <= 760) document.querySelector('.friend-panel')?.scrollIntoView({ block: 'start', behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     return;
   }
 

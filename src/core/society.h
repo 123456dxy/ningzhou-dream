@@ -37,12 +37,15 @@ string storyError(const Game& g, const data::StoryDef* s);
 // 选择本身的资源与重复结算检查；不满足时不得推进因缘记录。
 string storyChoiceError(const Game& g, const data::StoryDef& s, int optionIndex);
 
+// API 与控制台共同安排真实支线工作；奖励由 monthComplete 在到期时结算。
+string storyBegin(Game& g, const data::StoryDef& s, int optionIndex);
+
 // 完成一段支线并发放奖励。
 // optionIndex 为 0/1，对应两个选项。
 void storyComplete(Game& g, const data::StoryDef& s, int optionIndex);
 
 // ============================================================
-// 野外悬赏（3 类，不致死的斗法）
+// 野外悬赏（3 类，有陨落风险的斗法）
 // ============================================================
 const data::WildTaskDef* findWildTask(const string& id);
 string wildActionError(const Game& g, const string& id);

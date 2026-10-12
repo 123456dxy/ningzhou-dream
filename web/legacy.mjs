@@ -90,7 +90,7 @@ export function renderEnding(state, leg) {
         <button data-action="legacy-new">再写一世</button>
       </div>
       <p class="panel-note">传承点会提高下一世的建号预算（当前 ${leg?.budget ?? 10} 点），
-        并在建号时随机抽 12 项天赋供你挑选。</p>
+        建号时会按类别展示全部天赋，供你自由挑选。</p>
     </div>
   </div>`;
 }

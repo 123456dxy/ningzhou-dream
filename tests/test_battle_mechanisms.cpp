@@ -4,6 +4,8 @@
 
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/checkpoint.h"
+#include "core/sim.h"
 
 using namespace nz;
 
@@ -377,6 +379,18 @@ void runBattleMechanismTests() {
         checkEq(b.enemyHp, enemy - 3, "格挡20伤害反震15%即3伤害");
     }
     {
+        Game g = fight({}, {"6-5", "11-4", "11-5"}, 0);
+        g.player.arts.battle.reset();
+        EnemySpec enemy;
+        enemy.name = "先手妖兽"; enemy.stage = 0; enemy.style = "体";
+        enemy.beast = true; enemy.speed = 1000;
+        battleStart(g, enemy);
+        const Battle& b = *g.player.arts.battle;
+        check(!b.playerFirst, "更快的妖兽实际取得先手");
+        checkEq(b.shield, 0, "妖兽先手攻击实际消耗开局护盾");
+        checkEq(b.enemyMax - b.enemyHp, 3, "妖兽先手攻击的盾挡也触发体道反震");
+    }
+    {
         Game g = fight({"wood"}, {"10-4", "10-5"}); Battle& b = *g.player.arts.battle;
         hand(b, {"wood"}); b.playerPoison = 2; b.playerPoisonTurns = 3;
         battleTurn(g, "wood"); checkEq(b.playerPoison, 0, "丹道治疗神通清除2点自身毒伤");
@@ -387,6 +401,49 @@ void runBattleMechanismTests() {
         checkEq(b.shield, jsRound(b.max * 0.14), "器道提供开局10%加本回合4%护盾");
         b.intentKind = "guard"; battleTurn(g, "end");
         checkEq(b.shield, jsRound(b.max * 0.04), "器道后续每回合重新提供4%护盾");
+    }
+
+    std::printf("\n-- 野外战败与恢复点独立 --\n");
+    for (const bool checkpoint : {false, true}) {
+        for (const string context : {"wild", "hunt", "tide", "ambush", "kill", "rob", "dungeon", "adventure", "lethal"}) {
+            CreateOptions options; options.seed = 20261012;
+            Game g = createGame(options);
+            g.pending.reset(); g.job.reset(); g.npcs.clear();
+            if (checkpoint) checkpointEnable(g);
+            const int stones = g.player.stones;
+            EnemySpec enemy;
+            enemy.name = "野外失败回归"; enemy.kind = context;
+            enemy.stage = 0; enemy.beast = true;
+            if (context == "dungeon") enemy.dungeonSite = "defeat-regression";
+            if (context == "adventure") {
+                enemy.kind = "spar"; enemy.adventure = AdvContext{};
+                enemy.adventure->kind = "beast";
+            }
+            if (context == "lethal") { enemy.kind = "spar"; enemy.lethal = true; }
+            battleStart(g, enemy);
+            g.player.arts.battle->hp = 0;
+            battleFinish(g, false);
+            const string label = context + (checkpoint ? "有恢复点" : "无恢复点");
+            check(g.ended && g.ending && g.player.health == 0 && !g.player.arts.battle,
+                  label + "战败均结束该世并进入结算");
+            checkEq(g.checkpoint.restores, 0, label + "不会自动恢复");
+            checkEq(g.player.stones, stones, label + "死亡不追加奖励或扣取败退行装");
+        }
+        for (const string context : {"spar", "sectTrial", "win", "escape"}) {
+            CreateOptions options; options.seed = 20261012;
+            Game g = createGame(options);
+            g.pending.reset(); g.job.reset(); g.npcs.clear();
+            if (checkpoint) checkpointEnable(g);
+            EnemySpec enemy;
+            enemy.name = "非死亡结算回归"; enemy.stage = 0; enemy.beast = true;
+            enemy.kind = context == "win" || context == "escape" ? "wild" : context;
+            battleStart(g, enemy);
+            g.player.arts.battle->hp = context == "spar" || context == "sectTrial" ? 0 : 1;
+            battleFinish(g, context == "win", context == "escape");
+            const string label = context + (checkpoint ? "有恢复点" : "无恢复点");
+            check(!g.ended && !g.ending && g.player.health > 0 && !g.player.arts.battle,
+                  label + "维持存活并正常结束斗法");
+        }
     }
 }
 

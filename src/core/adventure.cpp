@@ -48,9 +48,8 @@ static string materialForStage(int stage) {
 }
 
 void ensureAdventure(Game& g) {
-    // 默认构造即为初始状态，这里只保证 backhillMonth 已初始化
-    if (g.adventure.backhillMonth == 0 && g.clock.days == 0)
-        g.adventure.backhillMonth = -1;
+    // 默认构造与缺字段读档均使用 -1；0 是第一个月已探访的有效记录。
+    (void)g;
 }
 
 // ------------------------------------------------------------

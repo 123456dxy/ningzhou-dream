@@ -667,7 +667,7 @@ Value buildState(const Game& g) {
         o.set("intentName", str(b.intentName));
         o.set("intentRaw", num(b.intentRaw));
         // 生死斗法要在界面上明确提示，否则玩家会莫名其妙死掉
-        o.set("lethal", Value(b.lethal));
+        o.set("lethal", Value(battleDefeatEndsLife(b)));
         o.set("kind", str(b.kind));
         o.set("quest", str(b.quest));
 
@@ -1588,6 +1588,7 @@ http::Response handle(const http::Request& req) {
         const play::BuildCheck c = play::checkBuild(opts.traits, opts.allocation, budget);
         if (!c.ok) return jsonError(c.error.empty() ? "建号方案不合法。" : c.error);
         opts.budget = budget;
+        opts.lifeId = legacy::newLifeId(opts.seed);
 
         g = createGame(opts);
         checkpointEnable(g);
@@ -2103,7 +2104,9 @@ http::Response handle(const http::Request& req) {
             if (!err.empty()) return jsonError(err);
             const std::string choiceError = storyChoiceError(g, st, choice);
             if (!choiceError.empty()) return jsonError(choiceError);
-            storyComplete(g, st, choice);
+            const auto beginError = storyBegin(g, st, choice);
+            if (!beginError.empty()) return jsonError(beginError);
+            advance(g, st.days);
             return jsonOk(okWithState(g));
         }
         return jsonError("没有这段机缘。");

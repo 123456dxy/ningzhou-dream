@@ -870,9 +870,9 @@ struct WildTaskDef {
 
 inline const vector<WildTaskDef>& WildTaskDef_TABLE() {
     static const vector<WildTaskDef> data = {
-        {"bandit", "清剿山匪", 6, 28, "体", "不致死的捕缉斗法，胜后领取悬赏。"},
-        {"beast", "驱除药田妖兽", 7, 32, "木", "不致死的驱妖，胜后得同阶矿材。"},
-        {"supply", "截回商路货箱", 9, 38, "火", "不致死的正面斗法，胜后增加声望。"},
+        {"bandit", "清剿山匪", 6, 28, "体", "捕缉斗法有陨落风险，胜后领取悬赏。"},
+        {"beast", "驱除药田妖兽", 7, 32, "木", "驱妖斗法有陨落风险，胜后得同阶矿材。"},
+        {"supply", "截回商路货箱", 9, 38, "火", "正面斗法有陨落风险，胜后增加声望。"},
     };
     return data;
 }

@@ -1327,7 +1327,7 @@ std::string saveStateError(const Game& g) {
             "plan", "travel", "join", "breakthrough", "social", "socialElapsed",
             "task", "commission", "hunt", "mine", "arena", "quest", "brew", "forge",
             "learn", "meditate", "expedition", "bond", "wild"
-            , "npcLearn", "locationService"
+            , "npcLearn", "locationService", "story"
         };
         if (!jobs.count(j.actionType) || j.total <= 0 || j.total > 360000 ||
             j.remaining <= 0 || j.remaining > j.total || j.started < 0 ||
@@ -1353,6 +1353,18 @@ std::string saveStateError(const Game& g) {
                     j.cost == lesson.stoneCost && j.gift == lesson.creditCost && j.total == lesson.days)
                     matched = true;
             if (!matched) return "授业内容、费用或用时无效";
+        }
+        if (j.actionType == "story") {
+            bool matched = false;
+            for (const auto& story : data::StoryDef_TABLE()) {
+                if (story.id != j.plan) continue;
+                const int choice = j.kind == "0" ? 0 : j.kind == "1" ? 1 : -1;
+                matched = choice >= 0 && j.paid && j.cost == 0 && j.total == story.days &&
+                    g.clock.days - j.started == j.total - j.remaining &&
+                    j.origin == g.player.location && storyError(g, &story).empty() &&
+                    storyChoiceError(g, story, choice).empty();
+            }
+            if (!matched) return "在途因缘的内容、选项或用时无效";
         }
         if (j.actionType == "locationService") {
             bool matched = false;

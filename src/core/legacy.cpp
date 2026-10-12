@@ -2,7 +2,10 @@
 #include "core/legacy.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <limits>
+#include <random>
 #include <sstream>
 
 #include "core/arts.h"
@@ -50,6 +53,23 @@ bool has(const vector<string>& v, const string& s) {
 } // namespace
 
 Archive create() { return Archive{}; }
+
+string newLifeId(uint32_t seed) {
+    static const uint64_t processNonce = [] {
+        try {
+            std::random_device entropy;
+            return (static_cast<uint64_t>(entropy()) << 32) | entropy();
+        } catch (...) {
+            return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+        }
+    }();
+    static std::atomic<uint64_t> sequence{0};
+    const auto timestamp = std::chrono::system_clock::now().time_since_epoch().count();
+    std::ostringstream id;
+    id << "life-" << seed << '-' << std::hex << timestamp << '-' << processNonce << '-'
+       << sequence.fetch_add(1, std::memory_order_relaxed);
+    return id.str();
+}
 
 int talentBudget(const Archive& a) {
     return std::min(MAX_POINTS, BASE_POINTS + a.earned);

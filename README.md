@@ -22,9 +22,11 @@ cd ningzhou-cpp
 
 首次构建会自动调用 CMake 配置 Ninja 工程。
 
-给其他玩家使用的单文件发行入口为 [宁州一梦-宗门修正版.exe](https://github.com/123456dxy/ningzhou-dream/releases/latest)，适用于 Windows 10/11 x64。地图与立绘已内置，双击自动准备资源并打开浏览器；不包含本项目的个人存档。玩家数据保存于 `%LOCALAPPDATA%\NingzhouDream\game\runtime`，正常关闭启动器保存独立续玩快照，下次自动恢复，游戏内手动档和死亡回档继续独立保留。使用说明见 [使用说明.txt](tools/release/使用说明.txt)。
+给其他玩家使用的单文件发行入口为 [宁州一梦-插件复核版.exe](https://github.com/guy-used-for-testing/ningzhou-dream/releases/latest)，适用于 Windows 10/11 x64。地图与立绘已内置，双击自动准备资源并打开浏览器；不包含本项目的个人存档。玩家数据保存于 `%LOCALAPPDATA%\NingzhouDream\game\runtime`，正常关闭启动器保存独立续玩快照，下次自动恢复，游戏内手动档和死亡回档继续独立保留。使用说明见 [使用说明.txt](tools/release/使用说明.txt)。
 
 宗门修正版补齐地图进入山门、拜师与受业、宗门任务板；修正事件实际收益记录与功法抄本修习入口，区分神通学习和携带状态，补上非战斗神通与炼器的真实数值预览。全部修复备注见 [CHANGELOG.md](CHANGELOG.md)。原续玩文件与手动档自动保留。
+
+插件复核版进一步修复手机建号和道友详情操作、支线实际耗时、同种子重开人生编号、野外死亡提示、先手反震及社交交易边界。界面审查截图、规则复现和验证入口见 [AUDIT.md](AUDIT.md)。
 
 重新生成单文件发行包：先构建最新 `build/ningzhou_web.exe`，再运行 `./tools/release/build-release.ps1`。脚本仅打包核心程序与网页运行资源，排除存档、日志及素材生成元数据；构建清单与哈希保存在新建的 `build/release-日期时间/` 中。运行 `./tools/release/verify-release.ps1 -ReleaseRecordPath "build/release-日期时间/release.json"` 可在独立目录验收解包、续玩和资源修复，不改变正在运行的正式游戏。
 

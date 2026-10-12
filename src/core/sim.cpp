@@ -1045,6 +1045,20 @@ void monthComplete(Game& g, const Job& job) {
     Arts& a = p.arts;
     const string& type = job.actionType;
     const int total = job.total;
+    if (type == "story") {
+        for (const auto& story : data::StoryDef_TABLE()) {
+            if (story.id != job.plan) continue;
+            const int choice = job.kind == "0" ? 0 : job.kind == "1" ? 1 : -1;
+            if (choice >= 0 && total == story.days && job.origin == p.location &&
+                storyError(g, &story).empty() && storyChoiceError(g, story, choice).empty())
+                storyComplete(g, story, choice);
+            else
+                logEvent(g, "self", "因缘「" + story.name + "」的条件已变化，未结算奖励。", true);
+            return;
+        }
+        logEvent(g, "self", "在途因缘不存在，未结算奖励。", true);
+        return;
+    }
     if (type == "npcLearn") { npcLearnComplete(g, job); return; }
     if (type == "locationService") { locationServiceComplete(g, job); return; }
 

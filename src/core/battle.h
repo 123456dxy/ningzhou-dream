@@ -139,6 +139,8 @@ struct EnemyPreview {
 EnemyPreview battleEnemyPreview(const Game& g);
 
 // 结算
+// 实际战败风险独立于恢复点；lethal 仍保留原有撤离掷骰语义。
+bool battleDefeatEndsLife(const Battle& b);
 void battleFinish(Game& g, bool win, bool escape = false);
 bool battleActive(const Game& g);
 

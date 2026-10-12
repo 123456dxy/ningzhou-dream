@@ -124,6 +124,14 @@ export function createBuildPanel({ onStart, onCancel }) {
   // ---- 渲染 ----
   function render() {
     if (!opts) return;
+    const scrollTop = root.querySelector('.build-panel')?.scrollTop || 0;
+    const active = document.activeElement;
+    const focusSelector = active && root.contains(active)
+      ? active.id ? `#${active.id}`
+        : active.dataset.talent ? `[data-talent="${active.dataset.talent}"]`
+        : active.dataset.alloc ? `[data-alloc="${active.dataset.alloc}"][data-d="${active.dataset.d}"]`
+        : active.dataset.gender ? `[data-gender="${active.dataset.gender}"]` : null
+      : null;
     const e = estimate();
 
     // 天赋按类别分组
@@ -233,6 +241,10 @@ export function createBuildPanel({ onStart, onCancel }) {
     paintPoints();
     paintActions();
     paintInnate();
+    // Replacing the panel must not send a player back to the top after every
+    // selection, or make repeated keyboard selections lose their active button.
+    root.querySelector('.build-panel').scrollTop = scrollTop;
+    if (focusSelector) root.querySelector(focusSelector)?.focus({ preventScroll: true });
   }
 
   // 先天气运：这一世生来的资质与悟性由地图种子决定。

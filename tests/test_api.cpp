@@ -380,5 +380,91 @@ void runApiTests() {
     check(request("sell", sell).status == 200, "真正通过出售API售出购入法器");
     checkEq(g.player.stones - beforePurchased, basePurchased,
             "购入法器实际成交不受生活悟道加价影响");
+
+    // 支线面板承诺的耗时必须由同一月历执行，奖励在完成时到账。
+    {
+        Game storyGame = createGame(opts);
+        storyGame.npcs.clear(); storyGame.pending.reset();
+        storyGame.player.age = storyGame.clock.ageBase = 18;
+        api::game() = storyGame;
+        json::Value letter = input("id", "letter"); letter.set("choice", 0);
+        const int heartBefore = storyGame.player.arts.heart;
+        check(request("story", letter).status == 200, "未拆的家书可实际执行选择");
+        checkEq(g.clock.days, 3, "未拆的家书真实消耗面板承诺的三天");
+        checkEq(g.player.arts.heart, heartBefore + 4, "家书完成后发放一次心境奖励");
+        check(!g.job && g.bonds.stories.count("letter"), "家书完成后解除工作并记录已完成");
+        unchangedReject("story", letter, "重复领取家书不再次耗时或发奖");
+
+        storyGame.clock.days = 29;
+        storyGame.tide.active = true; storyGame.tide.monthsLeft = 2;
+        api::game() = storyGame;
+        check(request("story", letter).status == 200, "月末家书可跨月完成");
+        checkEq(g.clock.days, 32, "月末支线跨月仍消耗完整三天");
+        checkEq(g.tide.monthsLeft, 1, "支线跨月同步推进兽潮月份");
+
+        Game unfinished = storyGame;
+        unfinished.clock.days = 1; unfinished.tide.active = false;
+        Job unfinishedLetter;
+        unfinishedLetter.actionType = "story"; unfinishedLetter.plan = "letter";
+        unfinishedLetter.kind = "0"; unfinishedLetter.origin = "wuling";
+        unfinishedLetter.total = 3; unfinishedLetter.remaining = 2; unfinishedLetter.paid = true;
+        unfinished.job = unfinishedLetter;
+        Game resumed; string storyLoadError;
+        check(loadFromJson(saveToJson(unfinished), resumed, &storyLoadError), "支线未完成的在途存档可正常读取");
+        if (resumed.job) {
+            checkEq(resumed.player.arts.heart, heartBefore, "读档不会提前发放支线奖励");
+            check(calendarRun(resumed, 2).ok && resumed.clock.days == 3 && !resumed.job,
+                  "支线读档继续只推进剩余两天");
+            checkEq(resumed.player.arts.heart, heartBefore + 4, "支线读档到期只发奖一次");
+        }
+        auto tamperedStory = json::Value::parse(saveToJson(unfinished));
+        tamperedStory.asObject()["job"].set("kind", "2");
+        unchangedReject("import", input("game", tamperedStory.dump()), "伪造在途支线选项");
+        tamperedStory = json::Value::parse(saveToJson(unfinished));
+        tamperedStory.asObject()["job"].set("remaining", 1);
+        unchangedReject("import", input("game", tamperedStory.dump()), "篡改支线剩余天数提前领奖");
+        tamperedStory = json::Value::parse(saveToJson(unfinished));
+        tamperedStory.asObject()["job"].set("started", 1);
+        unchangedReject("import", input("game", tamperedStory.dump()), "篡改支线起始日绕过耗时");
+
+        storyGame.clock.days = 359;
+        storyGame.player.age = storyGame.clock.ageBase = 99;
+        storyGame.player.lifespan = 100;
+        storyGame.tide.active = false;
+        api::game() = storyGame;
+        check(request("story", letter).status == 200, "寿尽前开始支线遵守同一时间规则");
+        check(g.ended && g.ending && g.ending->cause == "寿终正寝", "支线未完成前寿尽正常结算");
+        checkEq(g.clock.days, 360, "寿尽后支线不继续推进剩余天数");
+        checkEq(g.player.arts.heart, heartBefore, "未完成的支线不会提前发奖");
+        check(!g.bonds.stories.count("letter"), "未完成支线不记为已领取");
+    }
+
+    // 地图种子可以复现世界，但每次真正重开必须属于不同的一世。
+    {
+        json::Value birth(json::Object{});
+        birth.set("name", "重复种子重开回归"); birth.set("seed", 734);
+        birth.set("traits", json::Array{});
+        check(request("new", birth).status == 200, "固定种子可以创建第一世");
+        Game firstLife = api::game();
+        check(request("new", birth).status == 200, "相同种子可以重新创建另一世");
+        Game secondLife = api::game();
+        check(firstLife.lifeId != secondLife.lifeId, "同种子重开使用独立人生编号");
+        Game firstWorld = firstLife, secondWorld = secondLife;
+        firstWorld.lifeId.clear(); secondWorld.lifeId.clear();
+        firstWorld.checkpoint = AutoCheckpoint{}; secondWorld.checkpoint = AutoCheckpoint{};
+        check(saveToJson(firstWorld) == saveToJson(secondWorld),
+              "独立人生编号不改变同种子的世界、角色和随机序列");
+        legacy::Archive lifetimes = legacy::create();
+        firstLife.ended = true; firstLife.player.highestStage = 3;
+        secondLife.ended = true; secondLife.player.highestStage = 6;
+        check(legacy::settle(firstLife, lifetimes).eligible, "第一世可以结算真实筑基成就");
+        check(legacy::settle(secondLife, lifetimes).eligible && lifetimes.runs == 2 && lifetimes.earned == 4,
+              "同种子第二世仍可结算新的金丹成就，不被误认为旧世");
+        Game loadedLife; string loadError;
+        check(loadFromJson(saveToJson(secondLife), loadedLife, &loadError), "独立人生编号可完整存读");
+        checkStr(loadedLife.lifeId, secondLife.lifeId, "读档继续沿用原世编号");
+        check(!legacy::settle(loadedLife, lifetimes).eligible && lifetimes.runs == 2,
+              "已经结算的同一世读档后仍不能重复结算");
+    }
 }
 } // namespace nztest
