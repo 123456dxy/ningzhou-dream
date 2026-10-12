@@ -460,10 +460,11 @@ static void battleInitCards(Game& g, bool migrate) {
 // ------------------------------------------------------------
 // 开始斗法
 // ------------------------------------------------------------
-Battle battleReferenceState(const Player& p) {
+Battle battleReferenceWithPreparation(const Player& p, const string& preparationKey, double preparationValue) {
     const Arts& a = p.arts;
     const ArtMods m = talentMods(p);
     const auto prep = [&](const char* key) {
+        if (preparationKey == key) return preparationValue;
         const auto it = a.combatPrep.find(key);
         return it == a.combatPrep.end() ? 0.0 : it->second;
     };
@@ -477,7 +478,7 @@ Battle battleReferenceState(const Player& p) {
         jsRound(b.max * prep("shield")));
     b.swordQi = std::min(8, jsFloor(m.openingQi) +
         (artHas(a, "剑", 2) ? 2 : 0) + jsFloor(prep("qi")));
-    b.buff = a.combatBuff;
+    b.buff = preparationKey == "attack" ? preparationValue : a.combatBuff;
     b.reduction = prep("reduction");
     b.speed = jsRound(prep("speed"));
     b.maxMana = battleEnergy(p);
@@ -487,6 +488,10 @@ Battle battleReferenceState(const Player& p) {
     // 目标只有参考气血，不设护盾、减伤、功法和行动；不会接入真实战斗。
     b.enemyHp = b.enemyMax = 1000000000;
     return b;
+}
+
+Battle battleReferenceState(const Player& p) {
+    return battleReferenceWithPreparation(p, "", 0);
 }
 
 void battleStart(Game& g, const EnemySpec& enemy) {

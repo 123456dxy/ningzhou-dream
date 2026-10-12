@@ -24,6 +24,8 @@ string calendarLabel(const Game& g);
 // 把连续的少量收益按「整天」发放，零头留在 carry 里下次再用。
 // 对应 JS 的 calendarTake：先累加，再取整数部分，余数留回 carry。
 int calendarTake(Game& g, const string& key, double amount);
+// 同一自然化毒速率供每日结算与只读展示使用（每年360天）。
+double calendarDetoxPerYear(const Player& player);
 
 // 执行在途工作，逐天推进。
 // 返回本次实际推进的天数；结束条件与 JS 版一致。

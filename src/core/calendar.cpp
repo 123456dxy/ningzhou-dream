@@ -53,6 +53,10 @@ int calendarTake(Game& g, const string& key, double amount) {
     return n;
 }
 
+double calendarDetoxPerYear(const Player& player) {
+    return hasDan(player) ? 5.0 : 1.0;
+}
+
 CalRunResult calendarRun(Game& g, int maxDays) {
     CalRunResult out;
     const int restores = g.checkpoint.restores;
@@ -106,8 +110,8 @@ CalRunResult calendarRun(Game& g, int maxDays) {
             g.player.arts.repel = std::max(0, g.player.arts.repel - 1);
         }
 
-        // 丹毒每天自然化解；服过解毒丹（丹道二层）则更快
-        const double rate = hasDan(g.player) ? 5.0 : 1.0;
+        // 丹毒每天自然化解；丹道二层加快自然化毒
+        const double rate = calendarDetoxPerYear(g.player);
         const int detox = calendarTake(g, "detox", rate / 360.0);
         g.player.arts.poison = std::max(0, g.player.arts.poison - detox);
 

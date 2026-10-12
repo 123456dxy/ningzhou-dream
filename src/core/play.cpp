@@ -70,7 +70,7 @@ vector<MarketItem> marketList(const Game& g) {
         m.kind = "potion";
         m.id = r.id;
         m.name = r.name;
-        m.desc = r.effect;
+        m.desc = artPillUseInfo(g.player, r).effect;
         m.dao = r.dao;
         m.price = potionBuyPrice(g, r);
         m.sellPrice = shop::salePrice(g, "potion", r.id);
@@ -547,7 +547,7 @@ vector<CraftOption> craftOptions(const Game& g, const string& kind) {
             c.kind = "brew";
             c.id = rec.id;
             c.name = rec.name;
-            c.desc = rec.effect;
+            c.desc = artPillUseInfo(p, rec).effect;
             const BrewInfo b = artBrewInfo(p, rec.id);
             c.output = b.output;
             c.chance = b.chance;

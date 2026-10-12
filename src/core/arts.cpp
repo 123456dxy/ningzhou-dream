@@ -660,14 +660,23 @@ void ensureArts(Game& g) {
 // ------------------------------------------------------------
 // 大道经验（对应 JS 的 artGain）
 // ------------------------------------------------------------
-void artGain(Player& p, const string& dao, double amount) {
-    Arts& a = p.arts;
+namespace {
+struct DaoGainPlan { int exp = 0, points = 0; };
+DaoGainPlan daoGainPlan(const Player& p, const string& dao, double amount) {
+    const auto found = p.arts.exp.find(dao);
+    const int current = found == p.arts.exp.end() ? 0 : found->second;
     if (amount > 0 && daoIndex(dao) >= 0 && hasTalent(p, "blessing")) amount *= 1.20;
-    const int before = artLevel(a.exp[dao]);
-    a.exp[dao] = std::min(10000, a.exp[dao] + jsRound(amount));
-    const int after = artLevel(a.exp[dao]);
-    for (int i = before + 1; i <= after; ++i)
-        a.points += (i <= 2) ? 1 : 2;
+    DaoGainPlan plan;
+    plan.exp = std::min(10000, current + jsRound(amount));
+    for (int i = artLevel(current) + 1; i <= artLevel(plan.exp); ++i)
+        plan.points += (i <= 2) ? 1 : 2;
+    return plan;
+}
+}
+void artGain(Player& p, const string& dao, double amount) {
+    const auto plan = daoGainPlan(p, dao, amount);
+    p.arts.exp[dao] = plan.exp;
+    p.arts.points += plan.points;
 }
 
 // ------------------------------------------------------------
@@ -946,6 +955,179 @@ PillEffect artPillEffect(const Player& p, const data::RecipeDef& r) {
     else
         e.text = "斗法伤害 +10%";
     return e;
+}
+
+namespace {
+// Scalar assignments preserve the action's exact caps without cloning Player
+// (which contains inventory, relations, and possibly an entire battle).
+struct PillPlan {
+    PillUseInfo info;
+    vector<std::pair<int Person::*, int>> personValues;
+    vector<std::pair<int Arts::*, int>> artValues;
+    optional<DaoGainPlan> daoGain;
+    string materialId;
+    CombatPill prep;
+};
+PillPlan pillPlan(const Player& p, const data::RecipeDef& r) {
+    const Arts& a = p.arts;
+    PillPlan plan;
+    auto& info = plan.info;
+    info.baseEffect = artPillEffect(p, r);
+    const int value = info.baseEffect.value;
+    const auto owned = a.potions.find(r.id), used = a.used.find(r.id);
+    info.owned = owned == a.potions.end() ? 0 : owned->second;
+    info.used = used == a.used.end() ? 0 : used->second;
+    info.toleranceUnlimited = r.tolerance <= 0;
+    info.toleranceLimit = r.tolerance * (artHas(a, "丹", 3) ? 2 : 1);
+    info.toleranceRemaining = info.toleranceUnlimited ? -1 : std::max(0, info.toleranceLimit - info.used);
+    info.overTier = r.grade > artTier(p);
+    info.poison = r.poison + (info.overTier ? 2 : 0);
+    info.usage = "场外服用，每次消耗1枚；";
+    info.usage += info.toleranceUnlimited ? "无耐药次数上限" :
+        "本丹累计服用上限" + std::to_string(info.toleranceLimit) + "次（已服" + std::to_string(info.used) + "次）";
+    if (artHas(a, "丹", 3) && !info.toleranceUnlimited) info.usage += "，已计入丹道三层翻倍";
+    info.usage += "；丹毒达到80时仅可服化毒丹";
+    if (info.overTier) info.usage += "；越阶服用额外增加2丹毒";
+    if (info.owned <= 0) info.reason = "没有这味丹药。";
+    else if (r.kind == "xp" && hasTalent(p, "oddMeridian"))
+        info.reason = "经脉异变无法吸收修为丹药；可通过修炼增长修为。";
+    else if (r.tolerance > 0 && info.used >= info.toleranceLimit)
+        info.reason = "已达到此丹耐药上限（" + std::to_string(info.used) + "/" + std::to_string(info.toleranceLimit) + "）。";
+    else if (a.poison >= 80 && r.kind != "detox")
+        info.reason = "丹毒过高（" + std::to_string(a.poison) + "），请先化毒。";
+    else if (r.kind == "apt" && a.aptPills >= 10)
+        info.reason = "本世资质丹药提升已达 10 点，不能反复洗炼。";
+    else if (r.kind == "apt" && value <= 0)
+        info.reason = "资质已达上限，此丹无法继续提升。";
+
+    const auto describe = [&](const string& label, int before, int after, const string& unit = "") {
+        info.effectValue = after - before;
+        return label + (after >= before ? " +" : " ") + std::to_string(after - before) + unit +
+            "（当前" + std::to_string(before) + " → " + std::to_string(after) + "）";
+    };
+    const auto personValue = [&](int Person::* member, int after, const string& label, const string& unit = "") {
+        plan.personValues.push_back({member, after});
+        info.effect = describe(label, p.*member, after, unit);
+    };
+    const auto artValue = [&](int Arts::* member, int after, const string& label, const string& unit = "") {
+        plan.artValues.push_back({member, after});
+        info.effect = describe(label, a.*member, after, unit);
+    };
+    const string& kind = r.kind;
+    if (kind == "breakthrough") {
+        info.requiredStage = r.sourceEffect.find("结婴") != string::npos ? 8 :
+            r.sourceEffect.find("化神") != string::npos ? 11 : r.name == "筑基丹" ? 2 : 5;
+        info.usage += "；仅在" + realmName(info.requiredStage) + "服用，准备对应大境界突破";
+        info.effect = "下一次大境界突破成功率加成 +6个百分点（同类不叠加，仍受总成功率上限约束）";
+        if (!a.breakBuff.empty()) info.effect += "；将覆盖已有突破准备";
+        if (info.reason.empty() && p.stage != info.requiredStage)
+            info.reason = "该丹只用于对应的大境界准备。";
+    } else if (kind == "xp") {
+        personValue(&Person::xp, std::min(realmOf(p.stage).need, p.xp + value), "修为");
+        if (hasTalent(p, "oddMeridian")) info.effect = info.baseEffect.text;
+    } else if (kind == "heal") {
+        personValue(&Person::health, std::min(100, p.health + value), "健康度", "个百分点");
+    } else if (kind == "detox") {
+        info.effect = describe("化毒", a.poison, std::max(0, a.poison - value));
+    } else if (kind == "points") {
+        artValue(&Arts::points, a.points + value, "悟道点");
+    } else if (kind == "dao") {
+        plan.daoGain = daoGainPlan(p, r.dao, value);
+        const auto current = a.exp.find(r.dao);
+        info.effect = describe(r.dao + "道经验", current == a.exp.end() ? 0 : current->second, plan.daoGain->exp);
+        if (plan.daoGain->points) info.effect += "；升级获得悟道点 +" + std::to_string(plan.daoGain->points);
+        if (info.reason.empty() && daoIndex(r.dao) < 0) info.reason = "此道尚未开放。";
+    } else if (kind == "life") {
+        const int bonus = std::min(250, p.lifeBonus + value);
+        const int base[5] = {100, 200, 500, 1000, 2000};
+        plan.personValues.push_back({&Person::lifeBonus, bonus});
+        personValue(&Person::lifespan, std::min(3000, base[std::min(4, p.stage / 3)] + bonus), "寿元", "年");
+        info.usage += "；额外寿元累计上限250年";
+    } else if (kind == "apt") {
+        const int inc = std::min({value, 10 - a.aptPills, APT_MAX - p.apt});
+        personValue(&Person::apt, p.apt + std::max(0, inc), "资质");
+        plan.artValues.push_back({&Arts::aptPills, a.aptPills + std::max(0, inc)});
+        info.usage += "；本世资质丹累计提升上限10点（已提升" + std::to_string(a.aptPills) + "点）";
+    } else if (kind == "insight") {
+        personValue(&Person::insight, std::min(INSIGHT_MAX, p.insight + value), "悟性");
+    } else if (kind == "body") {
+        artValue(&Arts::hpBonus, std::min(200, a.hpBonus + value), "丹药斗法气血倍率加成", "个百分点");
+        info.usage += "；丹药气血加成累计上限200个百分点，最终斗法气血还受总倍率上限约束";
+    } else if (kind == "heart" || kind == "mind" || kind == "speed") {
+        if (kind == "heart") artValue(&Arts::heart, std::min(500, a.heart + value), "心境");
+        else if (kind == "mind") artValue(&Arts::mind, std::min(500, a.mind + value), "神识");
+        else artValue(&Arts::speed, std::min(500, a.speed + value), "额外遁速");
+        info.usage += "；此属性丹药结算上限500";
+        if (kind == "speed") info.usage += "；其中对实际遁速的贡献最多200";
+    } else if (kind == "repel") {
+        plan.artValues.push_back({&Arts::repel, 2});
+        info.effect = "游历避险效力设为2；每逢岁末递减1（重复服用刷新，不叠加）";
+    } else if (kind == "lure") {
+        const int grade = ordinaryMaterialGradeLimit(p);
+        for (const auto& material : data::MaterialDef_TABLE()) {
+            if (material.grade != grade) continue;
+            plan.materialId = material.id;
+            info.effect = "即刻获得" + material.name + " ×2（" + std::to_string(material.grade) + "阶）";
+            break;
+        }
+        if (info.effect.empty()) info.effect = "当前没有符合条件的材料";
+    } else {
+        plan.prep = artCombatPill(r);
+        const Battle before = battleReferenceState(p);
+        const Battle after = battleReferenceWithPreparation(p, plan.prep.key, plan.prep.value);
+        if (plan.prep.key == "mana") {
+            info.effect = describe("下一场开局灵力", before.mana, after.mana);
+            info.effect += "；灵力上限" + std::to_string(battleManaCap(p));
+        } else if (plan.prep.key == "speed") {
+            info.effect = describe("下一场撤离判定遁速", battleSpeed(p) + before.speed, battleSpeed(p) + after.speed);
+        } else if (plan.prep.key == "shield") {
+            info.effect = describe("下一场开局护盾", before.shield, after.shield);
+            info.effect += "；总开局护盾最多为斗法气血上限30%";
+        } else if (plan.prep.key == "qi") {
+            info.effect = describe("下一场开局剑气", before.swordQi, after.swordQi);
+        } else if (plan.prep.key == "reduction") {
+            const int previous = jsRound(battleReduction(p, before) * 100);
+            const int next = jsRound(battleReduction(p, after) * 100);
+            info.effect = describe("下一场总减伤", previous, next, "个百分点") + "；总减伤上限35%";
+        } else {
+            info.effect = describe("下一场丹药伤害加成", jsRound(before.buff * 100), jsRound(after.buff * 100), "个百分点");
+        }
+        info.usage += "；下场斗法生效，同类准备覆盖、不叠加";
+    }
+    const int afterDetox = kind == "detox" ? std::max(0, a.poison - value) : a.poison;
+    info.poisonAfter = std::min(100, afterDetox + info.poison);
+    info.poisonDelta = info.poisonAfter - a.poison;
+    return plan;
+}
+}
+
+PillUseInfo artPillUseInfo(const Player& p, const data::RecipeDef& r) {
+    return pillPlan(p, r).info;
+}
+string artUsePill(Game& g, const string& id) {
+    Player& p = g.player;
+    Arts& a = p.arts;
+    const auto owned = a.potions.find(id);
+    if (owned == a.potions.end() || owned->second <= 0) return "没有这味丹药。";
+    const auto* r = findRecipe(id);
+    if (!r) return "没有这张丹方。";
+    const auto plan = pillPlan(p, *r);
+    if (!plan.info.reason.empty()) return plan.info.reason;
+    for (const auto& [member, value] : plan.personValues) p.*member = value;
+    for (const auto& [member, value] : plan.artValues) a.*member = value;
+    if (plan.daoGain) { a.exp[r->dao] = plan.daoGain->exp; a.points += plan.daoGain->points; }
+    if (r->kind == "breakthrough") a.breakBuff = "stage";
+    if (!plan.materialId.empty()) a.materials[plan.materialId] += 2;
+    if (!plan.prep.key.empty()) {
+        a.combatPrep[plan.prep.key] = plan.prep.value;
+        if (plan.prep.key == "attack") a.combatBuff = 0.1;
+    }
+    a.potions[id] -= 1;
+    a.used[id] += 1;
+    a.poison = plan.info.poisonAfter;
+    logEvent(g, "self", "服下" + r->name + "：" + plan.info.baseEffect.text, true, "",
+             "丹毒 +" + std::to_string(plan.info.poison));
+    return "";
 }
 
 // ------------------------------------------------------------
@@ -1340,6 +1522,14 @@ void artAnnual(Game& g, const string& type, const string& id) {
 // 斗法牌组只能一直用开局那四张。
 //
 // 这里按 JS artInstant 的分支补齐，规则与 JS 逐条对齐。
+string artEquipError(const Player& p, const string& id) {
+    const Gear* gear = nullptr;
+    for (const auto& item : p.arts.gear) if (item.id == id) gear = &item;
+    if (!gear) return "法器不存在。";
+    if (gear->grade > artTier(p)) return "境界不足以装备此品阶法器。";
+    return "";
+}
+
 ActionError artInstant(Game& g, const string& type, const string& id) {
     ActionError out;
     Player& p = g.player;
@@ -1406,8 +1596,8 @@ ActionError artInstant(Game& g, const string& type, const string& id) {
         const Gear* gear = nullptr;
         for (const auto& x : a.gear)
             if (x.id == id) gear = &x;
-        if (!gear) return fail("法器不存在。");
-        if (gear->grade > artTier(p)) return fail("境界不足以装备此品阶法器。");
+        const string error = artEquipError(p, id);
+        if (!error.empty()) return fail(error);
         auto it = a.equipped.find(gear->slot);
         if (it != a.equipped.end() && it->second == id)
             a.equipped.erase(it);
