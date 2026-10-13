@@ -10,6 +10,9 @@
 #include "core/cultivate.h"
 #include "core/dungeon.h"
 #include "core/economy.h"
+#include "core/friendship.h"
+#include "core/play.h"
+#include "core/society.h"
 #include "core/json.h"
 #include "core/roster.h"
 #include "core/save.h"
@@ -172,9 +175,9 @@ void runTalentTests() {
         const int stones = game.player.stones;
         const auto result = calendarRun(game, 1);
         check(result.ok && game.clock.days == 30 && !game.job, "绿瓶通过真实月历跨月并完成工作");
-        checkEq(game.player.arts.herbs["银月花"], 2, "真实月历催熟一份已拥有低品草药");
-        checkEq(game.player.herbs, 2, "绿瓶同步药材总量而不被分类同步删除");
-        checkEq(game.player.stones, stones - 5, "真实月历只扣五灵石催熟费用");
+        checkEq(game.player.arts.herbs["银月花"], 1, "新版绿瓶不再按月复制背包草药");
+        checkEq(game.player.herbs, 1, "没有播种的绿瓶不产生药材");
+        checkEq(game.player.stones, stones, "新版绿瓶不再默默扣主背包灵石");
         const string once = saveToJson(game); const auto rng = game.rng;
         talentMonthTick(game); talentMonthTick(game);
         check(saveToJson(game) == once && game.rng == rng, "同月反复触发不刷材料、扣钱或消耗随机数");
@@ -185,7 +188,7 @@ void runTalentTests() {
         game.clock.days = 60; game.job = talentRest(game, 1);
         const auto beforeRng = game.rng;
         talentMonthTick(game);
-        checkEq(game.player.arts.herbs["银月花"], 3, "下个月绿瓶可再次催熟已有药材");
+        checkEq(game.player.arts.herbs["银月花"], 1, "下个月旧兼容入口仍不复制药材");
         checkEq(game.rng, beforeRng, "绿瓶挑选已有药材本身不掷随机数");
     }
     {
@@ -209,7 +212,7 @@ void runTalentTests() {
             if (unavailable == "dungeon") {
                 game.dungeons.run.reset(); const auto rng = game.rng;
                 talentMonthTick(game);
-                checkEq(game.player.arts.herbs["银月花"], 2, "离开副本后同月在安全时刻才催熟");
+                checkEq(game.player.arts.herbs["银月花"], 1, "离开副本后旧接口不恢复背包复制效果");
                 checkEq(game.rng, rng, "副本外补催熟不消耗随机数");
             }
         }
@@ -309,6 +312,63 @@ void runTalentTests() {
             checkEq(battle.hp, 1000, "龙血回合治疗不能超过气血上限");
         } else check(false, "龙族血脉斗法可建立");
     }
+    {
+        Game ordinary = talentGame();
+        ordinary.npcs.clear();
+        Npc friendNpc; friendNpc.id = "lucky-friend"; friendNpc.name = "同境道友";
+        friendNpc.location = ordinary.player.location; friendNpc.personality = "洒脱不羁";
+        friendNpc.stage = ordinary.player.stage; friendNpc.age = 24;
+        ordinary.npcs.push_back(friendNpc);
+        Game lucky = ordinary; lucky.player.traits = {"luck"};
+        const auto first = friendship::greet(ordinary, friendNpc.id);
+        const auto blessed = friendship::greet(lucky, friendNpc.id);
+        check(first.ok && blessed.ok, "福缘好感测试走真实见礼入口");
+        checkEq(blessed.affinityDelta, first.affinityDelta + 2, "福缘深厚首次正向见礼额外好感+2");
+        const int beforeRepeat = relationOf(lucky, friendNpc.id);
+        checkEq(friendship::greet(lucky, friendNpc.id).affinityDelta, 0, "重复见礼不会凭天赋刷取好感");
+        checkEq(relationOf(lucky, friendNpc.id), beforeRepeat, "重复见礼原好感不变");
+        ordinary.player.npcBonds.clear(); lucky.player.npcBonds.clear();
+        ordinary.player.relations.clear(); lucky.player.relations.clear();
+        ordinary.npcs[0].relations.clear(); lucky.npcs[0].relations.clear();
+        const auto basicGift = friendship::giftOutcome(ordinary, ordinary.npcs[0], 10, "material", "iron");
+        const auto luckyGift = friendship::giftOutcome(lucky, lucky.npcs[0], 10, "material", "iron");
+        checkEq(luckyGift.affinity, basicGift.affinity + 2, "福缘赠礼预览加入准确好感+2");
+        const int relationBeforeGift = relationOf(lucky, friendNpc.id);
+        const auto gift = friendship::giftItem(lucky, friendNpc.id, "material", "iron");
+        check(gift.ok, "真实赠礼成功");
+        checkEq(relationOf(lucky, friendNpc.id) - relationBeforeGift, gift.affinityDelta, "赠礼只在共同结算处加一次天赋");
+        ordinary.player.npcBonds.clear(); lucky.player.npcBonds.clear();
+        const auto ordinaryChat = play::socialDo(ordinary, friendNpc.id, "chat");
+        const auto luckyChat = play::socialDo(lucky, friendNpc.id, "chat");
+        check(ordinaryChat.ok && luckyChat.ok, "双方真实闲谈成功");
+        checkEq(luckyChat.relationDelta, ordinaryChat.relationDelta + 2, "相同福缘数值下闲谈额外+2来自天赋");
+        const int afterChat = relationOf(lucky, friendNpc.id);
+        check(!play::socialDo(lucky, friendNpc.id, "chat").ok, "同月重复闲谈仍被拒绝");
+        checkEq(relationOf(lucky, friendNpc.id), afterChat, "拒绝动作不发天赋好感");
+        lucky.player.npcBonds[friendNpc.id].talkMonth = -1;
+        for (const auto& action : play::socialActions(lucky, friendNpc.id))
+            if (action.id == "chat") check(action.desc.find("好感 +" + std::to_string(luckyChat.relationDelta)) != string::npos,
+                                          "社交行动预览显示真实含天赋好感");
+        Game rejected = ordinary; rejected.player.traits = {"luck"};
+        rejected.player.npcBonds.clear(); rejected.npcs[0].stage = 12;
+        rejected.npcs[0].personality = "好胜争先";
+        checkEq(friendship::greet(rejected, friendNpc.id).affinityDelta, -1, "负面初见不会被天赋变为奖励");
+        lucky.bonds.partner = friendNpc.id;
+        const int beforePart = relationOf(lucky, friendNpc.id);
+        societyBondComplete(lucky, "part", nullptr);
+        checkEq(relationOf(lucky, friendNpc.id), beforePart - 20, "解除道侣纯扣除不增加天赋奖励");
+        Game direct = ordinary, compatibility = ordinary;
+        direct.player.traits = compatibility.player.traits = {"luck"};
+        direct.player.npcBonds.clear(); compatibility.player.npcBonds.clear();
+        direct.player.relations.clear(); compatibility.player.relations.clear();
+        direct.npcs[0].relations.clear(); compatibility.npcs[0].relations.clear();
+        const string herb = direct.player.arts.herbs.begin()->first;
+        const auto immediate = friendship::giftItem(direct, friendNpc.id, "herb", herb);
+        const auto oldJob = friendship::giftHerbs(compatibility, friendNpc.id, 1);
+        check(immediate.ok && oldJob.ok, "即时与旧在途赠药入口均可结算");
+        checkEq(oldJob.affinityDelta, immediate.affinityDelta, "旧赠药路径使用同一加成且不会重复奖励");
+    }
+
     // 须由主测试入口放在原有 runApiTests 之后，保证冷启动回归不受影响。
     {
         Game& game = api::game(); const Game original = game;

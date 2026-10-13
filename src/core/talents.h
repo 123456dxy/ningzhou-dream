@@ -10,6 +10,8 @@ namespace nz {
 // 使用方式：传角色，从 artModsOf 复制后追加天赋并限制生活收益。
 // 返回值：汇总 ArtMods 值，不改变角色或基础缓存。
 ArtMods talentMods(const Player& player);
+// Positive, deliberate social interactions only; callers must not reward rejection or repeat greetings.
+int talentAffinityBonus(const Player& player);
 // 用途：查询先天道体的修炼速度乘数。
 // 参与流程：基础修炼速度汇总。
 // 使用方式：传角色只读状态。
@@ -32,10 +34,8 @@ string talentConflict(const vector<string>& traits);
 // 使用方式：传游戏，talentBirth 标记阻止读档重复发放。
 // 返回值：无；修改悟道点、神识、基础功法、已知神通和标记。
 void talentBirth(Game& game);
-// 用途：在有效月度条件下让绿瓶催熟一份真实药材。
-// 参与流程：月度天赋结算。
-// 使用方式：传游戏，要求资源、健康和无阻塞状态，同月最多一次。
-// 返回值：无；消耗玩家五灵石，增加药材总量/分类量并记标记日志。
+// 用途：保留既有月度天赋兼容入口；流程：旧日历调用；返回：无且不修改状态。
+// 神秘绿瓶真实效果移到灵田日tick，按已播种批次和格内储备加速，不复制背包草药。
 void talentMonthTick(Game& game);
 // 用途：为不灭道心每次新大境界奖励悟道点。
 // 参与流程：大境界突破成功后的天赋结算。

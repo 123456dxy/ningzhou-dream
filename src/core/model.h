@@ -183,7 +183,7 @@ inline const std::vector<TalentDef>& TALENTS() {
         {"blessing", "天道福泽", "悟道", 4, "获得的大道经验 +20%", "", 0},
         {"dragonBlood", "龙族血脉", "体魄", 5, "体魄 +1 · 每回合结束恢复3%气血", "body", 1},
         {"oddMeridian", "先天异脉", "磨砺", -3, "丹药与妖丹无法提升修为", "", 0},
-        {"greenBottle", "神秘绿瓶", "丹道", 3, "每月耗费5灵石催熟一份已有的一、二品草药；不催生妖丹，秘境中暂停", "", 0},
+        {"greenBottle", "神秘绿瓶", "丹道", 3, "灵田储备充足时自动催熟：每日每份种苗耗品阶数量灵石，额外增加200成长点；外出照常生效，不催生妖丹", "", 0},
         {"lightStep", "轻功高手", "遁速", 2, "遁速 +6 · 影响先手、步行御器耗时与逃遁", "", 0},
         {"artisan", "百炼匠心", "器道", 3, "炼器时间 −15% · 自炼法器售值 +15%，遵守生活加成上限", "", 0},
         {"family", "修真家族", "传承", 3, "开局修得一层蛮牛护体功并领悟聚气", "", 0},
@@ -520,6 +520,17 @@ struct Person {
     map<string, int> relations;
 };
 
+// NPC 只持久化服丹产生的增量，不复制玩家库存或战斗。
+struct NpcPillState {
+    map<string, int> used, daoExp;
+    vector<string> nodes;
+    int poison = 0, aptPills = 0, hpBonus = 0;
+    int heart = 0, mind = 0, speed = 0, points = 0, repel = 0;
+    string breakBuff;
+    map<string, double> combatPrep;
+    double combatBuff = 0;
+};
+
 // NPC
 struct Npc : Person {
     string id;
@@ -538,7 +549,8 @@ struct Npc : Person {
     map<string, int> bag;           // 物品 id -> 数量（丹药/药材/材料）
     vector<Gear> gear;              // 身上带的法器
     map<string, string> equipped;   // 槽位 -> 法器 id
-    vector<string> pillsUsed;       // 服过的丹药（避免重复算效果）
+    vector<string> pillsUsed;       // 旧档兼容：服过的丹药 ID（新次数见 pillState.used）
+    NpcPillState pillState;
 
     // ---- 功法与流派 ----
     // 人类修士的功法要和流派契合：有本命神通、有主修大道，
@@ -552,6 +564,7 @@ struct Npc : Person {
 
 // 玩家
 struct Player : Person {
+    string portraitId; // Empty in older saves: resolve the gender-specific default portrait.
     string talent = "sword";
     vector<string> traits;
     Build build;
@@ -816,6 +829,30 @@ struct AutoCheckpoint {
     string source = "auto", snapshot, lastReason;
 };
 
+// 所属制作模块；拥有一批同日播种的种苗，Count为1~99，ProgressUnits为0~品阶成熟阈值。
+// 无外部资源、可复制，状态仅由灵田命令/真实世界日tick修改；补种新批次不能继承旧成长。
+struct GardenCohort {
+    int Count = 0;
+    int ProgressUnits = 0;
+};
+
+// 所属制作模块；一个地块只容纳同一HerbId，总未收种苗最多99份。
+// 拥有格内储备和批次；储备仅由明确存取/日加速费用变化，不隐式扣玩家背包灵石。
+struct GardenPlot {
+    string HerbId;
+    int ReserveStones = 0;
+    vector<GardenCohort> Cohorts;
+};
+
+// 所属制作模块；拥有全洞府固定8格快照，实际解锁3/5/8格由洞府档位决定。
+// 默认未初始化是合法旧档状态：空Plots、LastGrowthDay=-1；初始化命令建立8格并从当前日期开始。
+// Initialized后禁止读查询补生长，LastGrowthDay确保每个真实世界日最多处理一次；由所属Game串行修改。
+struct CaveGardenState {
+    bool Initialized = false;
+    int LastGrowthDay = -1;
+    vector<GardenPlot> Plots;
+};
+
 struct Game {
     int version = VERSION;
     uint32_t rng = 20261004;
@@ -837,6 +874,7 @@ struct Game {
     Adventure adventure;
     BeastTide tide;
     DungeonWorld dungeons;
+    CaveGardenState Garden;
     AutoCheckpoint checkpoint;
     optional<Job> job;
     optional<Pending> pending;

@@ -1,5 +1,6 @@
 import { esc } from './shell.mjs';
 import { renderNumericPreview } from './numeric-preview.mjs';
+import { renderCraftPricing } from './craft-pricing.mjs';
 
 const kindLabel = { attack: '攻击', shield: '护盾', guard: '护盾', heal: '治疗', mana: '回灵',
   water: '蓄水', charge: '蓄势', poison: '施毒', fire: '灼烧', soul: '震荡', wave: '水势爆发',
@@ -61,6 +62,7 @@ export function renderForgePreview(preview) {
   if (!info || !info.valid) return `<div class="forge-preview"><p>${esc(info?.reason || preview.error || '当前配方无法推演。')}</p></div>`;
   return `<div class="forge-preview"><div class="forge-preview-heading"><strong>${esc(info.shapeName || '成器预览')}</strong><span>${esc(info.grade)}阶 · 成功率 ${Math.round(info.chance * 100)}%</span></div>`
     + `<p>${esc(info.mainName)} · ${esc(info.mainElement)}${esc(info.mainPolarity)} · 铸炼 ${esc(info.days)} 天 · ${esc(info.cost)} 灵石</p>`
+    + renderCraftPricing(info.pricing, { kind: 'gear' })
     + (info.passive?.text ? `<div class="forge-passive"><strong>装备数值变化</strong><p>${esc(info.passive.text)}</p></div>` : '')
     + renderArtifactAbility(info.ability)
     + (info.inscribedAbility ? `<details class="forge-inscribed"><summary>铭刻后的数值</summary>`

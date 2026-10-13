@@ -1,9 +1,14 @@
 // 宁州一梦 · C++ 版 — 营生与坊市实现（对应 JS 版 economy.mjs）
 #include "core/economy.h"
+#include "core/shop.h"
+#include "core/progression/manual_study.h"
 #include "core/crafting/material_supply.h"
+#include "core/crafting/craft_timing.h"
+#include "core/crafting/cave_garden.h"
 #include "core/renown.h"
 
 #include <algorithm>
+#include <cstdint>
 
 #include "core/arts.h"
 #include "core/cultivate.h"
@@ -79,6 +84,42 @@ static bool lookupManual(const string& id, ManualView& out) {
     return false;
 }
 
+// 用途：确定角色可接触的丹药收购市场层级。
+// 流程：月度坊市资金配置；炼气/筑基/金丹/元婴依次对应一至四品，最终化神覆盖五六品。
+// 返回值：一至六品；不改变炼制、丹炉或药材采购资格。
+int ecoMarketTier(const Player& player) {
+    return player.stage >= 12 ? 6 : clampInt(1 + player.stage / 3, 1, 4);
+}
+
+// 用途：计算有限的月度收购预算，避免高阶成品永远无法整枚售出。
+// 流程：初始化或换月时取声望基础预算与本层级最高单枚丹价的较高值，再乘基础三倍与大境界倍率。
+// 返回值：当期行情下的月预算；只读，不给本月已花掉的资金充值。
+int ecoMarketBudget(const Game& game) {
+    constexpr std::int64_t MaximumMarketBudget = 1000000000;
+    constexpr int BaseMarketBudgetMultiplier = 3;
+    constexpr int MaximumBudgetRenown = 250;
+    int BaseBudget = renown::marketCashCap(clampInt(game.player.renown, 0, MaximumBudgetRenown));
+    const int MarketTier = ecoMarketTier(game.player);
+    for (const auto& Recipe : data::RecipeDef_TABLE()) {
+        if (Recipe.grade <= MarketTier)
+            BaseBudget = std::max(BaseBudget, shop::salePrice(game, "potion", Recipe.id));
+    }
+    const std::int64_t Budget = static_cast<std::int64_t>(BaseBudget) * BaseMarketBudgetMultiplier * mfMarketRealmMultiplier(game.player);
+    return static_cast<int>(std::min(Budget, MaximumMarketBudget));
+}
+
+// 用途：查询月度收购预算的境界乘区；流程：资金预览/换月；用法：传只读角色，小境界不改变倍率；返回：炼气至化神1/2/4/8/16，越界饱和，无状态写入。
+int mfMarketRealmMultiplier(const Player& PlayerState) {
+    constexpr int MaximumMajorRealmIndex = 4;
+    constexpr int MinorStagesPerMajorRealm = 3;
+    const int MajorRealmIndex = clampInt(PlayerState.stage / MinorStagesPerMajorRealm, 0, MaximumMajorRealmIndex);
+    return 1 << MajorRealmIndex;
+}
+
+// 用途：返回统一预算解释；流程：坊市和声望视图；用法：无参数；返回：与后端完整底座乘区相同的中文规则，无状态写入。
+string mfMarketBudgetRule() {
+    return "声望基础额度与当前市场层级最高单枚丹药收购价取较高值，基础翻三倍，再乘大境界倍率（炼气1、筑基2、金丹4、元婴8、化神16），总预算最高十亿灵石；每月刷新，同月交易只扣减剩余资金。";
+}
 // ------------------------------------------------------------
 // 初始化与每月刷新
 // ------------------------------------------------------------
@@ -100,9 +141,7 @@ void ensureEconomy(Game& g) {
     g.economy.month = g.clock.days / 30;
     g.economy.orders.clear();
     g.economy.sold.clear();
-    g.economy.marketCash =
-        std::min(renown::marketCashCap(g.player.renown),
-                 400 + (g.player.stage / 3) * 250 + g.player.renown * 8);
+    g.economy.marketCash = ecoMarketBudget(g);
     g.economy.seq = 0;
 }
 
@@ -118,9 +157,7 @@ void ecoRefresh(Game& g) {
     e.orders.clear();
     e.taskCounts.clear();
     e.sold.clear();
-    e.marketCash = std::min(renown::marketCashCap(g.player.renown),
-                               400 + (g.player.stage / 3) * 250 +
-                                   g.player.renown * 8);
+    e.marketCash = ecoMarketBudget(g);
 }
 
 // 用途：把已得功法抄本同步到学习书单。
@@ -171,16 +208,12 @@ bool ecoAcquireBook(Game& g, const string& id, const string& source) {
 // 参与流程：工坊、坊市、藏经阁和洞府操作。
 // 使用方式：传入const Player& p, const string& type, int grade，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
-int ecoCraftDays(const Player& p, const string& type, int grade) {
-    static const int brewBase[6] = {4, 9, 18, 35, 60, 100};
-    static const int forgeBase[5] = {8, 18, 35, 60, 100};
-    const int g = clampInt(grade, 1, type == "brew" ? 6 : 5);
-    const int base = (type == "brew") ? brewBase[g - 1] : forgeBase[g - 1];
-    const double ability = type == "brew" ? static_cast<double>(p.alchemy) :
-                           (p.arts.exp.count("器") ? p.arts.exp.at("器") / 10.0 : 0.0);
-    const double passive = type == "forge" ? 1.0 - talentMods(p).forgeSpeed : 1.0;
-    return std::max(2, static_cast<int>(std::ceil(
-                           base * (1 - std::min(0.3, jsSqrt(ability) * 0.016)) * passive)));
+int ecoCraftDays(const Player& PlayerState, const string& WireKind, int Grade) {
+    const auto Kind = crafting::mfParseCraftKind(WireKind);
+    if (!Kind) return 0;
+    // 既有公共入口保留对品阶的钳位行为；新模块接口严格拒绝非法品阶。
+    const int MaximumGrade = *Kind == crafting::CraftKind::Brewing ? 6 : 5;
+    return crafting::mfCraftDurationDays(PlayerState, *Kind, clampInt(Grade, 1, MaximumGrade));
 }
 
 // 用途：按ID查询炼丹配方。
@@ -199,43 +232,8 @@ static const data::RecipeDef* findRecipeEco(const string& id) {
 // 使用方式：传入const Game& g, const string& type, const string& id，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
 int ecoSalePrice(const Game& g, const string& type, const string& id) {
-    const Player& p = g.player;
-    if (type == "potion") {
-        const data::RecipeDef* r = findRecipeEco(id);
-        if (!r) return 0;
-        // 材料成本 = 各药材基础价 × 用量
-        double materials = 0;
-        size_t pos = 0;
-        const string& ing = r->ingredients;
-        while (pos < ing.size()) {
-            const size_t semi = ing.find(';', pos);
-            const string item = ing.substr(
-                pos, semi == string::npos ? string::npos : semi - pos);
-            const size_t colon = item.find(':');
-            if (colon != string::npos) {
-                const string herbId = item.substr(0, colon);
-                const int n = std::stoi(item.substr(colon + 1));
-                for (const auto& h : data::HerbDef_TABLE())
-                    if (h.id == herbId) materials += h.sourcePrice * n;
-            }
-            if (semi == string::npos) break;
-            pos = semi + 1;
-        }
-        // JS 用 r.price，这里用 tolerance 之外的字段：丹方表里没有 price，
-        // 所以按 (材料 + 8 + 品阶*6) × 1.6 计算
-        const double v = std::max(0.0, (materials + 8 + r->grade * 6) * 1.6);
-        return jsRound(v * g.world.market);
-    }
-    // 法器
-    for (const auto& gear : p.arts.gear) {
-        if (gear.id != id) continue;
-        const double base = gear.craftCost > 0 ? gear.craftCost
-                                               : 60.0 * gear.grade * gear.grade;
-        return jsRound((base * 1.45 + gear.grade * 20) *
-                       (gear.inscribed ? 1.12 : 1.0) * g.world.market *
-                       (gear.crafted ? 1.0 + talentMods(p).craftedSale : 1.0));
-    }
-    return 0;
+    // 保留旧公共入口；丹药与法器均交权威市场报价，避免遗漏真实配方和声望。
+    return shop::salePrice(g, type, id);
 }
 
 // ------------------------------------------------------------
@@ -339,18 +337,15 @@ EcoActionInfo ecoActionInfo(const Game& g, const string& type,
                             const string& id, int batch) {
     EcoActionInfo info;
     const Player& p = g.player;
-    const Arts& a = p.arts;
 
     if (type == "learn") {
         ManualView m;
         if (!lookupManual(id, m)) return info;
-        auto it = a.manuals.find(m.id);
-        const int lv = it == a.manuals.end() ? 0 : it->second;
+        const auto study = manualStudyInfo(p, id);
         info.valid = true;
         info.name = "修习" + m.name;
-        // 悟性高的人读功法更快：20+10×层数 再按悟性打折
-        info.days = cultivate::learnDays(p, lv);
-        info.cost = 8 + (lv + 1) * 4;
+        info.days = study.days;
+        info.cost = study.stones;
         return info;
     }
     if (type == "brew") {
@@ -486,6 +481,10 @@ string ecoActionError(const Game& g, const string& type, const string& id, int b
     if (g.pending.has_value()) return "请先处理当前事件。";
     if (a.battle.has_value()) return "请先完成斗法。";
     if (g.job.has_value()) return "请先完成或中止当前安排。";
+    if (type == "arena") {
+        const string AccessError = crafting::mfGardenAccessError(g);
+        if (!AccessError.empty()) return AccessError;
+    }
 
     if (type == "commission" && id != "brew" && id != "forge")
         return "没有此类委托。";
@@ -750,9 +749,10 @@ void ecoComplete(Game& g, const Job& job) {
                  job.name + (win ? "成功" : "失败，投入资材耗尽") + "，用时" +
                      std::to_string(job.total) + "天。");
     } else if (type == "learn") {
-        a.manuals[id] = a.manuals[id] + 1;
         ManualView m;
-        if (lookupManual(id, m)) artGain(p, m.dao, 5);
+        if (!lookupManual(id, m)) return;
+        a.manuals[id] = std::min(5, std::max(0, a.manuals[id]) + 1);
+        artGain(p, m.dao, 5);
         logEvent(g, "self",
                  job.name + "至第" + std::to_string(a.manuals[id]) + "层，用时" +
                      std::to_string(job.total) + "天。");

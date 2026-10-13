@@ -18,10 +18,10 @@ import { loadRoster, invalidateRoster, renderRoster, bindRoster } from './roster
 import { heading, panel, layout, asideBlock, timeline, yearControls, hintBox } from './shell.mjs';
 import { renderDaos, renderArtsAside, loadNodes, invalidateNodes,
          loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds, renderManualIllustration } from './arts.mjs';
-import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect, marketGrade } from './economy.mjs';
+import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect, renderBrewIncome, marketGrade } from './economy.mjs';
 import { loadLegacy, invalidateLegacy, draftTalents, renderEnding, renderLegacyPanel, renderDraftPanel } from './legacy.mjs';
 import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks, renderAchievements } from './sects.mjs';
-import { renderRenownPanel, renderRenownBar, renownChip } from './renown.mjs';
+import { renderRenownBar, renownChip } from './renown.mjs';
 import { cardKind, cardRule, cardNumbers, battleStatusRows } from './cards.mjs';
 import { renderNumericPreview } from './numeric-preview.mjs';
 import { renderAtlas, selectedTravelMode, travelFeedback, isTravelJob } from './map.mjs';
@@ -29,9 +29,11 @@ import { renderLocationArt } from './location-art.mjs';
 import { renderPortrait, battleImpacts, animateBattleImpacts } from './portraits.mjs';
 import { renderDungeons } from './dungeons.mjs';
 import { caveSupplyAccess, renderCaveUpgrade, renderCaveSupplyLimits } from './cave-ui.mjs';
-import { renderArtifactAbility, renderEquippedArtifacts, renderBattleArtifacts, renderForgePreview } from './artifacts.mjs';
+import { renderEquippedArtifacts, renderBattleArtifacts, renderForgePreview } from './artifacts.mjs';
 import { renderInventoryPanel } from './inventory-panel.mjs';
 import { renderTaskPanel } from './task-panel.mjs';
+import { renderCavePage } from './cave-panel.mjs';
+import { renderCraftPricing } from './craft-pricing.mjs';
 import { renderCraftSupply, renderSalvageQuote } from './workshop.mjs';
 import { shouldRenderTide, renderTideMarket, renderTideBattleNotice } from './tide-panel.mjs';
 import {
@@ -118,6 +120,7 @@ try { chronicleHeight = Math.max(180, Math.min(900, Number(localStorage.getItem(
 let chronicleResizeObserver = null;
 let brewSupplyRecipeId = '';
 let craftSupplyQuote = null;
+const gardenSelections = {};
 
 // 用途：兼容旧页面链接，并解析新顶级页签的 hash。
 // 流程：读取 hash 主路径，将丹毒/装备/炼丹/炼器旧入口映射到新页面。
@@ -130,7 +133,7 @@ function tabFromHash() {
   const next = aliases[key] || key;
   // 本地测试版没有天机大比，地址栏里残留的 #tianji 回到岁月纪事
   if (window.__NZ_LOCAL__ && next === 'tianji') return 'chronicle';
-  return ['chronicle', 'map', 'arts', 'society', 'roster', 'quests', 'market', 'economy', 'workshop', 'inventory', 'tianji', 'dungeon'].includes(next) ? next : 'chronicle';
+  return ['chronicle', 'map', 'cave', 'arts', 'society', 'roster', 'quests', 'market', 'economy', 'workshop', 'inventory', 'tianji', 'dungeon'].includes(next) ? next : 'chronicle';
 }
 const tianji = createTianji({
   onChange: () => {
@@ -622,7 +625,7 @@ function showTravelResult(result, to) {
 
 // ------------------------------------------------------------
 // ------------------------------------------------------------
-// 页签：洞府道法
+// 页签：功法与悟道
 // 每道一张卡，列出 5 个节点的名称 / 花费 / 效果，另有「参悟 30 天」
 // ------------------------------------------------------------
 let artsReady = false;
@@ -638,7 +641,7 @@ let spellsRevision = 0;
 // ------------------------------------------------------------
 // 用途：展示已修功法。
 // 流程：读取主辅修、层数、来源与当前效果，生成管理按钮。
-// 调用方式：洞府道法页面无参调用。
+// 调用方式：功法与悟道页面无参调用。
 // 返回值：功法列表HTML字符串。
 function manualCards() {
   const list = S.arts.manualList || [];
@@ -716,7 +719,7 @@ function spellCards() {
     </div>`).join('') + `</div>`;
 }
 
-// 用途：展示洞府道法与构筑。
+// 用途：展示功法与悟道与构筑。
 // 流程：异步加载节点和神通目录，按子页组合功法、神通、流派与道法。
 // 调用方式：主渲染选择arts时调用。
 // 返回值：页面HTML字符串，未加载时占位HTML。
@@ -731,7 +734,7 @@ function viewArts() {
       nodesLoading = null;
       if (tab === 'arts') render();
     });
-    return heading('洞府道法', '十二大道各有点亮的节点；境界到位才能往上走。',
+    return heading('功法与悟道', '十二大道各有点亮的节点；境界到位才能往上走。',
                    `悟道点 ${a.points}`)
          + layout(panel('十二大道', '正在读取……',
              `<div class="empty">正在读取节点定义……</div>`),
@@ -771,11 +774,11 @@ function viewArts() {
   const builds = renderArtBuilds(S, spellData, artsNodes, artBuildFilter);
 
   const sub = subOf('arts', 'practice');
-  const top = heading('洞府道法',
-                 '安排修炼与配给，搭配功法神通，再参悟十二大道。',
+  const top = heading('功法与悟道',
+                 '搭配功法神通，修习抄本，再参悟十二大道。',
                  `悟道点 ${a.points} · 已点亮 ${a.nodes.length} 个节点`)
     + subTabs('arts', [
-        ['practice', '功法与洞府', `${(a.manualList || []).length} 部`],
+        ['practice', '功法修习', `${(a.manualList || []).length} 部`],
         ['spells', '神通搭配', `${extraCount} / ${slots}`],
         ['builds', '流派组合', `${(S.artBuilds || []).length} 组`],
         ['daos', '十二大道', `${a.nodes.length} / 60`],
@@ -791,8 +794,12 @@ function viewArts() {
         + hintBox(['普通攻击与防御固定常备，各五张，不占额外槽。', `额外槽当前 ${slots} 个，每种神通进入牌组两张。`, '换神通后下一场斗法生效。']));
   return top + layout(panel('已修功法', '选择主修、辅修或继续修习', `<div style="padding:14px 22px 18px">${manuals}</div>`), renderArtsAside(S))
     + panel('已得功法抄本', '事件、请教或兑换获得的抄本，修习后才能设置主辅修',
-      `<div style="padding:14px 22px 18px">${manualSourceRows((S.manualSources || []).filter(m => m.owned && !(S.arts.manuals?.[m.id] > 0)), 'learn') || '<div class="empty">暂无待修习的功法抄本。</div>'}</div>`)
-    + renderSupplyPanel(S);
+      `<div style="padding:14px 22px 18px">${manualSourceRows((S.manualSources || []).filter(m => m.owned && !(S.arts.manuals?.[m.id] > 0)), 'learn') || '<div class="empty">暂无待修习的功法抄本。</div>'}</div>`);
+}
+
+// 用途：展示独立洞府页；流程：读取权威管理条件、灵田批次与训练报价；返回：HTML；成长和扣费只在服务端世界日发生。
+function viewCave() {
+  return renderCavePage(S, { plantSelections: gardenSelections, supplyHtml: renderSupplyPanel(S) });
 }
 
 // ------------------------------------------------------------
@@ -818,10 +825,10 @@ function renderSupplyPanel(st) {
     const btns = [];
     for (let i = 0; i <= maxLv; i++) {
       const access = caveSupplyAccess(st, kind, i);
-      const dis = (locked && i > 0) || !access.enabled;
+      const dis = !!st.cave?.access?.reason || (locked && i > 0) || !access.enabled;
       btns.push(`<button class="supply-btn ${i === level ? 'on' : ''}" `
         + `${dis ? 'disabled ' : ''}`
-        + `title="${escape(access.reason || `${i} 档配给`)}" `
+        + `title="${escape(st.cave?.access?.reason || access.reason || `${i} 档配给`)}" `
         + `data-action="supply" data-kind="${kind}" data-level="${i}">${i}</button>`);
     }
     return `<div class="supply-row">
@@ -859,10 +866,6 @@ function renderSupplyPanel(st) {
         <div><label>洞府</label><strong>${escape((st.player && st.player.caveName) || '尚未安府')}</strong></div>
         <div><label>灵气</label><strong>${st.player && st.player.qiActive ? '正在生效' : '未生效'}</strong></div>
       </div>`
-      + (st.player && st.player.atCave ? ''
-          : `<button class="wide-btn" data-action="cave-move">${
-              st.player && st.player.cave ? '迁府至此' : '在此安府'
-            }（${sup.moveCost || 0} 灵石）</button>`)
       + renderCaveUpgrade(st))
     + asideBlock('修炼速度', `<div class="speed-breakdown">
         <div><span>功法基础</span><strong>${f(cul.manual)}</strong></div>
@@ -882,7 +885,6 @@ function renderSupplyPanel(st) {
 // 调用方式：主渲染选择society时调用。
 // 返回值：页面HTML字符串。
 function viewSociety() {
-  const b = S.bonds;
   // 宗门页只列本宗门的人 —— 当地仙友属于「地点」，已挪到地图页
   const all = S.nearby || [];
   const people = S.player.sect ? all.filter(n => n.sect === S.player.sect) : [];
@@ -911,20 +913,6 @@ function viewSociety() {
   const sel = selectedNpc ? people.find(n => n.id === selectedNpc) : null;
 
   // 原创支线与野外悬赏已挪到「机缘成就」—— 它们和宗门无关，散修一样能做。
-
-  const aside =
-    `<h3>宗门与俸禄</h3>`
-  + `<div class="detail-list" style="border-top:0;padding-top:0">`
-  + `<div><label>宗门</label><strong>${escape(S.player.sectName || '散修')}</strong></div>`
-  + `<div><label>身份</label><strong>${escape(S.player.rank || '—')}</strong></div>`
-  + `<div><label>待领俸禄</label><strong>${b.stipendBalance}</strong></div>`
-  + `<div><label>恶名</label><strong>${b.notoriety}</strong></div>`
-  + `</div>`
-  + `<div class="year-controls">`
-  + `<button class="primary" data-action="stipend">领取俸禄</button>`
-  + `<button data-action="expedition">探访后山</button></div>`
-  + hintBox(['好感度决定能做什么：', '30 解锁彻夜论道，40 可拜师，',
-             '60 可结为道侣。拜师条件与不足项可在「拜师与受业」查看。']);
 
   // 五宗一览：拜入山门后可做差事、以贡献兑换藏经阁功法
   const sectPanel = `<div class="chronicle-layout" style="margin-top:22px">`
@@ -1143,22 +1131,7 @@ function viewQuests() {
     </div>
     <p class="panel-note">遁速影响赶路耗时、斗法先手和逃脱机会。学习遁法、修行境界与装备带来的变化，以当前实际遁速为准。</p></div>`);
 
-  const filePanel = panel('本世档案', '', `<div style="padding:16px 22px 20px">
-    <div class="detail-list" style="border-top:0;padding-top:0">
-      <div><label>出身天赋</label><strong>${escape(p.traits.join('、'))}</strong></div>
-      <div><label>灵根资质</label><strong>${p.apt}</strong></div>
-      <div><label>福缘</label><strong>${p.luck}</strong></div>
-      <div><label>悟性</label><strong>${p.insight}</strong></div>
-      <div><label>体魄</label><strong>${p.body}</strong></div>
-      <div><label>丹术</label><strong>${p.alchemy}</strong></div>
-      <div><label>声望</label><strong>${p.renown}</strong></div>
-    </div></div>`);
-
   // 成就（14 项）：规则层一直有，之前既没面板也从不发放
-  // 声望：把「有什么用」直接摊开给玩家看
-  const renownPanel = panel('宁州声望', '名声是你在宁州的信誉资本',
-    `<div style="padding:16px 22px 20px">${renderRenownPanel(S.renownInfo)}</div>`);
-
   const achPanel = panel('成就', '达成后计入传承点',
                          `<div style="padding:16px 22px 20px">${renderAchievements(achData)}</div>`);
 
@@ -1337,7 +1310,7 @@ function viewMarket() {
             + `${i.owned ? ` · 已有 ${i.owned}` : ''}`
             + `${i.stageName ? ` · 需${escape(i.stageName)}` : ''}`
             + `${i.reason ? `<span class="market-item-reason">${escape(i.reason)}</span>` : ''}`
-            + `</div>${i.kind === 'potion' ? renderPillEffect(S, i.id, { catalog: true }) : ''}</div>
+            + `</div>${i.kind === 'potion' ? renderPillEffect(S, i.id, { catalog: true }) : ''}${['potion', 'gear'].includes(i.kind) ? renderCraftPricing(i.pricing, { kind: i.kind, compact: true }) : ''}</div>
             <div class="price">${i.price} 灵石</div>
             <div class="qty">
               <button data-qty="${i.id}" data-delta="-1" ${i.kind === 'gear' || qty === 1 ? 'disabled' : ''}>−</button>
@@ -1388,6 +1361,7 @@ function viewMarket() {
   + `<span class="rate ${o.chance < 0.4 ? 'low' : ''}">成丹 ${pct(o.chance)}</span></div>`
   + `<div class="craft-cost">开炉 ${o.stoneCost} 灵石 · ${o.days} 天</div>`
   + `<div class="craft-cost">整批 ${brewBatch} 炉：${o.batchQuote.cost} 灵石 · ${o.batchQuote.days} 天 · 每炉成丹 ${o.output} 枚</div>`
+  + renderBrewIncome(o)
   + renderPillEffect(S, o.id, { catalog: true })
   + (o.batchQuote.rows.length ? `<p class="craft-materials">${o.batchQuote.rows.map(item => `${escape(item.name)}：需 ${item.required}，有 ${item.owned}${item.missing ? `，缺 ${item.missing}` : ''}`).join('；')}</p>` : '')
   + (o.batchQuote.reason ? `<p class="card-why">${escape(o.batchQuote.reason)}</p>` : '')
@@ -1411,22 +1385,6 @@ function viewMarket() {
       <button data-action="sell" data-kind="potion" data-id="${id}" ${S.inCity ? '' : 'disabled'}>${S.inCity ? '出售' : '城中可售'}</button>
       </span></div>`;
   }).join('') || `<div class="empty">还没有炼成丹药。</div>`;
-
-  // ---- 法器（装备 / 卸下 / 分解 / 铭刻 / 出售）----
-  const gearRows = (S.gears || []).map(g =>
-    `<div class="pill-row">
-      <span>${escape(g.name)}
-      <span class="item-sub">${escape({ weapon: '武器', armor: '防具', accessory: '佩饰' }[g.slot] || g.slot)} · 加成 +${pct(g.bonus)}`
-    + `${g.inscribed ? ' · 已铭刻' : ''}${g.shapeName ? ` · ${escape(g.shapeName)}` : ''}${g.element ? ` · ${escape(g.element)}${escape(g.polarity || '')}` : ''}</span>${renderArtifactAbility(g.ability)}</span>
-      <span style="display:flex;gap:5px;flex-wrap:wrap">
-      ${g.equipped
-        ? `<button data-action="gear/unequip" data-id="${g.id}">卸下</button>`
-        : `<button data-action="equip" data-id="${g.id}">装备</button>`}
-      ${g.inscribed ? '' : `<button data-action="gear/inscribe" data-id="${g.id}">铭刻</button>`}
-      <button data-action="gear/salvage" data-id="${g.id}">分解</button>
-      ${g.equipped ? '' : `<button data-action="sell" data-kind="gear" data-id="${g.id}" ${S.inCity ? '' : 'disabled'}>${S.inCity ? '出售' : '城中可售'}</button>`}
-      </span></div>`).join('')
-    || `<div class="empty">还没有法器。</div>`;
 
   // ---- 丹炉 ----
   const furnaces = (S.furnaces || []).map(f =>
@@ -1470,7 +1428,7 @@ function viewMarket() {
     ['kit', '丹炉管理'],
   ], sub) : '';
   const mHead = heading(tab === 'workshop' ? '工坊' : '坊市', tab === 'workshop' ? '选择丹方与配料，开炉前查看投入和实际效果。' : '买卖药材、材料、丹药与法宝。',
-                        S.inCity ? '在城中' : '不在城中');
+                        S.inCity ? '在城中' : S.player.atCave ? '在洞府' : '外出');
 
   if (sub === 'forge') return mHead + mTabs + viewForgeWorkshop();
 
@@ -1762,8 +1720,8 @@ function openBuildPanel(opts = {}) {
   host.innerHTML = '';
 
   buildPanel = createBuildPanel({
-    onStart: async ({ name, gender, traits, allocation, budget, seed }) => {
-      const r = await call('new', { name, gender, traits, allocation, budget, seed });
+    onStart: async (plan) => {
+      const r = await call('new', plan);
       if (r && !r.error) closeBuildPanel();
       return !!(r && !r.error);
     },
@@ -1914,7 +1872,7 @@ function render() {
     $('#workspace').innerHTML = viewBattle();
   } else {
     const views = {
-      chronicle: viewChronicle, map: viewMap, arts: viewArts,
+      chronicle: viewChronicle, map: viewMap, cave: viewCave, arts: viewArts,
       society: viewSociety, roster: viewRoster, quests: viewQuests,
       market: viewMarket, workshop: viewMarket, economy: viewEconomy,
       inventory: () => renderInventoryPanel(S, { kind: inventoryKind, grade: inventoryGrade, sub: subOf('inventory', 'items'), materials: forgeOpts.materials, poisonHTML: poisonBox() }), tianji: () => tianji.render(),
@@ -2380,6 +2338,34 @@ document.addEventListener('click', async e => {
     case 'cave-upgrade':
       await call('cave/upgrade', {});
       break;
+    case 'cave-return':
+      await call('travel', { to: S.cave.access.homeLocation, mode: S.cave.access.returnMode });
+      break;
+    case 'cave-train':
+      await call('eco', { type: id, id: '' });
+      break;
+    case 'cave-garden-plant': {
+      const plotId = btn.dataset.plotId;
+      const controls = btn.closest('.cave-plot');
+      const herbId = controls?.querySelector('[data-cave-plant-herb]')?.value || gardenSelections[plotId]?.herbId;
+      const count = Number(controls?.querySelector('[data-cave-plant-count]')?.value || gardenSelections[plotId]?.count);
+      await call('cave/garden/plant', { plotId, herbId, count });
+      break;
+    }
+    case 'cave-garden-harvest':
+      await call('cave/garden/harvest', { plotId: btn.dataset.plotId });
+      break;
+    case 'cave-garden-deposit':
+    case 'cave-garden-withdraw': {
+      const plotId = btn.dataset.plotId;
+      const amount = Number(btn.closest('.cave-plot')?.querySelector('[data-cave-reserve-amount]')?.value || gardenSelections[plotId]?.reserveAmount);
+      await call(`cave/garden/reserve/${a === 'cave-garden-deposit' ? 'deposit' : 'withdraw'}`, { plotId, amount });
+      break;
+    }
+    case 'cave-garden-clear':
+      if (window.confirm('清理将放弃本格全部成熟和未成熟种苗；灵石储备保留。确认清理？'))
+        await call('cave/garden/clear', { plotId: btn.dataset.plotId });
+      break;
     case 'set-main':
       await call('arts/main', { id });
       invalidateNodes();
@@ -2765,7 +2751,7 @@ document.addEventListener('click', async e => {
         + '【炼丹】在坊市的开炉炼丹页选择丹方与炉数，耗时与投入列在卡片上。'
         + '遇事暂停后去岁月纪事继续推进；所有丹方均可查看。\n\n'
         + '【功法与神通】抄本从武陵城书坊、宗门藏经阁取得，需修习后生效。'
-        + '洞府道法的神通搭配页可更换额外神通，槽位随大境界由 4 增至 12。'
+        + '功法与悟道的神通搭配页可更换额外神通，槽位随大境界由 4 增至 12。'
         + '普通攻击与防御固定常备，各五张，不占槽位；流派组合页列出搭配与触发条件。\n\n'
         + '【斗法】每回合抽 5 张，出牌不触发反击，'
         + '点「结束回合」才结算敌方行动。');
@@ -2781,6 +2767,14 @@ document.addEventListener('click', async e => {
 // 调用方式：由 document 的 change 事件自动调用。
 // 返回值：Promise；无显式返回值。
 document.addEventListener('change', async e => {
+  if (e.target.matches('[data-cave-plant-herb], [data-cave-plant-count], [data-cave-reserve-amount]')) {
+    const plotId = e.target.dataset.plotId;
+    const choices = gardenSelections[plotId] ||= {};
+    if (e.target.matches('[data-cave-plant-herb]')) { choices.herbId = e.target.value; render(); }
+    if (e.target.matches('[data-cave-plant-count]')) choices.count = Number(e.target.value);
+    if (e.target.matches('[data-cave-reserve-amount]')) choices.reserveAmount = Number(e.target.value);
+    return; // 数量失焦不能重建正在被点击的按钮，否则第一次点击会丢失。
+  }
   const tideQuantity = e.target.closest('[data-tide-quantity]');
   if (tideQuantity) { tideMarketQuantities[tideQuantity.dataset.tideQuantity] = Math.max(1, Math.min(Number(tideQuantity.max) || 99, Math.floor(Number(tideQuantity.value)) || 1)); render(); return; }
   if (e.target.matches('[data-tide-market-grade]')) { tideMarketGrade = e.target.value; try { localStorage.setItem('nz-desktop-tide-market-grade', tideMarketGrade); } catch {} render(); return; }

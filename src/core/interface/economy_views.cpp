@@ -7,6 +7,7 @@
 #include "core/play.h"
 #include "core/shop.h"
 #include "core/interface/view_policy.h"
+#include "core/interface/craft_price_views.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 
@@ -67,6 +68,7 @@ void appendEconomyState(const Game& game, Value& state) {
             const PillUseInfo info = artPillUseInfo(game.player, recipe);
             Value item(json::Object{});
             item.set("id", str(recipe.id)); item.set("name", str(recipe.name));
+            item.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(game, recipe.id)));
             item.set("kind", str(recipe.kind)); item.set("grade", num(recipe.grade)); item.set("dao", str(recipe.dao));
             item.set("owned", num(info.owned)); item.set("effect", str(info.effect));
             item.set("effectValue", num(info.effectValue)); item.set("baseEffect", str(info.baseEffect.text));
@@ -113,12 +115,14 @@ void appendEconomyState(const Game& game, Value& state) {
             entry.set("owned", num(m.owned));
             entry.set("grade", num(marketGrade(m)));
             if (m.kind == "potion") {
+                entry.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(game, m.id)));
                 if (const auto* recipe = findRecipe(m.id)) entry.set("catalogEffect", str(catalogEffect(game.player, *recipe)));
             }
             arr.push_back(std::move(entry));
         }
         for (const auto& m : play::gearList(game)) {
             Value entry(json::Object{});
+            entry.set("pricing", mfCraftPriceView(crafting::mfQuoteStandardGearPrice(game, marketGrade(m))));
             entry.set("kind", str(m.kind));
             entry.set("id", str(m.id));
             entry.set("name", str(m.name));
@@ -131,6 +135,8 @@ void appendEconomyState(const Game& game, Value& state) {
         }
         state.set("market", Value(std::move(arr)));
         state.set("inCity", Value(ecoIsCity(game.player.location)));
+        const bool AtHome = !game.player.cave.empty() && game.player.cave == game.player.location;
+        state.set("workshopAvailable", Value(ecoIsCity(game.player.location) || AtHome));
     }
 
     // ---- 炼丹选项（带成丹率和缺料原因）----
@@ -138,11 +144,17 @@ void appendEconomyState(const Game& game, Value& state) {
         json::Array arr;
         for (const auto& c : play::craftOptions(game, "brew")) {
             Value entry(json::Object{});
+            entry.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(game, c.id)));
             entry.set("id", str(c.id));
             entry.set("name", str(c.name));
             entry.set("desc", str(c.desc));
             entry.set("chance", num(c.chance));
             entry.set("output", num(c.output));
+            // 数量和收益仅由后端报价；期望收入不承诺成功或即时售出。
+            const int salePrice = shop::salePrice(game, "potion", c.id);
+            entry.set("sellPrice", num(salePrice));
+            entry.set("expectedOutput", num(c.chance * c.output));
+            entry.set("expectedSaleIncome", num(c.chance * c.output * salePrice));
             entry.set("stoneCost", num(c.stoneCost));
             entry.set("days", num(c.days));
             entry.set("enabled", Value(c.enabled));
@@ -184,6 +196,10 @@ void appendEconomyState(const Game& game, Value& state) {
         state.set("poison", std::move(entry));
     }
     state.set("marketCash", num(game.economy.marketCash));
+    state.set("marketBudget", num(ecoMarketBudget(game)));
+    state.set("marketTier", num(ecoMarketTier(game.player)));
+    state.set("marketRealmMultiplier", num(mfMarketRealmMultiplier(game.player)));
+    state.set("marketBudgetRule", str(mfMarketBudgetRule()));
     state.set("coreBuyPrice", num(shop::corePrice(game, true)));
     state.set("pillBuyPrice", num(shop::pillPrice(game, true)));
     {

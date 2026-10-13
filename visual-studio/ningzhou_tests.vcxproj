@@ -13,6 +13,7 @@
 <ItemGroup>
 <ClInclude Include="..\tests\harness.h"/>
 <ClCompile Include="..\tests\test_adventure.cpp"/>
+<ClCompile Include="..\tests\test_alchemy_economy.cpp"/>
 <ClCompile Include="..\tests\test_api.cpp"/>
 <ClCompile Include="..\tests\test_api_refactor.cpp"/>
 <ClCompile Include="..\tests\test_artifact.cpp"/>
@@ -22,12 +23,17 @@
 <ClCompile Include="..\tests\test_battle_state.cpp"/>
 <ClCompile Include="..\tests\test_calendar.cpp"/>
 <ClCompile Include="..\tests\test_catalog_display.cpp"/>
+<ClCompile Include="..\tests\test_cave_api.cpp"/>
+<ClCompile Include="..\tests\test_cave_garden.cpp"/>
+<ClCompile Include="..\tests\test_character_build.cpp"/>
 <ClCompile Include="..\tests\test_checkpoint.cpp"/>
 <ClCompile Include="..\tests\test_combat_design.cpp"/>
 <ClCompile Include="..\tests\test_combat_fixes.cpp"/>
 <ClCompile Include="..\tests\test_content_registry.cpp"/>
 <ClCompile Include="..\tests\test_core.cpp"/>
 <ClCompile Include="..\tests\test_craft.cpp"/>
+<ClCompile Include="..\tests\test_craft_prices.cpp"/>
+<ClCompile Include="..\tests\test_craft_timing.cpp"/>
 <ClCompile Include="..\tests\test_crafting_fixes.cpp"/>
 <ClCompile Include="..\tests\test_display_contract.cpp"/>
 <ClCompile Include="..\tests\test_dungeon.cpp"/>
@@ -46,6 +52,7 @@
 <ClCompile Include="..\tests\test_play.cpp"/>
 <ClCompile Include="..\tests\test_player_fixes.cpp"/>
 <ClCompile Include="..\tests\test_renown_artifact_api.cpp"/>
+<ClCompile Include="..\tests\test_resource_points.cpp"/>
 <ClCompile Include="..\tests\test_reward_api.cpp"/>
 <ClCompile Include="..\tests\test_save.cpp"/>
 <ClCompile Include="..\tests\test_sect_completion.cpp"/>
@@ -54,6 +61,7 @@
 <ClCompile Include="..\tests\test_social_integrity.cpp"/>
 <ClCompile Include="..\tests\test_society.cpp"/>
 <ClCompile Include="..\tests\test_state_integrity.cpp"/>
+<ClCompile Include="..\tests\test_study_npc.cpp"/>
 <ClCompile Include="..\tests\test_talents.cpp"/>
 <ClCompile Include="..\tests\test_tianji.cpp"/>
 <ClCompile Include="..\tests\test_tide_api.cpp"/>

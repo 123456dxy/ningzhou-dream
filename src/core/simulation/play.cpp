@@ -5,14 +5,17 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <limits>
 
 #include "core/arts.h"
 #include "core/economy.h"
 #include "core/friendship.h"
 #include "core/battle.h"
 #include "core/shop.h"
+#include "core/crafting/craft_prices.h"
 #include "core/source_limits.h"
 #include "core/sim.h"
+#include "core/talents.h"
 #include "core/sect_trial.h"
 #include "core/sword.h"
 #include "data/reference_tables.h"
@@ -33,20 +36,6 @@ double marketMul(const Game& g) {
     return 1.0 + (g.world.market - 1.0) * 0.5;
 }
 
-// 用途：计入声望与天赋折扣后的买价。
-// 参与流程：人生推进、成长与世界模拟。
-// 使用方式：传入const Game& g, int base，按本模块入口调用。
-// 返回值：说明所述数值结果；不额外消耗资源。
-int buyPrice(const Game& g, int base) {
-    // 名声大的人在坊市有议价权：每点声望便宜 0.25%，上限 15%
-    const double disc = 1.0 - renown::buyDiscount(g.player.renown);
-    // 「商贾世家」天赋：购入价格 −10%。
-    // 这条写在天赋说明里，但之前只有「营生收入 +18%」实现了，
-    // 减价那一半从没接到任何计算里。
-    const double merchant = hasTalent(g.player, "merchant") ? 0.9 : 1.0;
-    return std::max(1, jsRound(base * marketMul(g) * disc * merchant));
-}
-
 // 用途：计入行情与声望加成后的卖价。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, int base，按本模块入口调用。
@@ -57,13 +46,13 @@ int sellPriceOf(const Game& g, int base) {
     return std::max(1, jsRound(base * 0.55 * marketMul(g) * bonus));
 }
 
-// 用途：按丹药效果与制作成本确定既有买价。
+// 用途：按完整配方材料市场价确定成品买价。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, const data::RecipeDef& recipe，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
 int potionBuyPrice(const Game& g, const data::RecipeDef& recipe) {
-    // RecipeDef.value 是疗效数值。市场买价必须覆盖材料定价，防止 1 灵石买丹再高价倒卖。
-    return std::max(buyPrice(g, recipe.value), jsRound(shop::salePrice(g, "potion", recipe.id) * 1.25));
+    const auto Quote = crafting::mfQuotePotionPrice(g, recipe.id);
+    return Quote.Valid ? Quote.BuyPrice : 0;
 }
 
 
@@ -71,16 +60,8 @@ int potionBuyPrice(const Game& g, const data::RecipeDef& recipe) {
 
 // 用途：复用既有买价公式；流程：普通坊市、兽潮报价与成交；用法：传药材/器材稳定 ID；返回：正常单价，未知为零。
 int normalMaterialBuyPrice(const Game& g, const string& kind, const string& id) {
-    if (kind == "herb") {
-        const auto* herb = findHerbById(id);
-        if (!herb) return 0;
-        const int base = herb->sourcePrice > 0 ? herb->sourcePrice : 20 + herb->grade * 15;
-        return buyPrice(g, herb->sourceLocation == g.player.location ? jsRound(base * 0.8) : base);
-    }
-    if (kind == "material") {
-        for (const auto& material : data::MaterialDef_TABLE())
-            if (material.id == id) return buyPrice(g, material.price);
-    }
+    if (kind == "herb") return crafting::mfNormalMaterialBuyPrice(g, crafting::MaterialPriceKind::Herb, id);
+    if (kind == "material") return crafting::mfNormalMaterialBuyPrice(g, crafting::MaterialPriceKind::ForgeMaterial, id);
     return 0;
 }
 
@@ -108,6 +89,7 @@ vector<MarketItem> marketList(const Game& g) {
         m.desc = artPillUseInfo(g.player, r).effect;
         m.dao = r.dao;
         m.price = potionBuyPrice(g, r);
+        if (m.price <= 0) continue;
         m.sellPrice = shop::salePrice(g, "potion", r.id);
         auto it = a.potions.find(r.id);
         m.owned = (it == a.potions.end()) ? 0 : it->second;
@@ -125,6 +107,7 @@ vector<MarketItem> marketList(const Game& g) {
         // 本地药材打折
         const int base = h.sourcePrice > 0 ? h.sourcePrice : 20 + h.grade * 15;
         m.price = normalMaterialBuyPrice(g, "herb", h.id);
+        if (m.price <= 0) continue;
         m.sellPrice = sellPriceOf(g, base);
         auto it = a.herbs.find(h.name);
         m.owned = (it == a.herbs.end()) ? 0 : it->second;
@@ -140,6 +123,7 @@ vector<MarketItem> marketList(const Game& g) {
         m.dao = material.element;
         m.desc = std::to_string(material.grade) + "阶材料 · " + material.element + " · " + material.polarity;
         m.price = normalMaterialBuyPrice(g, "material", material.id);
+        if (m.price <= 0) continue;
         m.sellPrice = sellPriceOf(g, material.price);
         const auto owned = a.materials.find(material.id);
         m.owned = owned == a.materials.end() ? 0 : owned->second;
@@ -168,8 +152,10 @@ vector<MarketItem> gearList(const Game& g) {
             m.desc = (sh.slot == "weapon")   ? "兵器"
                      : (sh.slot == "armor")  ? "护甲"
                                              : "饰物";
-            m.price = buyPrice(g, 60 * grade * grade);
-            m.sellPrice = sellPriceOf(g, 60 * grade * grade);
+            const auto Quote = crafting::mfQuoteStandardGearPrice(g, grade);
+            if (!Quote.Valid) continue;
+            m.price = Quote.BuyPrice;
+            m.sellPrice = Quote.SellPrice;
             out.push_back(m);
         }
     }
@@ -196,7 +182,10 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (!r) return "坊市里没有这味丹药。";
         if (r->grade > 3) return "高阶丹药坊市不管卖，需自行炼制。";
         const int unit = potionBuyPrice(g, *r);
-        const int total = unit * count;
+        if (unit <= 0) return "丹药材料报价无效，请刷新后重试。";
+        const long long TotalCost = static_cast<long long>(unit) * count;
+        if (TotalCost > std::numeric_limits<int>::max()) return "丹药购买金额超过支持范围。";
+        const int total = static_cast<int>(TotalCost);
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) +
                    "，你只有 " + std::to_string(p.stones) + "。";
@@ -219,6 +208,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         const string sourceError = ordinaryHerbError(p, h->grade);
         if (!sourceError.empty()) return sourceError;
         const int unit = normalMaterialBuyPrice(g, "herb", h->id);
+        if (unit <= 0) return "药材市场报价无效，请刷新后重试。";
         const int total = unit * count;
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) +
@@ -244,6 +234,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         const string sourceError = ordinaryMaterialError(p, material->grade);
         if (!sourceError.empty()) return sourceError;
         const int unit = normalMaterialBuyPrice(g, "material", material->id);
+        if (unit <= 0) return "材料市场报价无效，请刷新后重试。";
         const int total = unit * count;
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) + "，你只有 " + std::to_string(p.stones) + "。";
@@ -274,7 +265,9 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (grade > 2) return "三阶及以上法器不在普通坊市出售，请以秘境材料自行炼制或向道友寻求真实藏品。";
         if (grade > ordinaryMaterialGradeLimit(p)) return "二阶法器需达到筑基期。";
 
-        const int unit = buyPrice(g, 60 * grade * grade);
+        const auto Quote = crafting::mfQuoteStandardGearPrice(g, grade);
+        if (!Quote.Valid) return Quote.Reason;
+        const int unit = Quote.BuyPrice;
         if (p.stones < unit)
             return "灵石不足：需要 " + std::to_string(unit) +
                    "，你只有 " + std::to_string(p.stones) + "。";
@@ -287,6 +280,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         } while (std::any_of(a.gear.begin(), a.gear.end(), [&](const Gear& item) { return item.id == gear.id; }));
         gear.name = std::string(sh->name) + "·" + std::to_string(grade) + "阶";
         gear.slot = sh->slot;
+        gear.shape = sh->id;
         gear.grade = grade;
         gear.price = unit;
         gear.craftCost = unit;
@@ -351,6 +345,16 @@ string relationLabel(int v) {
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, const string& npcId，按本模块入口调用。
 // 返回值：对应目录或计算结果列表。
+static int socialAffinityGain(const Player& player, const string& action) {
+    int base = 0;
+    if (action == "chat") base = 3 + player.luck / 25;
+    else if (action == "study") base = 3;
+    else if (action == "travel") base = 12;
+    else if (action == "deep" || action == "partner") base = 15;
+    else if (action == "master" || action == "disciple") base = 10;
+    return base > 0 ? base + talentAffinityBonus(player) : 0;
+}
+
 vector<SocialAction> socialActions(const Game& g, const string& npcId) {
     vector<SocialAction> out;
     const Npc* n = findPerson(g, npcId);
@@ -366,6 +370,9 @@ vector<SocialAction> socialActions(const Game& g, const string& npcId) {
         a.id = id;
         a.name = name;
         a.desc = desc;
+        const int affinity = socialAffinityGain(p, id);
+        if (affinity > 0) a.desc += "；好感 +" + std::to_string(affinity) +
+            (talentAffinityBonus(p) ? "（含福缘深厚 +2）" : "");
         a.days = days;
         a.cost = cost;
         out.push_back(a);
@@ -374,10 +381,11 @@ vector<SocialAction> socialActions(const Game& g, const string& npcId) {
     add("chat", "闲谈叙话", "聊上几句，增进了解；同一道友每月一次", 1, 0);
     add("gift", "赠送灵药", "赠送背包中的一份药材；好感按价值与偏好折算，交情按价值累积", 1, 0);
     add("spar", "切磋剑艺", "以真实神通卡牌进行非致命斗法；同一道友每月一次，用时3天", 3, 0);
+    out.back().desc += "；完成切磋好感 +" + std::to_string(4 + talentAffinityBonus(p)) + "，撤离时 +4";
     add("study", "请教修行", "讨论修行，悟性 +2；与彻夜论道共用每人每月两次限额", 2, 5);
-    add("travel", "结伴游历", "一同出门 10 天，好感 +12；同一道友每月一次", 10, 10);
+    add("travel", "结伴游历", "一同出门 10 天；同一道友每月一次", 10, 10);
     if (rel >= 30)
-        add("deep", "彻夜论道", "深谈一场，好感 +15、心境 +2", 5, 0);
+        add("deep", "彻夜论道", "深谈一场，心境 +2", 5, 0);
     if (rel >= 60 && b.partner.empty())
         add("partner", "结为道侣", "确认道侣名分", 7, 0);
     // 条件不满足时仍显示入口与准确原因，避免玩家误以为没有拜师系统。
@@ -499,7 +507,7 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
 
     if (actionId == "chat") {
         p.npcBonds[npcId].talkMonth = month;
-        const int gain = 3 + p.luck / 25;
+        const int gain = socialAffinityGain(p, actionId);
         addRelation(g, npcId, gain);
         p.insight = std::min(INSIGHT_MAX, p.insight + 1);
         r.relationDelta = gain;
@@ -525,8 +533,8 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         const int gain = 8 + p.insight / 20;
         artGain(p, a.focus, gain);
         p.insight = std::min(INSIGHT_MAX, p.insight + 2);
-        addRelation(g, npcId, 3);
-        r.relationDelta = 3;
+        r.relationDelta = socialAffinityGain(p, actionId);
+        addRelation(g, npcId, r.relationDelta);
         r.text = "你向" + who + "请教修行疑难，受益良多。";
         logEvent(g, "npc", r.text + "（悟性 +2 · 大道经验 +" +
                                 std::to_string(gain) + "）", false, npcId,
@@ -534,7 +542,7 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
     } else if (actionId == "travel") {
         p.npcBonds[npcId].travelMonth = month;
         p.stones -= act->cost;
-        const int gain = 12;
+        const int gain = socialAffinityGain(p, actionId);
         addRelation(g, npcId, gain);
         p.insight = std::min(INSIGHT_MAX, p.insight + 4);
         artGain(p, a.focus, 5);
@@ -542,10 +550,10 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         g.adventure.since += 10;
         r.relationDelta = gain;
         r.text = "你与" + who + "结伴游历十日，见闻与情谊都有增长。";
-        logEvent(g, "npc", r.text + "（好感 +12 · 悟性 +4）", true, npcId,
+        logEvent(g, "npc", r.text + "（好感 +" + std::to_string(gain) + " · 悟性 +4）", true, npcId,
                  "灵石 −" + std::to_string(act->cost));
     } else if (actionId == "deep") {
-        const int gain = 15;
+        const int gain = socialAffinityGain(p, actionId);
         addRelation(g, npcId, gain);
         a.heart += 2;
         // 星河剑派「观水悟剑，论道收益提高」：论道给的大道经验 +50%。
@@ -556,27 +564,27 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         r.relationDelta = gain;
         r.text = "你与" + who + "彻夜论道，彼此心意更近了一层。";
         logEvent(g, "npc",
-                 r.text + "（好感 +15 · 心境 +2 · 大道经验 +" +
+                 r.text + "（好感 +" + std::to_string(gain) + " · 心境 +2 · 大道经验 +" +
                      std::to_string(dao) + "）",
                  true, npcId);
     } else if (actionId == "partner") {
         b.partner = npcId;
         b.bondDays = 0;
-        addRelation(g, npcId, 15);
-        r.relationDelta = 15;
+        r.relationDelta = socialAffinityGain(p, actionId);
+        addRelation(g, npcId, r.relationDelta);
         r.text = "你与" + who + "结为道侣。往后可相伴共修。";
         logEvent(g, "self", r.text, true, npcId);
     } else if (actionId == "master") {
         p.stones -= 20;
         b.master = npcId;
-        addRelation(g, npcId, 10);
-        r.relationDelta = 10;
+        r.relationDelta = socialAffinityGain(p, actionId);
+        addRelation(g, npcId, r.relationDelta);
         r.text = "你行拜师礼，" + who + "收下你的拜帖。";
         logEvent(g, "sect", r.text, true, npcId, "灵石 −20");
     } else if (actionId == "disciple") {
         b.disciples.push_back(npcId);
-        addRelation(g, npcId, 10);
-        r.relationDelta = 10;
+        r.relationDelta = socialAffinityGain(p, actionId);
+        addRelation(g, npcId, r.relationDelta);
         r.text = who + "拜入门下。";
         logEvent(g, "sect", r.text, true, npcId);
     } else {

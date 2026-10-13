@@ -2,6 +2,8 @@
 
 本清单依据 2026-10-12 工作区头文件，用于在 Visual Studio 中按模块查找现有 C++ 调用入口。11 个模块是实现职责与导航分类，当前共同编译为 `nzcore`，不是 11 个已隔离的库。各模块设计见 [后端架构](BACKEND_ARCHITECTURE.md) 及模块 README。
 
+2026-10-13 新增入口补充（不计入下方历史统计）：`character_build.h` 统一建角方案与立绘目录；`progression/manual_study.h` 提供功法研习报价；`social/npc_consumables.h` 管理 NPC 服丹动作与药效状态；`economy.h` 的 `ecoMarketTier` / `ecoMarketBudget` 提供分层月预算。规则与维护约定见 [代码规范](CODING_STANDARDS.md)、[初始天赋](INITIAL_TALENTS.md)、[研习与 NPC 丹药](MANUAL_STUDY_AND_NPC_PILLS.md) 和 [炼丹经济](ALCHEMY_ECONOMY.md)。
+
 ## 统计口径
 
 - 公共统计范围：core 根目录保留的兼容公共头，加 `content/game_ids.h`、`content/text_table.h` 、`interface/routes.h` 和 `crafting/material_supply.h`。这里的“公共”指调用方可使用的 C++ 入口；项目目前没有安装/导出头的独立边界。

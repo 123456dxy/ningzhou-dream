@@ -22,7 +22,9 @@ import { renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSect
 import * as artifacts from '../web/artifacts.mjs';
 import { renderNumericPreview } from '../web/numeric-preview.mjs';
 import { renderRenownSources } from '../web/renown.mjs';
-import { renderEconomy, forgeRequirements, brewRequirements, renderPillEffect, marketGrade } from '../web/economy.mjs';
+import { renderEconomy, forgeRequirements, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade } from '../web/economy.mjs';
+import { renderCavePage } from '../web/cave-panel.mjs';
+import { renderCraftPricing } from '../web/craft-pricing.mjs';
 import { renderInventoryPanel } from '../web/inventory-panel.mjs';
 import { renderTaskPanel } from '../web/task-panel.mjs';
 import { renderCraftSupply, renderSalvageQuote } from '../web/workshop.mjs';
@@ -232,7 +234,8 @@ const document = { querySelector: element, getElementById(id) { return element('
   body: { setAttribute() {}, removeAttribute() {} } };
 const requests = [];
 const context = { ...tianji, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
-  renderSectMentors, renderSectTasks, brewRequirements, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
+  renderSectMentors, renderSectTasks, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
+  renderCavePage, renderCraftPricing,
   renderManualIllustration, renderTidePanel, shouldRenderTide, renderTideMarket, renderTideBattleNotice,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
@@ -384,7 +387,7 @@ const sectLibraryState = {...state,player:{...state.player,sect:'jinhong'},libra
 const sectLibraryHTML=renderSectSpellLibrary(sectLibraryState);
 verify(sectLibraryHTML.includes('金光连斩') && sectLibraryHTML.includes('金系连击消耗锐意') && sectLibraryHTML.includes('筑基初期 · 18 贡献')
   && !sectLibraryHTML.includes('烈焰'), '藏经阁仅显示本宗神通与实际规则、所需境界、贡献价格');
-verify(/data-id="sword" disabled/.test(sectLibraryHTML) && sectLibraryHTML.includes('洞府道法 → 神通搭配'), '已学神通不可重复购买，学习和装备流程明确');
+verify(/data-id="sword" disabled/.test(sectLibraryHTML) && sectLibraryHTML.includes('功法与悟道 → 神通搭配'), '已学神通不可重复购买，学习和装备流程明确');
 const dungeonState = { ...state, player: {...state.player,cave:'wuling'}, cave: {
   tier:0,tierName:'寻常洞府',maxSupply:1,
   upgrade:{tier:1,name:'灵脉洞府',cost:120,minRenown:20,enabled:false,reason:'声望不足 20。',desc:'支持二档灵气配给。'},

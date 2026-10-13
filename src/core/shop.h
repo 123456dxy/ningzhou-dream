@@ -24,8 +24,9 @@ namespace nz::shop {
 // 出售
 // ============================================================
 // 售价（对应 JS ecoSalePrice）
-//   potion: max(r.price, (材料价 + 8 + 品阶×6) × 1.6) × 行情
-//   gear:   (craftCost × 1.45 + 品阶×20) × (铭刻?1.12) × 行情
+//   potion: 完整配方原料当前正常购价 × 1.5；标准产量摊到单枚，不计炉费或增产BUFF。
+//   gear:   完整配料记录/同阶十份标准材料市价 × 1.5 × 明示的铭刻/声望/自炼售值加成。
+// 原料正常购价已含行情、声望购买折扣和商贾优惠，成品不重复乘行情；详情见craft_prices.h。
 // 用途：按物品类别计算真实出售价格。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, const std::string& kind, const std::string& id，按本模块入口调用。
@@ -122,6 +123,8 @@ SellResult caveSupplySet(Game& game, const std::string& kind, int level);
 // 使用方式：传入Game& game，按本模块入口调用。
 // 返回值：SellResult结果，包含说明所述状态或计算数据。
 SellResult caveMove(Game& game);
+// 用途：统一安置/迁府资格与费用；流程：洞府页面预览及caveMove；返回：成本、enabled和reason，无状态/RNG/时钟/IO写入。
+[[nodiscard]] ActionQuote mfQuoteCaveMove(const Game& State);
 
 // ============================================================
 // 功法获取

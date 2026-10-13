@@ -97,4 +97,13 @@ void runTideRuleTests();
 void runTideIntegrationTests();
 void runTideApiTests();
 
+void runCharacterBuildTests();
+void runAlchemyEconomyTests();
+void runStudyNpcTests();
+void mfRunCraftPriceTests();
+void mfRunCraftTimingTests();
+void mfRunResourcePointTests();
+void mfRunCaveGardenTests();
+void mfRunCaveApiTests();
+
 } // namespace nztest

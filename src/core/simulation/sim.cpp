@@ -2,6 +2,9 @@
 // 本文件覆盖 sim.mjs 的：纪事、数值公式、世界年度推进、NPC 年度行动、
 // 宗门刷新、人口修剪、新游戏生成、结算。
 #include "core/sim.h"
+#include "core/crafting/cave_garden.h"
+#include "core/social/npc_consumables.h"
+#include "core/character_build.h"
 #include "core/dungeon.h"
 #include "core/checkpoint.h"
 #include "core/talents.h"
@@ -563,6 +566,11 @@ static void npcTurn(Game& g, Npc& n) {
     if (!n.alive) return;
     if (n.isNewborn && n.bornYear == g.year) return;
 
+    n.pillState.poison = std::max(0, n.pillState.poison -
+        (artHas(artNpcLoadout(n), "丹", 2) ? 5 : 1));
+    n.pillState.repel = std::max(0, n.pillState.repel - 1);
+    const int pillsTaken = npcConsumeUsefulPills(n);
+    if (pillsTaken > 0) npcHistory(g, n, "服用行囊中适用的丹药 " + std::to_string(pillsTaken) + " 枚。");
     n.age++;
     if (n.age >= n.lifespan) {
         killNpc(g, n, "寿元已尽，坐化于故地");
@@ -589,6 +597,11 @@ static void npcTurn(Game& g, Npc& n) {
         double chance = major ? majorChance[std::min(3, group)] : 0.8;
         chance += std::min(0.1, jsSqrt(n.insight) * 0.01);
         chance += clamp((n.apt - 55) * 0.001, -0.02, 0.05);
+        chance += std::min(0.1, n.pillState.heart * 0.001);
+        if (major && !n.pillState.breakBuff.empty()) {
+            chance += 0.06;
+            n.pillState.breakBuff.clear();
+        }
 
         if (major) {
             if (n.pills) { n.pills--; chance += 0.18; }
@@ -606,7 +619,7 @@ static void npcTurn(Game& g, Npc& n) {
         if (randomOf(g) < chance) {
             n.stage++;
             n.xp = 0;
-            n.lifespan = realmOf(n.stage).life;
+            n.lifespan = std::min(3000, realmOf(n.stage).life + n.lifeBonus);
             n.health = std::min(100, n.health + 12);
             npcHistory(g, n, "突破至" + realmName(n.stage) +
                              "，寿元上限" + std::to_string(n.lifespan) + "岁。");
@@ -651,14 +664,17 @@ static void npcTurn(Game& g, Npc& n) {
                roll < 0.54) {
         n.goal = "闭关修炼";
         n.stones -= upkeep;
-        gainXp(n, cultivationRateFor(n.stage, n.apt) * (n.sect.empty() ? 1.0 : 1.12));
+        gainXp(n, cultivationRateFor(n.stage, n.apt) * (n.sect.empty() ? 1.0 : 1.12) *
+                  artPoisonCultivationMultiplier(n.pillState.poison));
         n.insight = std::min(500, n.insight + 1);
     } else if (roll < 0.7) {
         n.goal = "游历寻缘";
         n.location = pickOf(g, LOCATIONS()).id;
-        gainXp(n, cultivationRateFor(n.stage, n.apt) * 0.3);
+        gainXp(n, cultivationRateFor(n.stage, n.apt) * 0.3 *
+                  artPoisonCultivationMultiplier(n.pillState.poison));
         npcHistory(g, n, "游历至" + string(findLoc(n.location)->name) + "。");
-        if (findLoc(n.location)->danger > power(n) && randomOf(g) < 0.14) {
+        if (findLoc(n.location)->danger > power(n) &&
+            randomOf(g) < (n.pillState.repel > 0 ? 0.07 : 0.14)) {
             damagePerson(n, randIntOf(g, 12, 30));
             if (n.health <= 0)
                 killNpc(g, n, "在" + string(findLoc(n.location)->name) + "遇险陨落");
@@ -1014,43 +1030,15 @@ void maybeChoice(Game& g) {
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const CreateOptions& opts，按本模块入口调用。
 // 返回值：Game结果，包含说明所述状态或计算数据。
-Game createGame(const CreateOptions& opts) {
+Game createGame(const CreateOptions& source) {
+    const CreateOptions opts = resolveCreateOptions(source);
+    const Build build = buildCharacter(opts.traits, opts.allocation, opts.budget, opts.seed);
     Game g;
     g.seed = opts.seed;
     g.rng = opts.seed;
     g.lifeId = opts.lifeId.empty()
                    ? ("life-" + std::to_string(opts.seed))
                    : opts.lifeId;
-
-    // 天赋与属性
-    vector<string> traits = opts.traits;
-    // 只有调用方没明确给天赋时，才用预设补一个。
-    // 建号面板允许「一个天赋都不选、点数全给属性」，
-    // 这时不能再偷偷塞一个默认天赋 —— 否则预算会超，
-    // buildCharacter 抛异常，建号会静默退回默认值。
-    if (traits.empty() && !opts.traitsExplicit) {
-        const TalentDef* preset = findTalent(opts.talent);
-        traits.push_back(preset ? preset->id : TALENTS()[0].id);
-    }
-    map<string, int> alloc = opts.allocation;
-    if (alloc.empty()) {
-        int cost = 0;
-        for (const auto& t : traits) {
-            const TalentDef* td = findTalent(t);
-            if (td) cost += td->cost;
-        }
-        const int apt = std::min(10, std::max(0, opts.budget - cost));
-        if (apt > 0) alloc["apt"] = apt;
-    }
-    // buildCharacter 对非法入参会抛异常。建号是程序入口，不该因为
-    // 一个配点错误就整个崩掉，所以这里退回「只用第一个天赋」重试一次。
-    Build build;
-    try {
-        build = buildCharacter(traits, alloc, opts.budget, opts.seed);
-    } catch (const std::invalid_argument&) {
-        traits = {traits.empty() ? TALENTS()[0].id : traits[0]};
-        build = buildCharacter(traits, {}, opts.budget, opts.seed);
-    }
 
     // 玩家
     Player& p = g.player;
@@ -1075,7 +1063,8 @@ Game createGame(const CreateOptions& opts) {
         }
     }
     p.name = clean.empty() ? "沈知微" : clean;
-    p.gender = (opts.gender == "男") ? "男" : "女";
+    p.gender = opts.gender;
+    p.portraitId = opts.portraitId;
     p.talent = build.traits.empty() ? "plain" : build.traits[0];
     p.traits = build.traits;
     p.build = build;
@@ -1144,6 +1133,7 @@ Game createGame(const CreateOptions& opts) {
     artGain(p, "剑", std::max(0, std::max(0, build.sword - 2) * 2 - (hasTalent(p, "gold") ? 6 : 0)));
     if (hasTalent(p, "gold")) artGain(p, "金", 6);
     ensureCalendar(g);
+    crafting::mfInitializeGarden(g);
     ensureEconomy(g);
     ensureSociety(g);
     ensureAdventure(g);

@@ -70,7 +70,7 @@ export function renderRenownPanel(info, { sources = info?.sources || [] } = {}) 
     ['坊市买入折扣', pct(info.buyDiscount), '名声大，商家愿意让利'],
     ['坊市卖出溢价', pct(info.sellBonus), '名声大，货品卖得更贵'],
     ['每月同类收购上限', `${info.sellLimit} 件`, '基础 8 件，每 20 点声望 +1'],
-    ['坊市收购资金上限', `${info.marketCashCap}`, '基础 400，每点声望 +8'],
+    ['当前层级月度收购预算', `${info.marketCashCap}`, info.marketBudgetRule || '基础 400，每点声望 +8'],
     ['初见交情', `${info.firstImpression}`, '陌生人一开始就对你有所耳闻'],
     ['藏经阁贡献折扣', pct(info.libraryDiscount), '兑换功法更省贡献'],
     ['山门差事工钱', `+${pct(info.stipendBonus)}`, '接差事的报酬加成'],

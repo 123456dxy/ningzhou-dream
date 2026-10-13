@@ -212,11 +212,13 @@ double breakthroughBonus(const Player& p) {
 // 参与流程：学习功法行动报价。
 // 使用方式：传角色与要学层数。
 // 返回值：至少三天的修习耗时。
-int learnDays(const Player& p, int level) {
-    // 基础 20 天 + 每层 10 天；悟性每点快 1%，最快打到六折
-    const int base = 20 + level * 10;
-    const double speed = clamp(1.0 - (p.insight - 10) * 0.010, 0.6, 1.5);
-    return std::max(3, jsRound(base * speed * (hasTalent(p, "savvy") ? 0.80 : 1.0)));
+int learnDays(const Player& p, int level, int tier) {
+    // level 为已修层数；基础四十天，每层 ×1.2、每阶 ×2。
+    const double base = 40.0 * std::pow(1.2, clampInt(level, 0, 4)) *
+                        std::pow(2.0, clampInt(tier, 1, 5) - 1);
+    const double speed = clamp(1.0 - (static_cast<double>(p.insight) - 10.0) * 0.010, 0.6, 1.5);
+    return std::max(3, static_cast<int>(std::ceil(base * speed *
+        (hasTalent(p, "savvy") ? 0.80 : 1.0) - 1e-9)));
 }
 
 

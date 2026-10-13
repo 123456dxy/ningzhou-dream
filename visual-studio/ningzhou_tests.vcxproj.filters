@@ -4,6 +4,7 @@
 </ItemGroup><ItemGroup>
 <ClInclude Include="..\tests\harness.h"><Filter>Tests</Filter></ClInclude>
 <ClCompile Include="..\tests\test_adventure.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_alchemy_economy.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_api.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_api_refactor.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_artifact.cpp"><Filter>Tests</Filter></ClCompile>
@@ -13,12 +14,17 @@
 <ClCompile Include="..\tests\test_battle_state.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_calendar.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_catalog_display.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_cave_api.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_cave_garden.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_character_build.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_checkpoint.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_combat_design.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_combat_fixes.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_content_registry.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_core.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_craft.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_craft_prices.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_craft_timing.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_crafting_fixes.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_display_contract.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_dungeon.cpp"><Filter>Tests</Filter></ClCompile>
@@ -37,6 +43,7 @@
 <ClCompile Include="..\tests\test_play.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_player_fixes.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_renown_artifact_api.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_resource_points.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_reward_api.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_save.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_sect_completion.cpp"><Filter>Tests</Filter></ClCompile>
@@ -45,6 +52,7 @@
 <ClCompile Include="..\tests\test_social_integrity.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_society.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_state_integrity.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_study_npc.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_talents.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tianji.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tide_api.cpp"><Filter>Tests</Filter></ClCompile>

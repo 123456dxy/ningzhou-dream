@@ -8,6 +8,7 @@
 #include "core/crafting/material_supply.h"
 #include "core/talents.h"
 #include "core/interface/view_policy.h"
+#include "core/interface/craft_price_views.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 
@@ -90,6 +91,7 @@ void appendEquipmentState(const Game& game, Value& state) {
         json::Array arr;
         for (const auto& gr : game.player.arts.gear) {
             Value entry(json::Object{});
+            entry.set("pricing", mfCraftPriceView(crafting::mfQuoteGearPrice(game, gr)));
             entry.set("id", str(gr.id));
             entry.set("name", str(gr.name));
             entry.set("slot", str(gr.slot));

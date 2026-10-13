@@ -12,6 +12,7 @@
 | `location_services.cpp` | 地点服务列表、服务开始与完成 | `location_services.h` |
 | `adventure.cpp` | 奇遇初始化、事件、选择与战斗后果 | `adventure.h` |
 | `dungeon.cpp` | 秘境生成、进入、节点、奖励、情报与完整性 | `dungeon.h` |
+| `resource_points.cpp` | 资源点开发目录和默认关闭的功能闸门；未开放争夺、收益或时间钩子 | `resource_points.h` |
 
 这些公共头仍保留在 core 根。交通入口为 `travelPlan` → `travelBegin` → `travelAmbushTick`；地点服务为 `locationServices` → `locationServiceBegin` → `locationServiceComplete`；秘境为 `dungeonEnter` → `dungeonChoose` / `dungeonClaim` → `dungeonLeave`。
 
@@ -33,3 +34,5 @@ API 根据当前位置与目标查询选项，规则入口验证后创建在途 
 `tests/test_travel.cpp`、`test_adventure.cpp`、`test_dungeon.cpp`、`test_reward_api.cpp`、`test_material_sources.cpp`、`test_npc_learning_location.cpp`、`test_passive_life_travel.cpp`、`test_checkpoint.cpp`。统一编入 `ningzhou_tests`；这里提供已有测试导航。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。
+
+资源点争夺方案与安全关闭边界见 [RESOURCE_POINTS.md](../../../docs/RESOURCE_POINTS.md)。当前即使请求启用，玩法仍因未就绪而明确拒绝；关闭时不加入存档字段、不消耗随机数、不影响服务和既有收益。

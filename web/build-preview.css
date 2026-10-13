@@ -1,0 +1,54 @@
+.build-portraits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  max-height: 330px;
+  overflow: auto;
+  padding: 4px;
+}
+.build-portrait-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid #bdcbbb;
+  border-radius: 10px;
+  background: #f4f1e6;
+  color: #294e40;
+  padding: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.build-portrait-choice img { width: 100%; height: 126px; object-fit: contain; }
+.build-portrait-choice.selected { outline: 2px solid #37694e; background: #e1eadc; }
+.build-portrait-choice:disabled { cursor: default; }
+.build-portrait-choice:disabled:not(.selected) { opacity: .5; }
+.opening-preview { border: 1px solid #adc4ae; border-radius: 12px; padding: 16px; background: #eff3e8; margin-top: 16px; }
+/* A locked preview must remain fully readable above its confirmation actions. */
+.opening-preview + .build-summary { position: static; }
+.opening-preview-title { display: flex; gap: 14px; align-items: center; }
+.opening-preview-title img { width: 92px; height: 122px; object-fit: contain; flex: none; }
+.opening-preview-title h3 { margin: 0 0 7px; }
+.opening-preview-title p, .build-note { color: #5c6d5e; font-size: 13px; line-height: 1.6; }
+.opening-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 12px; }
+.opening-stats dt { font-size: 13px; color: #5c6d5e; }
+.opening-stats dd { margin: 3px 0 0; font-weight: 700; font-size: 20px; }
+.opening-talents { padding-left: 20px; }
+.opening-talents li { margin: 7px 0; }
+.opening-talents span { display: block; font-size: 13px; line-height: 1.6; }
+.build-lock-status { color: #28533d; font-weight: 600; }
+@media (max-width: 480px) {
+  .build-portraits { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 306px; gap: 7px; }
+  .build-portrait-choice img { height: 104px; }
+  .opening-preview { padding: 12px; }
+  .opening-preview-title { gap: 9px; }
+  .opening-preview-title img { width: 65px; height: 96px; }
+  .opening-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+}
+
+.character-profile { display: flex; align-items: center; gap: 14px; }
+.character-profile img { width: 72px; height: 96px; object-fit: contain; flex: none; }
+.character-profile h3 { margin: 0; }
+.character-profile .meta { margin-bottom: 0; }

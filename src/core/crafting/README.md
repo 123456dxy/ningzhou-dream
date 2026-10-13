@@ -11,6 +11,8 @@
 | `economy.cpp` | 行情、书籍取得、制作/任务安排与完成 | `economy.h` |
 | `shop.cpp` | 交易报价、出售、换书、法器处理、丹炉、洞府 | `shop.h` |
 | `source_limits.cpp` | 普通草药/材料品阶限制与错误信息 | `source_limits.h` |
+| `craft_timing.cpp` | 逐品阶时长、丹术/器道与生活减时；`ecoCraftDays` 为既有接口的薄适配 | `crafting/craft_timing.h` |
+| `cave_garden.cpp` | 同格批次种植、储备自动催熟、后台生长与纯报价 | `crafting/cave_garden.h` |
 
 公共头仍位于 core 根。任务路径主要为 `ecoActionInfo` / `ecoActionError` → `ecoBegin` → `ecoComplete`；即时路径主要为 `shop::saleQuote` / `gearActionQuote` → `sell` / `salvage` / `inscribe`。`ordinaryHerbGradeLimit` 与 `ordinaryMaterialGradeLimit` 为跨模块来源限制提供统一计算。
 
@@ -26,9 +28,12 @@
 - 失败动作不得先扣材料、灵石或取消任务；批量制作要检查数量、库存和数值边界。
 - 物品 ID、来源键和任务类型属于稳定数据契约，改显示文字不应改这些键。
 - 变动跨越在途 `Job`、装备或配给字段时，应同步 persistence 的结构与状态校验。
+- 制作时长只在 `craft_timing.cpp` 定义，开工冻结到 Job；存读档不重算。坊市月预算完整原底座乘境界 1/2/4/8/16，查询和同月晋阶不补充资金，详见 [制作时长与预算](../../../docs/CRAFT_TIMING.md)。
 
 ## 已有测试
 
 `tests/test_craft.cpp`、`test_equipment_task.cpp`、`test_material_sources.cpp`、`test_passive_life_travel.cpp`、`test_numeric_previews.cpp`；API 与收益另见 `test_api.cpp`、`test_renown_artifact_api.cpp`、`test_event_rewards.cpp`。测试统一编入 `ningzhou_tests`；此处仅列出已有覆盖入口。
+新增时长与月预算回归见 `tests/test_craft_timing.cpp`，包含真实核心 API、旧工作合同和同月余额保持。
+洞府灵田规则见 [灵田说明](../../../docs/CAVE_GARDEN.md)，定向批次/储备/日历回归为 `tests/test_cave_garden.cpp`。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。

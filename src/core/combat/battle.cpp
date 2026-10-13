@@ -3,6 +3,7 @@
 // Demo05 的「直接选招 + 立即反击」已被 Demo07 的卡牌循环取代，
 // 所以本文件是重写而非修补。旧的逐回合数值对照测试也随之更新。
 #include "core/battle.h"
+#include "core/social/npc_consumables.h"
 #include "core/content/game_ids.h"
 #include "core/content/text_table.h"
 #include "core/artifact.h"
@@ -857,7 +858,7 @@ void battleFinish(Game& game, bool win, bool escape) {
         }
     }
     if (!battle.npcId.empty() && battleKind == BattleKind::Spar)
-        addRelation(game, battle.npcId, 4);
+        addRelation(game, battle.npcId, 4 + (!escape ? talentAffinityBonus(game.player) : 0));
 
     // 兽潮迎战：赏赐比普通野外悬赏厚得多，这是「成长动力」的来源
     if (battleKind == BattleKind::Tide && !escape)
@@ -1232,6 +1233,7 @@ static Player battleEnemyPlayer(const Game& g, const Battle& b) {
     if (b.shadowPlayer) return *b.shadowPlayer;
     const EnemyCombat& e = b.enemyCards;
     Player p;
+    p.talent.clear();
     p.name = b.enemy; p.stage = e.stage; p.sect = e.sect; p.body = e.body;
     p.arts.main = e.main; p.arts.aux = e.aux; p.arts.manuals = e.manuals;
     p.arts.nodes = e.nodes; p.arts.mind = e.mind;
@@ -1469,9 +1471,18 @@ static void battleEnemyInit(Game& g, const EnemySpec& spec, bool opening) {
     npc.beast = spec.beast || (spec.id.empty() && spec.sect.empty() &&
         (content::parseBattleKind(spec.kind) == BattleKind::Hunt || content::parseBattleKind(spec.kind) == BattleKind::Tide));
     bool actualNpc = false;
-    for (const auto& actual : g.npcs) {
+    for (auto& actual : g.npcs) {
         if (actual.id != spec.id) continue;
-        npc = actual; actualNpc = true; break;
+        if (opening) {
+            const int used = npcConsumeUsefulPills(actual, true);
+            if (used > 0) b.log.push_back(actual.name + "战前服用适用丹药 " + std::to_string(used) + " 枚。");
+        }
+        npc = actual; actualNpc = true;
+        if (opening) {
+            actual.pillState.combatPrep.clear();
+            actual.pillState.combatBuff = 0;
+        }
+        break;
     }
     npc.stage = clampInt(npc.stage, 0, 12);
     b.enemyStage = npc.stage; b.enemySect = npc.sect; b.enemyGender = npc.gender;
@@ -1485,7 +1496,8 @@ static void battleEnemyInit(Game& g, const EnemySpec& spec, bool opening) {
     b.enemyCards = e;
     Player foe = battleEnemyPlayer(g, b);
     foe.arts = loadout;
-    b.enemySpeed = spec.speed >= 0 ? spec.speed : battleSpeed(foe);
+    const Battle preparation = battleReferenceState(foe);
+    b.enemySpeed = (spec.speed >= 0 ? spec.speed : battleSpeed(foe)) + preparation.speed;
     b.enemyCards.speed = b.enemySpeed;
     b.playerSpeed = std::max(1, battleSpeed(g.player) + b.speed);
     b.playerFirst = b.playerSpeed >= b.enemySpeed;
@@ -1500,12 +1512,21 @@ static void battleEnemyInit(Game& g, const EnemySpec& spec, bool opening) {
                                  : b.enemyMax;
     }
     Battle v = battleEnemyView(b, g.player.stage);
-    v.maxMana = battleEnergy(foe);
-    v.mana = std::min(battleManaCap(foe), v.maxMana + static_cast<int>(std::ceil(mods.openingMana / 2.0)) +
-                                         (artHas(foe.arts, "气", 2) ? 1 : 0));
-    v.shield = jsRound(v.max * std::min(0.30, mods.openingShield + mods.roundShield +
-                                                (artHas(foe.arts, "阵", 1) ? 0.12 : 0.0)));
-    v.swordQi = std::min(8, jsFloor(mods.openingQi) + (artHas(foe.arts, "剑", 2) ? 2 : 0));
+    v.maxMana = preparation.maxMana;
+    v.mana = preparation.mana;
+    const auto shieldPill = loadout.combatPrep.find("shield");
+    const double pillShield = shieldPill == loadout.combatPrep.end() ? 0.0 : shieldPill->second;
+    // A fast NPC historically starts with its round shield. Keep that baseline,
+    // but let a consumed shield pill survive until the player can respond.
+    const double openingShield = b.playerFirst
+        ? mods.openingShield + (artHas(foe.arts, "阵", 1) ? 0.12 : 0.0) : 0.0;
+    v.shield = std::min(jsRound(v.max * 0.30),
+        jsRound(v.max * (openingShield + mods.roundShield)) + jsRound(v.max * pillShield));
+    v.swordQi = preparation.swordQi;
+    if (opening) {
+        v.buff = preparation.buff;
+        v.reduction = preparation.reduction;
+    }
     if (!opening && b.playerPoisonTurns > 0) {
         v.poisonTurns = b.playerPoisonTurns;
         v.poison = clampInt(jsRound(b.playerPoison /
@@ -1587,6 +1608,16 @@ void battleStartShadow(Game& encounter, const Player& challengerSnapshot,
     } else started.log.push_back("你的遁速取得先手，先行出牌。");
 }
 
+// 用途：统一敌方每轮开始时的护盾与守势重置。
+// 参与流程：只读预览、连招规划和真实行动。
+// 使用方式：传主战斗、敌方加成和敌方视角；先手首轮沿用开局状态。
+// 返回值：无；后续轮次只保留每轮再生护盾，不重复发放开局丹药。
+static void battleEnemyBeginTurn(const Battle& b, const ArtMods& mods, Battle& v) {
+    if (!b.playerFirst && b.enemyCards.turns == 0) return;
+    v.shield = jsRound(v.max * std::min(0.30, mods.roundShield));
+    v.guard = 0;
+}
+
 // 用途：只读试算回合末持续状态及敌方完整连招。
 // 参与流程：战况意图展示。
 // 使用方式：传游戏，在副本上执行已计划行动，不重洗未知牌。
@@ -1627,9 +1658,7 @@ EnemyPreview battleEnemyPreview(const Game& g) {
     const ArtMods playerMods = talentMods(g.player);
     const ArtMods mods = b.shadowPlayer ? talentMods(foe) : artModsOf(foe.arts);
     Battle v = battleEnemyView(projected, g.player.stage);
-    if (!b.shadowPlayer || b.playerFirst || b.enemyCards.turns > 0) {
-        v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
-    }
+    battleEnemyBeginTurn(b, mods, v);
     const int before = v.hp;
     Game simulation; simulation.rng = g.rng;
     for (const auto& uid : b.enemyCards.planned) {
@@ -1674,9 +1703,7 @@ static void battleEnemyPlan(Game& g) {
     const ArtMods playerMods = talentMods(g.player);
     const ArtMods mods = b.shadowPlayer ? talentMods(foe) : artModsOf(foe.arts);
     Battle v = battleEnemyView(b, g.player.stage);
-    if (!b.shadowPlayer || b.playerFirst || b.enemyCards.turns > 0) {
-        v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
-    }
+    battleEnemyBeginTurn(b, mods, v);
     e.planned.clear();
     Game simulation; simulation.rng = g.rng;
     const int limit = b.shadowPlayer ? 24 : e.sect.empty() ? 2 + e.stage / 6 : std::min(8, 3 + e.stage / 3);
@@ -1725,9 +1752,7 @@ static void battleEnemyAct(Game& g) {
     const ArtMods mods = b.shadowPlayer ? talentMods(foe) : artModsOf(foe.arts);
     const ArtMods playerMods = talentMods(g.player);
     Battle v = battleEnemyView(b, g.player.stage);
-    if (!b.shadowPlayer || b.playerFirst || b.enemyCards.turns > 0) {
-        v.shield = jsRound(v.max * std::min(0.30, mods.roundShield)); v.guard = 0;
-    }
+    battleEnemyBeginTurn(b, mods, v);
     const vector<string> planned = b.enemyCards.planned;
     for (const auto& uid : planned) {
         const int hp = v.enemyHp, shield = v.enemyShield;

@@ -1,4 +1,4 @@
-// 宁州一梦 · C++ 版 — 洞府道法页
+// 宁州一梦 · C++ 版 — 功法与悟道页
 //
 // 为什么单独一个文件：
 //   十二大道有 60 个节点，每个都有名称（金道入门…）和效果说明（金系伤害 +10%）。
@@ -75,7 +75,7 @@ let nodeCache = null;
 
 // 用途：读取大道节点目录。
 // 流程：优先复用缓存，必要时POST arts/nodes并缓存nodes。
-// 调用方式：洞府道法页面可传force强制刷新。
+// 调用方式：功法与悟道页面可传force强制刷新。
 // 返回值：Promise，节点数组。
 export async function loadNodes(force) {
   if (nodeCache && !force) return nodeCache;
@@ -144,7 +144,6 @@ export function spellKindLabel(sp) {
 // 返回值：道法卡片HTML字符串。
 export function renderDaos(state, nodes) {
   const a = state.arts;
-  const p = state.player;
   const byDao = {};
   for (const n of (nodes || [])) (byDao[n.dao] ||= []).push(n);
 
@@ -199,7 +198,7 @@ export function renderDaos(state, nodes) {
 export function renderArtsAside(state) {
   const a = state.arts;
   const m = a.mods;
-  return `<h3>洞府概览</h3>`
+  return `<h3>修行概览</h3>`
     + `<p class="intro">悟道点 ${a.points} · 主修 ${esc(a.focus)}道</p>`
     + `<div class="detail-list" style="border-top:0;padding-top:0">`
     + `<div><label>修炼效率</label><strong>×${m.cult.toFixed(3)}</strong></div>`

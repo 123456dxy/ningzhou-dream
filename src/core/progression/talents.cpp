@@ -8,6 +8,10 @@
 
 namespace nz {
 
+int talentAffinityBonus(const Player& player) {
+    return hasTalent(player, "luck") ? 2 : 0;
+}
+
 // 用途：查询先天道体的修炼速度乘数。
 // 参与流程：基础修炼速度汇总。
 // 使用方式：传角色只读状态。
@@ -84,30 +88,9 @@ void talentBirth(Game& game) {
     game.flags["talentBirth"] = 1;
 }
 
-// 用途：在有效月度条件下让绿瓶催熟一份真实药材。
-// 参与流程：月度天赋结算。
-// 使用方式：传游戏，要求资源、健康和无阻塞状态，同月最多一次。
-// 返回值：无；消耗玩家五灵石，增加药材总量/分类量并记标记日志。
-void talentMonthTick(Game& game) {
-    Player& player = game.player;
-    if (!hasTalent(player, "greenBottle") || game.ended || player.health <= 0 ||
-        player.age >= player.lifespan || game.dungeons.run || player.arts.battle ||
-        game.pending || player.stones < 5 || player.herbs >= std::numeric_limits<int>::max()) return;
-    const int month = game.clock.days / 30;
-    if (month <= 0) return;
-    const auto previous = game.flags.find("greenBottleMonth");
-    if (previous != game.flags.end() && previous->second >= month) return;
-    for (auto& [name, count] : player.arts.herbs) {
-        const auto* herb = findHerbByName(name);
-        if (!herb || count <= 0 || count >= std::numeric_limits<int>::max() ||
-            herb->grade < 1 || herb->grade > ordinaryHerbGradeLimit(player) ||
-            herb->name.find("妖丹") != string::npos) continue;
-        ++count; ++player.herbs; player.stones -= 5;
-        game.flags["greenBottleMonth"] = month;
-        logEvent(game, "self", "神秘绿瓶耗费5灵石，催熟「" + name + "」一份。", true);
-        return;
-    }
-}
+// 用途：保留既有月度天赋接口兼容门面；流程：旧日历调用；返回：无且不改状态。
+// 神秘绿瓶改由灵田日tick按格内储备加速，不再按月复制背包草药、扣主背包灵石或写旧标记。
+void talentMonthTick(Game&) {}
 
 // 用途：为不灭道心每次新大境界奖励悟道点。
 // 参与流程：大境界突破成功后的天赋结算。

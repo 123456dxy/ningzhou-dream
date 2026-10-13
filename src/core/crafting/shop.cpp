@@ -1,9 +1,12 @@
 // 宁州一梦 · C++ 版 — 即时经济动作（实现）
 #include "core/shop.h"
+#include "core/crafting/cave_garden.h"
+#include "core/crafting/craft_prices.h"
 #include "core/crafting/material_supply.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "core/arts.h"
 #include "core/battle.h"
@@ -27,21 +30,6 @@ namespace {
 // 使用方式：传入const Game& g，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
 double market(const Game& g) { return g.world.market; }
-
-// 丹方的材料成本（按药材基础价 price，不是 sourcePrice）
-// 用途：合计丹方药材基础成本。
-// 参与流程：工坊、坊市、藏经阁和洞府操作。
-// 使用方式：传入const data::RecipeDef& r，按本模块入口调用。
-// 返回值：丹方全部药材的基础灵石价值。
-double materialCost(const data::RecipeDef& r) {
-    double sum = 0;
-    for (const auto& [herbName, n] : parseIngredients(r.ingredients)) {
-        const data::HerbDef* h = findHerbByName(herbName);
-        if (!h) continue;
-        sum += (h->price > 0 ? h->price : h->sourcePrice) * n;
-    }
-    return sum;
-}
 
 // 用途：按法器ID查玩家行囊。
 // 参与流程：工坊、坊市、藏经阁和洞府操作。
@@ -96,24 +84,14 @@ SellResult ok(const string& msg, int gain = 0) {
 // 返回值：说明所述数值结果；不额外消耗资源。
 int salePrice(const Game& g, const string& kind, const string& id) {
     if (kind == "potion") {
-        const data::RecipeDef* r = findRecipe(id);
-        if (!r) return 0;
-        const double mats = materialCost(*r);
-        // JS: Math.round(Math.max(r.price, (materials+8+r.grade*6)*1.6) * market)
-        const double base = std::max(static_cast<double>(r->value),
-                                     (mats + 8 + r->grade * 6) * 1.6);
-        return jsRound(base * market(g));
+        const auto Quote = crafting::mfQuotePotionPrice(g, id);
+        return Quote.Valid ? Quote.SellPrice : 0;
     }
     if (kind == "gear") {
-        const Gear* gr = findGear(g, id);
-        if (!gr) return 0;
-        const double base = (gr->craftCost > 0 ? gr->craftCost
-                                               : 60.0 * gr->grade * gr->grade) *
-                                1.45 +
-                            gr->grade * 20.0;
-        return jsRound(base * (gr->inscribed ? 1.12 : 1.0) * market(g) *
-                        (1.0 + renown::sellBonus(g.player.renown)) *
-                        (gr->crafted ? 1.0 + talentMods(g.player).craftedSale : 1.0));
+        const Gear* GearState = findGear(g, id);
+        if (!GearState) return 0;
+        const auto Quote = crafting::mfQuoteGearPrice(g, *GearState);
+        return Quote.Valid ? Quote.SellPrice : 0;
     }
     return 0;
 }
@@ -134,6 +112,8 @@ ActionQuote saleQuote(const Game& g, const string& kind, const string& id) {
     if (a.battle.has_value()) return reject("斗法中无法交易。");
     if (!ecoIsCity(p.location)) return reject("此处没有坊市。请前往五城之一。");
     if (quote.returnStones <= 0) return reject("此物无法出售。");
+    if (static_cast<long long>(p.stones) + quote.returnStones > std::numeric_limits<int>::max())
+        return reject("出售后灵石余额超过支持范围。");
     if (e.marketCash < quote.returnStones)
         return reject("坊市收购资金不足（余 " + std::to_string(e.marketCash) + "），请下月再来。");
     const int limit = renown::sellLimit(p.renown);
@@ -163,10 +143,7 @@ SellResult sell(Game& g, const string& kind, const string& id) {
     Economy& e = g.economy;
     const ActionQuote quote = saleQuote(g, kind, id);
     const string key = kind + ":" + id;
-    // Old sell() touched these maps before ownership checks; keep its exact
-    // persisted behavior, while a quote itself is strictly non-mutating.
-    if (quote.demandChecked) (void)e.sold[key];
-    if (quote.potionChecked) (void)a.potions[id];
+    // 拒绝路径不提前插入需求或库存键；成功提交才更新关联账本。
     if (!quote.enabled) return fail(quote.reason);
     const int price = quote.returnStones;
     string label;
@@ -380,17 +357,35 @@ SellResult caveSupplySet(Game& g, const string& kind, int level) {
 // 使用方式：传入Game& g，按本模块入口调用。
 // 返回值：SellResult结果，包含说明所述状态或计算数据。
 SellResult caveMove(Game& g) {
-    const string busy = caveBusyError(g);
-    if (!busy.empty()) return fail(busy);
-    if (!findLoc(g.player.location)) return fail("所在地无法安置洞府。");
-    if (g.player.cave == g.player.location) return fail("洞府已经在这里了。");
-    const int cost = 40 + (g.player.stage / 3) * 30;
-    if (g.player.stones < cost) return fail("迁府需要 " + std::to_string(cost) + " 灵石。");
-    g.player.stones -= cost;
-    g.player.cave = g.player.location;
-    const string text = "在" + string(findLoc(g.player.location)->name) + "安下「" + caveTierDefs()[clampInt(g.player.caveTier, 0, 2)].name + "」，已购档位保留。";
-    logEvent(g, "self", text, true, "", "灵石 −" + std::to_string(cost));
-    return ok(text, -cost);
+    const auto Quote = mfQuoteCaveMove(g);
+    if (!Quote.enabled) return fail(Quote.reason);
+    Game Candidate = g;
+    Candidate.player.stones -= Quote.costStones;
+    Candidate.player.cave = Candidate.player.location;
+    const string Text = "在" + string(findLoc(Candidate.player.location)->name) + "安下「" + caveTierDefs()[clampInt(Candidate.player.caveTier, 0, 2)].name + "」，已购档位保留。";
+    logEvent(Candidate, "self", Text, true, "", "灵石 −" + std::to_string(Quote.costStones));
+    g = std::move(Candidate);
+    return ok(Text, -Quote.costStones);
+}
+
+// 用途：统一安置/迁府费用与完整预检；流程：只读页面及真实caveMove；返回：报价值，不写状态，种苗/储备未清阻断迁府。
+ActionQuote mfQuoteCaveMove(const Game& State) {
+    constexpr int BaseSettlementCost = 40;
+    constexpr int ExtraCostPerMajorRealm = 30;
+    ActionQuote Quote;
+    Quote.costStones = BaseSettlementCost + clampInt(State.player.stage / 3, 0, 4) * ExtraCostPerMajorRealm;
+    Quote.reason = caveBusyError(State);
+    if (Quote.reason.empty() && State.dungeons.run) Quote.reason = "请先离开秘境再安置洞府。";
+    if (Quote.reason.empty() && !findLoc(State.player.location)) Quote.reason = "所在地无法安置洞府。";
+    if (Quote.reason.empty() && State.player.cave == State.player.location) Quote.reason = "洞府已经在这里了。";
+    if (Quote.reason.empty()) for (const auto& Plot : State.Garden.Plots)
+        if (!Plot.Cohorts.empty() || Plot.ReserveStones > 0) {
+            Quote.reason = "迁府前请先收获或清理全部灵田，并取回格内灵石储备。";
+            break;
+        }
+    if (Quote.reason.empty() && State.player.stones < Quote.costStones)
+        Quote.reason = "迁府需要 " + std::to_string(Quote.costStones) + " 灵石。";
+    Quote.enabled = Quote.reason.empty(); return Quote;
 }
 
 // ============================================================

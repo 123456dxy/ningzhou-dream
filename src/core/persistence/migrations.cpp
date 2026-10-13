@@ -1,5 +1,6 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/crafting/cave_garden.h"
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/economy.h"
@@ -102,6 +103,7 @@ void completeLoadedSave(const Value& root, Game& game, bool detached) {
         ensureSociety(game);
         ensureAdventure(game);
         ensureDungeons(game);
+        if (root["garden"].isNull()) crafting::mfInitializeGarden(game);
     }
 
     // 老版在途斗法没有保存任务来源，将能够确定的上下文迁移回来。

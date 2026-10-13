@@ -1,6 +1,8 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
 #include "core/arts.h"
+#include "core/character_build.h"
+#include "core/crafting/cave_garden.h"
 #include "core/artifact.h"
 #include "core/battle.h"
 #include "core/travel.h"
@@ -31,8 +33,13 @@ bool nonnegativeMap(const map<string, int>& values) {
 } // namespace
 
 std::string saveStateError(const Game& game) {
+    if (const auto Error = crafting::mfGardenStateError(game); !Error.empty()) return Error;
     if (const auto error=tideStateError(game); !error.empty()) return error;
     if (!validPerson(game.player)) return "角色属性、境界或地点无效";
+    if (!game.player.portraitId.empty()) {
+        const auto* portrait = findPlayerPortrait(game.player.portraitId);
+        if (!portrait || game.player.gender != portrait->gender) return "角色立绘无效";
+    }
     if (!game.ended && (game.player.health == 0 || game.player.age >= game.player.lifespan))
         return "死亡角色尚未结算";
     if (!findPlan(game.plan) || (!game.player.sect.empty() && !findSect(game.player.sect)) ||
@@ -82,6 +89,25 @@ std::string saveStateError(const Game& game) {
         if (npc.id.empty() || !ids.insert(npc.id).second || !validPerson(npc) ||
             (!npc.sect.empty() && !findSect(npc.sect)) || !nonnegativeMap(npc.bag)) return "同道数据无效";
         if (const auto error = gearError(npc.gear, npc.equipped); !error.empty()) return error;
+        const auto& pills = npc.pillState;
+        if (pills.poison < 0 || pills.poison > 100 || pills.aptPills < 0 || pills.aptPills > 10 ||
+            pills.hpBonus < 0 || pills.hpBonus > 200 || pills.heart < 0 || pills.heart > 500 ||
+            pills.mind < 0 || pills.mind > 500 || pills.speed < 0 || pills.speed > 500 ||
+            pills.points < 0 || pills.points > 100 || pills.repel < 0 || pills.repel > 2 ||
+            (pills.breakBuff != "" && pills.breakBuff != "stage") ||
+            pills.combatBuff < 0 || pills.combatBuff > 0.1) return "同道服丹属性无效";
+        for (const auto& [id, count] : pills.used)
+            if (!findRecipe(id) || count < 0 || count > 10000) return "同道耐药记录无效";
+        for (const auto& [dao, exp] : pills.daoExp)
+            if (daoIndex(dao) < 0 || exp < 0 || exp > 10000) return "同道丹药悟道经验无效";
+        std::set<string> pillNodes;
+        for (const auto& id : pills.nodes)
+            if (!findNode(id) || !pillNodes.insert(id).second) return "同道丹药悟道节点无效";
+        for (const auto& [key, value] : pills.combatPrep) {
+            const double cap = key == "shield" ? 0.2 : key == "reduction" ? 0.12 :
+                key == "mana" || key == "qi" ? 2.0 : key == "speed" ? 10.0 : key == "attack" ? 0.1 : -1;
+            if (value < 0 || value > cap) return "同道战斗丹准备无效";
+        }
     }
     if (game.npcs.size() > 10000 || game.logs.size() > 10000) return "人口或纪事数据过大";
     if (game.job.has_value()) {

@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
@@ -35,6 +36,7 @@
 #include "core/calendar.h"
 #include "core/model.h"
 #include "core/tianji.h"
+#include "core/resource_points.h"
 
 namespace {
 
@@ -162,6 +164,8 @@ constexpr size_t kMaxSessions = 20000;
 // 用途：--local 启动时关闭创建角色/登录/注册与全部联网模块，
 //       固定使用内置道号，并在没有存档时用默认天赋与属性直接开局。
 bool g_localMode = false;
+// 应用拥有资源点部署配置；启动参数解析结束后只读，不能由角色存档或HTTP请求启用。
+nz::ResourcePoints::Config ResourcePointConfig;
 const std::string kLocalNick = "本地道友";
 const std::string kLocalSid = "local-test-session";
 
@@ -500,6 +504,15 @@ Response handle(const Request& req) {
         o.set("ok", true);
         o.set("local", g_localMode);
         o.set("nickname", g_localMode ? kLocalNick : std::string());
+        const auto ResourcePointCapability = nz::ResourcePoints::mfCapability(ResourcePointConfig);
+        nz::json::Value ResourcePointState(nz::json::Object{});
+        ResourcePointState.set("requested", ResourcePointCapability.Requested);
+        ResourcePointState.set("available", ResourcePointCapability.Available);
+        ResourcePointState.set("mutationsAllowed", ResourcePointCapability.MutationsAllowed);
+        ResourcePointState.set("status", std::string(nz::ResourcePoints::mfStatusId(ResourcePointCapability.Status)));
+        nz::json::Value Features(nz::json::Object{});
+        Features.set("resourcePoints", std::move(ResourcePointState));
+        o.set("features", std::move(Features));
         return jsonResp(200, o);
     }
     if (g_localMode && localDisabledPath(path))
@@ -766,10 +779,7 @@ void shutdownAll() {
 
 } // namespace
 
-int main(int argc, char** argv) {
-#ifdef _WIN32
-    SetConsoleOutputCP(65001);
-#endif
+static int runServer(int argc, const char* const* argv) {
     int port = 8106;
     std::string host = "0.0.0.0";
     std::string webDir = defaultWebDir();
@@ -784,6 +794,7 @@ int main(int argc, char** argv) {
         else if (a == "--feedback" && i + 1 < argc) g_feedbackDir = argv[++i];
         else if (a == "--idle-minutes" && i + 1 < argc) g_idleSeconds = std::max(1, std::atoi(argv[++i])) * 60LL;
         else if (a == "--local") g_localMode = true;
+        else if (a == "--enable-resource-points") ResourcePointConfig.Enabled = true;
         else if (a == "--no-open") openBrowser = false;
         else if (a == "--help" || a == "-h") {
             std::printf(
@@ -796,6 +807,7 @@ int main(int argc, char** argv) {
                 "  --feedback DIR     反馈箱目录（默认 ./feedback）\n"
                 "  --idle-minutes N   玩家多久不操作后保存并释放内存（默认 30）\n"
                 "  --local            本地测试版：仅监听 127.0.0.1，关闭登录与联网模块，内置道号直接开局\n"
+                "  --enable-resource-points  请求启用资源点模块；当前骨架未就绪，仍不开放玩法\n"
                 "  --no-open          启动后不自动打开浏览器\n");
             return 0;
         }
@@ -828,3 +840,48 @@ int main(int argc, char** argv) {
     }
     return nz::http::serve(host, port, webDir, handle, tick, shutdownAll);
 }
+
+#ifdef _WIN32
+// Windows 的窄 argv 使用本机 ANSI 编码，文件 IO 则约定 UTF-8。
+// 只在进程入口转换一次；参数解析、HTTP 与持久化共用同一编码。
+int wmain(int argc, wchar_t** argv) {
+    SetConsoleOutputCP(CP_UTF8);
+    try {
+        std::vector<std::string> arguments;
+        arguments.reserve(argc);
+        for (int i = 0; i < argc; ++i) {
+            const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                argv[i], -1, nullptr, 0, nullptr, nullptr);
+            if (bytes <= 0) {
+                std::fprintf(stderr, "命令行参数无法转换为 UTF-8。\n");
+                return 1;
+            }
+            std::string argument(static_cast<size_t>(bytes), '\0');
+            if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, argv[i], -1,
+                                    argument.data(), bytes, nullptr, nullptr)) {
+                std::fprintf(stderr, "命令行参数无法转换为 UTF-8。\n");
+                return 1;
+            }
+            argument.pop_back(); // 转换结果包含终止符，std::string 不保留该字符。
+            arguments.push_back(std::move(argument));
+        }
+        std::vector<const char*> utf8Argv;
+        utf8Argv.reserve(arguments.size() + 1);
+        for (const auto& argument : arguments) utf8Argv.push_back(argument.c_str());
+        utf8Argv.push_back(nullptr);
+        return runServer(argc, utf8Argv.data());
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "服务启动或运行失败：%s\n", error.what());
+        return 1;
+    }
+}
+#else
+int main(int argc, char** argv) {
+    try {
+        return runServer(argc, argv);
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "服务启动或运行失败：%s\n", error.what());
+        return 1;
+    }
+}
+#endif

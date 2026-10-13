@@ -12,12 +12,19 @@
 <Import Project="ningzhou.props"/>
 <ItemGroup>
 <ClInclude Include="..\data\reference_tables.h"/>
+<None Include="..\docs\ALCHEMY_ECONOMY.md"/>
 <None Include="..\docs\BACKEND_ARCHITECTURE.md"/>
 <None Include="..\docs\BEAST_TIDE.md"/>
+<None Include="..\docs\CAVE_GARDEN.md"/>
+<None Include="..\docs\CODING_STANDARDS.md"/>
 <None Include="..\docs\CPP_API_INDEX.md"/>
+<None Include="..\docs\CRAFT_TIMING.md"/>
 <None Include="..\docs\HTTP_API_REFERENCE.md"/>
+<None Include="..\docs\INITIAL_TALENTS.md"/>
 <None Include="..\docs\LOCAL_FULL_SERVER.md"/>
+<None Include="..\docs\MANUAL_STUDY_AND_NPC_PILLS.md"/>
 <None Include="..\docs\mobile-frontend-v2.md"/>
+<None Include="..\docs\RESOURCE_POINTS.md"/>
 <None Include="..\docs\tianji-rollback-performance.md"/>
 <ClInclude Include="..\src\core\adventure.h"/>
 <ClCompile Include="..\src\core\api.cpp"/>
@@ -28,6 +35,7 @@
 <ClInclude Include="..\src\core\base.h"/>
 <ClInclude Include="..\src\core\battle.h"/>
 <ClInclude Include="..\src\core\calendar.h"/>
+<ClInclude Include="..\src\core\character_build.h"/>
 <ClInclude Include="..\src\core\checkpoint.h"/>
 <ClCompile Include="..\src\core\combat\artifact.cpp"/>
 <ClCompile Include="..\src\core\combat\battle.cpp"/>
@@ -42,6 +50,12 @@
 <None Include="..\src\core\content\README.md"/>
 <ClCompile Include="..\src\core\content\text_table.cpp"/>
 <ClInclude Include="..\src\core\content\text_table.h"/>
+<ClCompile Include="..\src\core\crafting\cave_garden.cpp"/>
+<ClInclude Include="..\src\core\crafting\cave_garden.h"/>
+<ClCompile Include="..\src\core\crafting\craft_prices.cpp"/>
+<ClInclude Include="..\src\core\crafting\craft_prices.h"/>
+<ClCompile Include="..\src\core\crafting\craft_timing.cpp"/>
+<ClInclude Include="..\src\core\crafting\craft_timing.h"/>
 <ClCompile Include="..\src\core\crafting\economy.cpp"/>
 <ClCompile Include="..\src\core\crafting\material_supply.cpp"/>
 <ClInclude Include="..\src\core\crafting\material_supply.h"/>
@@ -55,6 +69,7 @@
 <ClCompile Include="..\src\core\exploration\dungeon.cpp"/>
 <ClCompile Include="..\src\core\exploration\location_services.cpp"/>
 <None Include="..\src\core\exploration\README.md"/>
+<ClCompile Include="..\src\core\exploration\resource_points.cpp"/>
 <ClCompile Include="..\src\core\exploration\travel.cpp"/>
 <ClCompile Include="..\src\core\foundation\base.cpp"/>
 <ClCompile Include="..\src\core\foundation\json.cpp"/>
@@ -65,6 +80,10 @@
 <ClCompile Include="..\src\core\interface\api_exploration.cpp"/>
 <ClCompile Include="..\src\core\interface\arts_views.cpp"/>
 <ClCompile Include="..\src\core\interface\battle_views.cpp"/>
+<ClCompile Include="..\src\core\interface\cave_views.cpp"/>
+<ClInclude Include="..\src\core\interface\cave_views.h"/>
+<ClCompile Include="..\src\core\interface\craft_price_views.cpp"/>
+<ClInclude Include="..\src\core\interface\craft_price_views.h"/>
 <ClCompile Include="..\src\core\interface\economy_views.cpp"/>
 <ClCompile Include="..\src\core\interface\equipment_views.cpp"/>
 <ClCompile Include="..\src\core\interface\player_views.cpp"/>
@@ -89,6 +108,7 @@
 <ClCompile Include="..\src\core\persistence\dungeon_codec.cpp"/>
 <ClCompile Include="..\src\core\persistence\file_io.cpp"/>
 <ClCompile Include="..\src\core\persistence\game_codec.cpp"/>
+<ClCompile Include="..\src\core\persistence\garden_codec.cpp"/>
 <ClInclude Include="..\src\core\persistence\internal.h"/>
 <ClInclude Include="..\src\core\persistence\json_helpers.h"/>
 <ClCompile Include="..\src\core\persistence\migrations.cpp"/>
@@ -103,11 +123,14 @@
 <ClCompile Include="..\src\core\progression\arts.cpp"/>
 <ClCompile Include="..\src\core\progression\cultivate.cpp"/>
 <ClCompile Include="..\src\core\progression\legacy.cpp"/>
+<ClCompile Include="..\src\core\progression\manual_study.cpp"/>
+<ClInclude Include="..\src\core\progression\manual_study.h"/>
 <None Include="..\src\core\progression\README.md"/>
 <ClCompile Include="..\src\core\progression\talents.cpp"/>
 <ClCompile Include="..\src\core\pwhash.cpp"/>
 <ClInclude Include="..\src\core\pwhash.h"/>
 <ClInclude Include="..\src\core\renown.h"/>
+<ClInclude Include="..\src\core\resource_points.h"/>
 <ClInclude Include="..\src\core\reward_receipt.h"/>
 <ClInclude Include="..\src\core\roster.h"/>
 <ClCompile Include="..\src\core\save.cpp"/>
@@ -116,6 +139,7 @@
 <ClInclude Include="..\src\core\shop.h"/>
 <ClInclude Include="..\src\core\sim.h"/>
 <ClCompile Include="..\src\core\simulation\calendar.cpp"/>
+<ClCompile Include="..\src\core\simulation\character_build.cpp"/>
 <ClCompile Include="..\src\core\simulation\checkpoint.cpp"/>
 <ClCompile Include="..\src\core\simulation\play.cpp"/>
 <None Include="..\src\core\simulation\README.md"/>
@@ -127,6 +151,8 @@
 <ClCompile Include="..\src\core\simulation\tide_rules.cpp"/>
 <ClInclude Include="..\src\core\simulation\tide_rules.h"/>
 <ClCompile Include="..\src\core\social\friendship.cpp"/>
+<ClCompile Include="..\src\core\social\npc_consumables.cpp"/>
+<ClInclude Include="..\src\core\social\npc_consumables.h"/>
 <ClCompile Include="..\src\core\social\npc_learning.cpp"/>
 <None Include="..\src\core\social\README.md"/>
 <ClCompile Include="..\src\core\social\renown.cpp"/>

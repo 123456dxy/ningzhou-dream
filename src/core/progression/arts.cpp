@@ -1,5 +1,7 @@
 // 宁州一梦 · C++ 版 — 洞府道法实现（对应 JS 版 arts.mjs）
 #include "core/arts.h"
+#include "core/progression/manual_study.h"
+#include "core/social/npc_consumables.h"
 #include "core/content/game_ids.h"
 #include "core/content/npc_combat_profiles.h"
 #include "core/content/text_table.h"
@@ -555,8 +557,12 @@ const ArtMods& artModsOf(const Arts& a) {
     m.craftedSale = clamp(m.craftedSale, 0.0, 0.5);
     m.escapeSpeed = clamp(m.escapeSpeed, 0.0, 200.0);
     // 丹毒超过 20 会降低修炼效率
-    m.cult *= std::max(0.5, 1.0 - std::max(0, a.poison - 20) / 160.0);
+    m.cult *= artPoisonCultivationMultiplier(a.poison);
     return m;
+}
+
+double artPoisonCultivationMultiplier(int poison) {
+    return std::max(0.5, 1.0 - std::max(0.0, static_cast<double>(poison) - 20.0) / 160.0);
 }
 
 // 用途：汇总境界、额外遁速、功法与天赋速度。
@@ -639,6 +645,7 @@ Arts artNpcLoadout(const Npc& npc) {
     for (const auto& id : spells) addSpell(id);
     for (const auto& id : npc.spells) addSpell(id);
     arts.knownSpells = arts.spells;
+    applyNpcPillState(npc, arts);
     return arts;
 }
 
@@ -1249,8 +1256,7 @@ PillUseInfo artPillUseInfo(const Player& p, const data::RecipeDef& r) {
 // 参与流程：场外服药动作入口。
 // 使用方式：传游戏和丹方 ID，失败前不改任何资源。
 // 返回值：成功为空；失败为原因，成功更新属性、库存、丹毒和日志。
-string artUsePill(Game& g, const string& id) {
-    Player& p = g.player;
+string artApplyPill(Player& p, const string& id) {
     Arts& a = p.arts;
     const auto owned = a.potions.find(id);
     if (owned == a.potions.end() || owned->second <= 0) return "没有这味丹药。";
@@ -1270,8 +1276,17 @@ string artUsePill(Game& g, const string& id) {
     a.potions[id] -= 1;
     a.used[id] += 1;
     a.poison = plan.info.poisonAfter;
-    logEvent(g, "self", "服下" + r->name + "：" + plan.info.baseEffect.text, true, "",
-             "丹毒 +" + std::to_string(plan.info.poison));
+    return "";
+}
+
+string artUsePill(Game& g, const string& id) {
+    const auto* recipe = findRecipe(id);
+    if (!recipe) return "没有这张丹方。";
+    const auto info = artPillUseInfo(g.player, *recipe);
+    const string error = artApplyPill(g.player, id);
+    if (!error.empty()) return error;
+    logEvent(g, "self", "服下" + recipe->name + "：" + info.baseEffect.text, true, "",
+             "丹毒 +" + std::to_string(info.poison));
     return "";
 }
 
@@ -1511,7 +1526,7 @@ string artAnnualError(const Game& g, const string& type, const string& id) {
         if (p.stage < m.stage) return "境界尚不足。";
         auto it = a.manuals.find(m.id);
         if (it != a.manuals.end() && it->second >= 5) return "功法已满五层。";
-        if (p.stones < m.price) return "修习资粮不足。";
+        if (p.stones < manualStudyInfo(p, id).stones) return "修习资粮不足。";
         return "";
     }
     if (type == "meditate") {
@@ -1581,13 +1596,15 @@ void artAnnual(Game& game, const string& type, const string& id) {
     if (type == "learn") {
         ManualEntryView m;
         if (!lookupManual(id, m)) return;
-        player.stones -= m.price;
-        arts.manuals[m.id] = arts.manuals[m.id] + 1;
+        const auto study = manualStudyInfo(player, id);
+        if (study.maxed || !artAnnualError(game, type, id).empty()) return;
+        player.stones -= study.stones;
+        arts.manuals[m.id] = study.targetLevel;
         artGain(player, m.dao, 12);
         logEvent(game, "self",
                  "修习" + m.name + "至第 " + std::to_string(arts.manuals[m.id]) +
                      " 层。",
-                 false, "", "灵石 −" + std::to_string(m.price));
+                 false, "", "灵石 −" + std::to_string(study.stones));
     } else if (type == "meditate") {
         const auto daoId = content::parseDaoId(id);
         if (!daoId) return;

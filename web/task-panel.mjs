@@ -14,7 +14,7 @@ export function renderTaskPanel(state, options, sects, sub = 'city') {
   else if (sub === 'wild') body = `<p class="panel-note">战败会陨落。${state.checkpoint?.enabled ? '意外死亡后可选择回到最近存档，回档会撤回保存之后的进度。' : '请留意双方气血与敌方意图。'}</p><div class="arts-grid">`
     + (state.wildTasks || []).map(item => `<button class="card" data-action="wild" data-id="${esc(item.id)}" ${item.enabled === false ? 'disabled' : ''}><strong>${esc(item.name)}</strong><p>${esc(item.desc)}</p><div class="card-foot">${item.days} 天 · 3 灵石 · 赏金 ${item.fee}${item.reason ? ` · ${esc(item.reason)}` : ''}</div></button>`).join('') + `</div>`;
   else if (sub === 'story') body = `<div class="arts-grid">` + (state.stories || []).map(item => `<button class="card ${item.available ? '' : 'dead'}" data-action="story" data-id="${esc(item.id)}" ${item.available || item.done ? '' : 'disabled'}><strong>${esc(item.name)}</strong><p>${esc(item.desc)}</p><div class="card-foot">${esc(item.done ? '已落笔 · 点击阅读' : item.available ? `${item.days} 天 · 点击阅读` : item.reason)}</div></button>`).join('') + `</div>`;
-  else body = (options || []).filter(item => !item.sect && item.id !== 'sect' && !item.id?.startsWith('sect-')).map(actionRow).join('') || '<div class="empty">正在读取任务；城中可接更多差事。</div>';
+  else body = (options || []).filter(item => item.type !== 'arena' && !item.sect && item.id !== 'sect' && !item.id?.startsWith('sect-')).map(actionRow).join('') || '<div class="empty">正在读取任务；城中可接更多差事。</div>';
   return heading('任务', '按所在地点与身份接取任务，或查看悬赏和支线。', state.player.locationName) + tabs
     + panel(categories.find(([id]) => id === sub)?.[1] || '城中任务', '', `<div class="task-content">${body}</div>`);
 }

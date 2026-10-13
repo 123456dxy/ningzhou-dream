@@ -4,6 +4,7 @@
 //   ctx.worldYear / ctx.hasDan / ctx.finish / ctx.refresh / ctx.complete / ctx.choice
 // C++ 里改成在 sim.h 中声明的自由函数，calendar 直接调用。
 #include "core/calendar.h"
+#include "core/crafting/cave_garden.h"
 
 #include "core/sim.h"
 #include "core/tide.h"
@@ -93,6 +94,7 @@ static void advanceWorldDay(Game& game, const string& endingCause = {}) {
         game.year = year;
         game.player.age = game.clock.ageBase + year;
     }
+    crafting::mfGardenDayTick(game);
     tide::dayTick(game);
     if (game.clock.days % 30 == 0) tide::monthTick(game);
     if (crossedYear) {

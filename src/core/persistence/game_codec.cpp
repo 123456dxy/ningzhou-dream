@@ -19,6 +19,7 @@ Value gameToJson(const Game& game) {
     root.set("plan", str(game.plan));
     root.set("flags", mapToJson(game.flags));
     root.set("dungeons", dungeonWorldToJson(game.dungeons));
+    root.set("garden", mfGardenToJson(game.Garden));
     {
         Value checkpoint(json::Object{});
         checkpoint.set("enabled", Value(game.checkpoint.enabled)); checkpoint.set("days", num(game.checkpoint.days));
@@ -259,6 +260,7 @@ Game gameFromJson(const Value& root) {
     game.plan = root["plan"].asString("cultivate");
     game.flags = jsonToMap<int>(root["flags"]);
     dungeonWorldFromJson(root["dungeons"], game.dungeons);
+    mfGardenFromJson(root["garden"], game.Garden);
     if (root["checkpoint"].isObject()) {
         const auto& checkpoint = root["checkpoint"];
         game.checkpoint.enabled = checkpoint["enabled"].asBool(); game.checkpoint.days = checkpoint["days"].asInt();

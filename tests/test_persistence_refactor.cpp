@@ -173,7 +173,7 @@ void runPersistenceRefactorTests() {
     check(listSaveSlots()[3].exists && listSaveSlots()[3].automatic, "账号 A 自动档摘要可读取");
     setSaveDirOverride(previousDirectory);
     std::error_code ignored;
-    std::filesystem::remove(firstPath, ignored);
+    std::filesystem::remove(std::filesystem::u8path(firstPath), ignored);
     std::filesystem::remove(directory / "account-a", ignored);
     std::filesystem::remove(directory / "account-b", ignored);
     std::filesystem::remove(directory, ignored);

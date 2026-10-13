@@ -1,5 +1,8 @@
 param([Parameter(Mandatory = $true)][string]$Path)
 $ErrorActionPreference = 'Stop'
+# Match CMake's explicit UTF-8 decoder; even an 8.3 path can retain CJK names.
+# Emit UTF-8 without a BOM so the first character remains part of the drive path.
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 # Existing Windows fixtures pass native paths across a UTF-8 API boundary.
 Add-Type -TypeDefinition @'
 using System;

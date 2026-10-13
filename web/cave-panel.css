@@ -1,0 +1,371 @@
+.cave-page {
+  --cave-tint: #edf1e6;
+  --cave-soil: #e9dfcd;
+  --cave-border: #d7decd;
+  --cave-shadow: #263e360b;
+}
+
+.cave-page .cave-residence {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 26px;
+  margin-bottom: 20px;
+  background: linear-gradient(110deg, var(--cave-tint), var(--surface));
+  border: 1px solid var(--cave-border);
+  border-left: 3px solid var(--gold);
+  border-radius: 8px;
+}
+
+.cave-page .cave-seal {
+  width: 54px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  color: var(--green);
+  font: 34px var(--serif);
+  border: 1px solid var(--gold);
+  outline: 1px solid #aa865055;
+  outline-offset: -5px;
+  border-radius: 3px;
+}
+
+.cave-page .cave-residence h3 {
+  margin: 4px 0 8px;
+  font: 25px var(--serif);
+  letter-spacing: 2px;
+  color: var(--ink);
+}
+
+.cave-page .cave-eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--gold);
+}
+
+.cave-page .cave-residence p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.cave-page .cave-entry-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.cave-page .cave-entry-actions button {
+  min-width: 138px;
+  white-space: normal;
+}
+
+.cave-page .cave-action-cost {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.cave-page .cave-entry-actions .cave-action-cost {
+  text-align: right;
+  max-width: 260px;
+}
+
+.cave-page .cave-main-column {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.cave-page .cave-section-body {
+  padding: 20px 24px 24px;
+}
+
+.cave-page .cave-section-intro {
+  margin: 0 0 17px;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+
+.cave-page .cave-access-note {
+  margin: 0 0 18px;
+  padding: 11px 14px;
+  border: 1px solid #d9cdaa;
+  border-radius: 5px;
+  background: #f6f0df;
+  color: #876939;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.cave-page .cave-garden-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.cave-page .cave-garden-summary strong {
+  margin-left: 5px;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.cave-page .cave-plot-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cave-page .cave-plot {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--cave-border);
+  border-radius: 7px;
+  background: linear-gradient(135deg, #fcfcf6, #f1f3e9);
+  box-shadow: 0 2px 7px var(--cave-shadow);
+}
+
+.cave-page .cave-plot.is-empty {
+  border-style: dashed;
+  background: #fbfaf5;
+}
+
+.cave-page .cave-plot.is-ready {
+  border-color: #83946e;
+  background: linear-gradient(135deg, #f3f6e6, #e8eed8);
+}
+
+.cave-page .cave-plot-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.cave-page .cave-plot-head h4 {
+  margin: 0;
+  font: 19px var(--serif);
+  color: var(--green);
+}
+
+.cave-page .cave-plot-head .tag {
+  white-space: normal;
+}
+
+.cave-page .cave-plot p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+.cave-page .cave-plant-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.cave-page .cave-plant-controls label,
+.cave-page .cave-training-choice {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cave-page .cave-plant-controls select,
+.cave-page .cave-training-choice select {
+  width: 100%;
+  min-width: 0;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--cave-border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.cave-page .cave-plant-controls button {
+  flex-shrink: 0;
+  min-width: 96px;
+}
+
+.cave-page .cave-plant-quantity {
+  flex: 0 0 76px;
+}
+
+.cave-page .cave-plant-quantity input,
+.cave-page .cave-reserve-controls input {
+  width: 100%;
+  min-width: 0;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid var(--cave-border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cave-page .cave-reserve {
+  margin-top: 17px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cave-border);
+}
+
+.cave-page .cave-reserve-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.cave-page .cave-reserve-head strong {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.cave-page .cave-reserve-head span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cave-page .cave-reserve-controls {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cave-page .cave-reserve-controls label {
+  flex: 1;
+  min-width: 100px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.cave-page .cave-reserve-controls button {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  font-size: 11px;
+}
+
+.cave-page .cave-batch-details {
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+.cave-page .cave-batch-details summary {
+  cursor: pointer;
+  color: var(--green);
+}
+
+.cave-page .cave-batch-details ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.cave-page .cave-plot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.cave-page .cave-plot-actions .cave-action-cost {
+  flex-basis: 100%;
+}
+
+.cave-page .cave-growth-line {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  color: var(--green);
+  font-size: 12px;
+}
+
+.cave-page .cave-growth-line strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.cave-page .cave-plot button:disabled,
+.cave-page .cave-training-controls button:disabled {
+  opacity: .65;
+  cursor: not-allowed;
+}
+
+.cave-page .cave-training-controls {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cave-page .cave-training-quote {
+  padding: 14px 16px;
+  margin-top: 16px;
+  border-left: 2px solid var(--gold);
+  background: #f6f1e5;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.cave-page .cave-training-quote p {
+  margin: 5px 0;
+}
+
+.cave-page .cave-training-note {
+  margin: 14px 0 0;
+  font-size: 11px;
+  line-height: 1.85;
+  color: var(--muted);
+}
+
+.cave-page button:focus-visible,
+.cave-page select:focus-visible,
+.cave-page input:focus-visible,
+.cave-page summary:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1120px) {
+  .cave-page .cave-section-body { padding: 18px; }
+  .cave-page .cave-residence { gap: 15px; padding: 20px; }
+}
+
+@media (max-width: 940px) {
+  .cave-page .cave-plot-list { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 690px) {
+  .cave-page .cave-residence { grid-template-columns: 42px minmax(0, 1fr); gap: 12px; padding: 16px; }
+  .cave-page .cave-seal { width: 40px; height: 49px; font-size: 27px; }
+  .cave-page .cave-residence h3 { font-size: 21px; }
+  .cave-page .cave-entry-actions { grid-column: 1 / -1; align-items: stretch; }
+  .cave-page .cave-entry-actions .cave-action-cost { text-align: left; max-width: none; }
+  .cave-page .cave-plant-controls { align-items: stretch; flex-direction: column; }
+  .cave-page .cave-plot { padding: 14px; }
+  .cave-page .cave-training-choice { flex-basis: 100%; }
+  .cave-page .cave-training-controls button { width: 100%; }
+}

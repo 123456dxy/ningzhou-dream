@@ -56,6 +56,15 @@ int main() {
     nztest::runTideIntegrationTests();
     nztest::runTideApiTests();
 
+    nztest::runCharacterBuildTests();
+    nztest::runAlchemyEconomyTests();
+    nztest::runStudyNpcTests();
+    nztest::mfRunCraftPriceTests();
+    nztest::mfRunCraftTimingTests();
+    nztest::mfRunResourcePointTests();
+    nztest::mfRunCaveGardenTests();
+    nztest::mfRunCaveApiTests();
+
     const int f = nztest::failures();
     std::printf("\n===== 结果: %s（%d 项失败）=====\n",
                 f == 0 ? "全部通过" : "有失败", f);
