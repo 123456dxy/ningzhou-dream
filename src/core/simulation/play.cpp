@@ -69,6 +69,21 @@ int potionBuyPrice(const Game& g, const data::RecipeDef& recipe) {
 
 } // namespace
 
+// 用途：复用既有买价公式；流程：普通坊市、兽潮报价与成交；用法：传药材/器材稳定 ID；返回：正常单价，未知为零。
+int normalMaterialBuyPrice(const Game& g, const string& kind, const string& id) {
+    if (kind == "herb") {
+        const auto* herb = findHerbById(id);
+        if (!herb) return 0;
+        const int base = herb->sourcePrice > 0 ? herb->sourcePrice : 20 + herb->grade * 15;
+        return buyPrice(g, herb->sourceLocation == g.player.location ? jsRound(base * 0.8) : base);
+    }
+    if (kind == "material") {
+        for (const auto& material : data::MaterialDef_TABLE())
+            if (material.id == id) return buyPrice(g, material.price);
+    }
+    return 0;
+}
+
 // ============================================================
 // 坊市
 // ============================================================
@@ -109,8 +124,7 @@ vector<MarketItem> marketList(const Game& g) {
         m.desc = std::to_string(h.grade) + "品药材" + (h.main.empty() ? "" : (" · 主" + h.main));
         // 本地药材打折
         const int base = h.sourcePrice > 0 ? h.sourcePrice : 20 + h.grade * 15;
-        const bool local = (h.sourceLocation == g.player.location);
-        m.price = buyPrice(g, local ? jsRound(base * 0.8) : base);
+        m.price = normalMaterialBuyPrice(g, "herb", h.id);
         m.sellPrice = sellPriceOf(g, base);
         auto it = a.herbs.find(h.name);
         m.owned = (it == a.herbs.end()) ? 0 : it->second;
@@ -125,7 +139,7 @@ vector<MarketItem> marketList(const Game& g) {
         m.name = material.name;
         m.dao = material.element;
         m.desc = std::to_string(material.grade) + "阶材料 · " + material.element + " · " + material.polarity;
-        m.price = buyPrice(g, material.price);
+        m.price = normalMaterialBuyPrice(g, "material", material.id);
         m.sellPrice = sellPriceOf(g, material.price);
         const auto owned = a.materials.find(material.id);
         m.owned = owned == a.materials.end() ? 0 : owned->second;
@@ -204,9 +218,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (!h) return "坊市里没有这味药材。";
         const string sourceError = ordinaryHerbError(p, h->grade);
         if (!sourceError.empty()) return sourceError;
-        const int base = h->sourcePrice > 0 ? h->sourcePrice : 20 + h->grade * 15;
-        const bool local = (h->sourceLocation == p.location);
-        const int unit = buyPrice(g, local ? jsRound(base * 0.8) : base);
+        const int unit = normalMaterialBuyPrice(g, "herb", h->id);
         const int total = unit * count;
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) +
@@ -231,7 +243,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (!material) return "坊市里没有这份炼器材料。";
         const string sourceError = ordinaryMaterialError(p, material->grade);
         if (!sourceError.empty()) return sourceError;
-        const int unit = buyPrice(g, material->price);
+        const int unit = normalMaterialBuyPrice(g, "material", material->id);
         const int total = unit * count;
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) + "，你只有 " + std::to_string(p.stones) + "。";

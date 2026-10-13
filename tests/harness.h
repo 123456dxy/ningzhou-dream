@@ -93,5 +93,8 @@ void runCombatFixTests();
 void runPlayerFixTests();
 void runCraftingFixTests();
 void runCatalogDisplayTests();
+void runTideRuleTests();
+void runTideIntegrationTests();
+void runTideApiTests();
 
 } // namespace nztest

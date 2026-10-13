@@ -1,0 +1,410 @@
+{
+  "checks": 256,
+  "count": 40,
+  "uniquePaths": 40,
+  "uniqueHashes": 40,
+  "totalBytes": 2255806,
+  "maxBytes": 73886,
+  "assets": [
+    {
+      "id": "tuna",
+      "name": "吐纳功",
+      "dao": "气",
+      "path": "assets/manuals/tuna-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 44748,
+      "sha256": "6ce22138351df8b60ec3076f497ba8c3944e9088a99c260748231ff36d5427da"
+    },
+    {
+      "id": "bull",
+      "name": "蛮牛护体功",
+      "dao": "体",
+      "path": "assets/manuals/bull-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 63050,
+      "sha256": "c7d7610d1a714cfad365a3a72a76319864227847527df1d9fc6d50927163f4ff"
+    },
+    {
+      "id": "wood",
+      "name": "青木诀",
+      "dao": "木",
+      "path": "assets/manuals/wood-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 59966,
+      "sha256": "d1f7a1ac1835fab0b259772ab81f64e5c5e138ded772e28a3729b86c60bc0dea"
+    },
+    {
+      "id": "sword",
+      "name": "剑典·人道篇",
+      "dao": "剑",
+      "path": "assets/manuals/sword-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 41620,
+      "sha256": "e4cc666b84fcff5556ebc996dc8fc8f1fc47c1361494484a5a0bf77e095c9c01"
+    },
+    {
+      "id": "water",
+      "name": "星河真法",
+      "dao": "水",
+      "path": "assets/manuals/water-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 58830,
+      "sha256": "91d579f7f3d521ce0285c96ba41114f4249303fc81c864dab5dbd80cd29e39fe"
+    },
+    {
+      "id": "fire",
+      "name": "焚心诀",
+      "dao": "火",
+      "path": "assets/manuals/fire-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 54730,
+      "sha256": "00ed31a57d6317a4caf3e556dc6a989a5afc145eb02fe5951803ae0c3e48553b"
+    },
+    {
+      "id": "earth",
+      "name": "厚土诀",
+      "dao": "土",
+      "path": "assets/manuals/earth-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 59418,
+      "sha256": "a2257741786668425501478e89ac49757604b82f732d4626fc18eb53de070379"
+    },
+    {
+      "id": "gold",
+      "name": "金虹诀",
+      "dao": "金",
+      "path": "assets/manuals/gold-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 54610,
+      "sha256": "be1fb867213ce4176dcf0824c364de7de247c2947062688f9e678a19365b4bd9"
+    },
+    {
+      "id": "longlife",
+      "name": "长生诀",
+      "dao": "木",
+      "path": "assets/manuals/longlife-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 68776,
+      "sha256": "873396fd51a87e1529292d3f6da209c49e6bf67fccb0857d3ffdc1ce80abbc81"
+    },
+    {
+      "id": "zhou",
+      "name": "大周天吐纳",
+      "dao": "气",
+      "path": "assets/manuals/zhou-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 52194,
+      "sha256": "74cc4e1e2fff95c4b02d322a7963505aec330f09c404e45ec022c492260a0e7a"
+    },
+    {
+      "id": "mind",
+      "name": "养魂诀",
+      "dao": "神",
+      "path": "assets/manuals/mind-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 54636,
+      "sha256": "a198c89796e23d7aa065de21d7f2c87e76d9029c510ac4246c9728ca6fb5b94d"
+    },
+    {
+      "id": "array",
+      "name": "两仪阵经",
+      "dao": "阵",
+      "path": "assets/manuals/array-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 55818,
+      "sha256": "90fd9530dff9cfbb2bff1161e7594d8936b0ddb596831418252fea34d338d90d"
+    },
+    {
+      "id": "pill",
+      "name": "丹火诀",
+      "dao": "丹",
+      "path": "assets/manuals/pill-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 57516,
+      "sha256": "ed93bea3a03e465584897f3f40d6a67a164b4715f029905190e6cf95327490f9"
+    },
+    {
+      "id": "forge",
+      "name": "百炼真解",
+      "dao": "器",
+      "path": "assets/manuals/forge-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 58904,
+      "sha256": "032464688d4da44d9c07c4104cef7179006c027d400375effcab07a1e573e3e0"
+    },
+    {
+      "id": "wheel",
+      "name": "重元转轮诀",
+      "dao": "气",
+      "path": "assets/manuals/wheel-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 55994,
+      "sha256": "3332fd8546631e04bdbd793e32c8634ae936fd7ba421cfad80302aad6b2142e5"
+    },
+    {
+      "id": "heavy",
+      "name": "重剑诀",
+      "dao": "金",
+      "path": "assets/manuals/heavy-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 61792,
+      "sha256": "0c0933b25bdf9705d5226e6d06d2f0467cac795972f585c085150e852e884cd2"
+    },
+    {
+      "id": "hidden",
+      "name": "藏剑诀",
+      "dao": "剑",
+      "path": "assets/manuals/hidden-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 44824,
+      "sha256": "2c9ac8e88515f3e327815c60d75d1da253287e29015598c1354d62c3615b6e8b"
+    },
+    {
+      "id": "bladecare",
+      "name": "养刀术",
+      "dao": "金",
+      "path": "assets/manuals/bladecare-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 55824,
+      "sha256": "e778ab0265c1939d3db5336d76e980fc0a122ca32d1a9b79d07e2c14767d0d25"
+    },
+    {
+      "id": "rainform",
+      "name": "化雨诀",
+      "dao": "水",
+      "path": "assets/manuals/rainform-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 60178,
+      "sha256": "a66ee77816121fa4f13ee478619a2380abb05e7bc7cfbcdbc7dfd7757638076d"
+    },
+    {
+      "id": "wave",
+      "name": "浪击诀",
+      "dao": "水",
+      "path": "assets/manuals/wave-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 73886,
+      "sha256": "af235a5cb2a0b1c44ef0c53d2bcda60649d478777ee2ef49af003014e2e9a764"
+    },
+    {
+      "id": "ocean",
+      "name": "沧海诀",
+      "dao": "水",
+      "path": "assets/manuals/ocean-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 57658,
+      "sha256": "315d477564b07a953675edd44be536d242eb82e5b6fbdefd9c56700d4252661e"
+    },
+    {
+      "id": "turtle",
+      "name": "龟息术",
+      "dao": "木",
+      "path": "assets/manuals/turtle-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 59252,
+      "sha256": "088cc27dad80985a30e5a40167ca7198daae0bafeb1f26e1da7895662bb85ce6"
+    },
+    {
+      "id": "venom",
+      "name": "鸩羽诀",
+      "dao": "木",
+      "path": "assets/manuals/venom-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 51632,
+      "sha256": "39a76863450520adfcf59cc7fecf86999c4eb0e263105c1cf24200b28cd1a1be"
+    },
+    {
+      "id": "flame",
+      "name": "烈焰诀",
+      "dao": "火",
+      "path": "assets/manuals/flame-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 55846,
+      "sha256": "7ddd0e5e3bcf6857806b92d61845288a80d0ed2e44271db1c7ba3c2708ab4030"
+    },
+    {
+      "id": "cloud",
+      "name": "凌云诀",
+      "dao": "气",
+      "path": "assets/manuals/cloud-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 45986,
+      "sha256": "1eaf1a57b73402790964bcf8e61e48b1756fa73908bd0aae9736298b20c5c4d6"
+    },
+    {
+      "id": "kindle",
+      "name": "引火诀",
+      "dao": "火",
+      "path": "assets/manuals/kindle-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 48138,
+      "sha256": "2736e087d7fabcad0079038ce7a3368558fa22a1955c0c1fa2fceec8411f358d"
+    },
+    {
+      "id": "playfire",
+      "name": "弄焰诀",
+      "dao": "火",
+      "path": "assets/manuals/playfire-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 49190,
+      "sha256": "9ef845fffebe0d2a847a6f6da396f83ef401afc6ffc22006f40a9ec345e0285f"
+    },
+    {
+      "id": "mountain",
+      "name": "撼山诀",
+      "dao": "土",
+      "path": "assets/manuals/mountain-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 67230,
+      "sha256": "cf84764ab865e8ba2bf1fa6347f0fb4519be59e4673ab1122ef4abd6cc2f0d54"
+    },
+    {
+      "id": "fetal",
+      "name": "胎息经",
+      "dao": "体",
+      "path": "assets/manuals/fetal-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 53620,
+      "sha256": "000a7bc32e3048c059a1a28bfe41e5098a03b654f91b5d7c0f435470692a41f3"
+    },
+    {
+      "id": "human",
+      "name": "剑典·人剑篇",
+      "dao": "剑",
+      "path": "assets/manuals/human-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 53796,
+      "sha256": "fbd807a163da678e209379612a3f17d6599dc5347478b414a1f83e5bc0709943"
+    },
+    {
+      "id": "swordcraft",
+      "name": "剑术要诀",
+      "dao": "剑",
+      "path": "assets/manuals/swordcraft-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 41952,
+      "sha256": "dd17fe0867b8f04dbf9eb1fb21636357e78ce7d942730b9e40ed7fcfad8764c2"
+    },
+    {
+      "id": "soulfire",
+      "name": "燃魂诀",
+      "dao": "神",
+      "path": "assets/manuals/soulfire-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 55616,
+      "sha256": "c6642061f9ce31ef6355d88b22451edf2c89bb223e41cfb02d2518a21cfd800d"
+    },
+    {
+      "id": "visual",
+      "name": "五内观想法",
+      "dao": "神",
+      "path": "assets/manuals/visual-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 61576,
+      "sha256": "cd930face0a3973d861af7dfac23346e12ba26043a2ac2a5680f0625a8dc1b75"
+    },
+    {
+      "id": "steal",
+      "name": "夺灵诀",
+      "dao": "气",
+      "path": "assets/manuals/steal-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 44072,
+      "sha256": "9f25422dffc385d4b62b07ffe9ca6b4d00d6abd27d6d27b10c67bbd07fb06d86"
+    },
+    {
+      "id": "jadecloud",
+      "name": "玉云功",
+      "dao": "土",
+      "path": "assets/manuals/jadecloud-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 54786,
+      "sha256": "b050a7f09552c50409fd7f8175c2a0f3d8f1515555a902688f6cdfdeb56eb733"
+    },
+    {
+      "id": "sunwheel",
+      "name": "离火归元经",
+      "dao": "火",
+      "path": "assets/manuals/sunwheel-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 58586,
+      "sha256": "c61d8ac163e57728c3b8202fb73b3ed97e799ec1a1038e4116de86642c166052"
+    },
+    {
+      "id": "deepwater",
+      "name": "沧溟水剑经",
+      "dao": "水",
+      "path": "assets/manuals/deepwater-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 71640,
+      "sha256": "f4cb6ee211780d799380d63f1d6dc55ced7c40e3be28a44c4747e66481eff08c"
+    },
+    {
+      "id": "evergreen",
+      "name": "万木同春经",
+      "dao": "木",
+      "path": "assets/manuals/evergreen-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 65966,
+      "sha256": "4009e489d7812b9f3b77e575cff82152c1b5ebd437e972ef109b6dd26f876206"
+    },
+    {
+      "id": "gravity",
+      "name": "玄山镇岳经",
+      "dao": "土",
+      "path": "assets/manuals/gravity-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 62434,
+      "sha256": "5c27dbdb8870d25d17e83802fddb00a129c90d8e776677e4bcb9bd53eb0863b1"
+    },
+    {
+      "id": "goldenrain",
+      "name": "金虹剑阵经",
+      "dao": "金",
+      "path": "assets/manuals/goldenrain-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 59516,
+      "sha256": "07406f49066f3c8b84080e65ad26d58a3fb49ab2fcde102a4d346b1c657e9050"
+    }
+  ]
+}

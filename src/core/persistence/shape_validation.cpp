@@ -99,6 +99,7 @@ bool dungeonShapesValid(const Value& world, bool modern) {
 } // namespace
 
 bool saveShapesValid(const Value& root) {
+    if (!tideShapeValid(root["tide"])) return false;
     using json::Type;
     if (!saveObjectFieldTypes(root, {{"rng", Type::Number}, {"seed", Type::Number},
             {"year", Type::Number}, {"version", Type::Number}, {"ended", Type::Bool},
@@ -130,11 +131,14 @@ bool saveShapesValid(const Value& root) {
             {"discussCount", Type::Number}, {"travelMonth", Type::Number}, {"sparMonth", Type::Number},
             {"learnMonth", Type::Number}, {"learnedThisMonth", Type::Number}})) return false;
     }
+    for (const auto& npc : root["npcs"].asArray())
+        if (!npc.isObject() || !saveObjectFieldTypes(npc, {{"combatProfileId",Type::String}})) return false;
     const Value& battle = playerObject["arts"]["battle"];
     if (root["job"].isObject() && !saveObjectFieldTypes(root["job"], {
             {"origin", Type::String}, {"travelMode", Type::String}, {"craftOutput", Type::Number},
             {"travelChecks", Type::Number}, {"travelAmbushes", Type::Number}})) return false;
     if (battle.isObject() && !saveObjectFieldTypes(battle, {
+            {"tideEventId", Type::String}, {"tideBattlefield", Type::Number}, {"tideDaysCharged", Type::Number},
             {"deck", Type::Array}, {"hand", Type::Array}, {"draw", Type::Array},
             {"discard", Type::Array}, {"exhausted", Type::Array},
             {"cooldowns", Type::Object}, {"enemyCd", Type::Object}, {"enemyCards", Type::Object},

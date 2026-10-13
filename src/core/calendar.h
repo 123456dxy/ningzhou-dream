@@ -46,6 +46,9 @@ int calendarTake(Game& g, const string& key, double amount);
 // 使用方式：传入const Player& player，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
 double calendarDetoxPerYear(const Player& player);
+// 用途：兽潮实际完成一回合后推进世界一天；共用月年、化毒和寿尽逻辑，不执行日常计划或虚构工作。
+// 使用：结束访问Battle引用后调用；无返回值，可能因寿尽结束人生。
+void calendarBattleDay(Game& game, const string& endingCause = {});
 
 // 执行在途工作，逐天推进。
 // 返回本次实际推进的天数；结束条件与 JS 版一致。

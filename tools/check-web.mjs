@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import * as tianji from '../web/tianji.mjs';
-import { renderDaos, renderSpellPicker, renderArtBuilds } from '../web/arts.mjs';
+import { renderDaos, renderSpellPicker, renderArtBuilds, renderManualIllustration } from '../web/arts.mjs';
+import { renderTidePanel, shouldRenderTide, renderTideMarket, renderTideBattleNotice } from '../web/tide-panel.mjs';
 import { renderFriendPanel, renderBondActions, renderNpcLearning, renderNpcLoadout } from '../web/friends.mjs';
 import { bindRoster } from '../web/roster.mjs';
 import { renderAtlas, selectedTravelMode, travelFeedback, isTravelJob } from '../web/map.mjs';
@@ -232,6 +233,7 @@ const document = { querySelector: element, getElementById(id) { return element('
 const requests = [];
 const context = { ...tianji, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
   renderSectMentors, renderSectTasks, brewRequirements, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
+  renderManualIllustration, renderTidePanel, shouldRenderTide, renderTideMarket, renderTideBattleNotice,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
   fetch: async (path, options) => { requests.push({ path, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; } };

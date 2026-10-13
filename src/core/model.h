@@ -309,6 +309,9 @@ struct Battle {
     string npcId;                  // 对手 NPC id，可能为空
     string quest;                  // 关联机缘 id
     string kind = "spar";          // spar / hunt / wild / rob / kill ...
+    string tideEventId;             // 兽潮场次标识，避免把旧战果计入下一场兽潮
+    int tideBattlefield = -1;        // 0/1/2/3 对应炼气/筑基/金丹/元婴战场
+    int tideDaysCharged = 0;         // 本场已计入日历的回合天数
     bool lethal = false;           // 是否生死斗
     int turn = 0;
     int hp = 1;
@@ -543,6 +546,7 @@ struct Npc : Person {
     // 「力大砖飞」那种纯平A留给妖兽。
     string dao = "剑";              // 主修大道（剑/火/水/木/金/土/神/体/气/阵/丹/器）
     vector<string> spells;          // 会用的神通 id
+    string combatProfileId;         // 可选稳定构筑 ID；特殊修士的实际战斗与兽潮积分共用
     bool beast = false;             // 是否妖兽（妖兽走「力大砖飞」那一套）
 };
 
@@ -735,6 +739,15 @@ struct Ending {
 // 兽潮：全图起效的大灾。妖潮自险地涌出，波及所有地点，
 // 低境界修士首当其冲 —— NPC 会真的死。
 // 对玩家是成长动力：迎战有厚赏，躲着则错过机缘。
+struct TideParticipant {
+    string actorId, name, sect, combatProfileId;
+    int entryStage = 0, score = 0, rank = 0;
+    bool elite = false;
+};
+struct TideMarketStock {
+    string kind, id;
+    int stock = 0;
+};
 struct BeastTide {
     bool active = false;
     int startYear = -1;
@@ -745,6 +758,14 @@ struct BeastTide {
     int npcDeaths = 0;        // 本次兽潮死了多少修士
     vector<string> fallen;    // 陨落者的名字（给玩家看）
     bool warned = false;      // 是否已播报「妖潮将起」
+    int rulesVersion = 0;     // 0 表示旧版月度兽潮；迁移时只初始化一次
+    string eventId;
+    int startDay = -1, endDay = -1, durationDays = 60, lastProcessedDay = -1;
+    int playerScore = 0, playerEntryStage = 0, playerRank = 0;
+    bool playerJoined = false, settled = false, rewardPaid = false;
+    int rewardStones = 0, totalScore = 0, marketExpiresDay = -1;
+    vector<TideParticipant> participants;
+    vector<TideMarketStock> marketStock;
 };
 
 struct DungeonReward {

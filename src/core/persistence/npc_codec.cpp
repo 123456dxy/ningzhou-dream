@@ -52,6 +52,7 @@ Value npcToJson(const Npc& npc) {
       npcObject.set("pillsUsed", Value(std::move(arr))); }
     // 功法与流派
     npcObject.set("dao", str(npc.dao));
+    npcObject.set("combatProfileId", str(npc.combatProfileId));
     npcObject.set("beast", Value(npc.beast));
     {
         json::Array sp;
@@ -96,6 +97,7 @@ Npc npcFromJson(const Value& npcObject) {
     }
     npc.equipped = jsonToStrMap(npcObject["equipped"]);
     npc.pillsUsed = jsonToStringVec(npcObject["pillsUsed"]);
+    npc.combatProfileId = npcObject["combatProfileId"].asString();
     npc.dao = npcObject["dao"].asString();
     npc.beast = npcObject["beast"].asBool();
     npc.spells = jsonToStringVec(npcObject["spells"]);

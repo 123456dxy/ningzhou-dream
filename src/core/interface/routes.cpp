@@ -82,6 +82,7 @@ constexpr RouteInfo routes[] = {
     {RouteId::Supply, "/api/supply", RouteEffect::Mutation, false, false, false, false},
     {RouteId::Task, "/api/task", RouteEffect::Mutation, false, false, false, false},
     {RouteId::Tide, "/api/tide", RouteEffect::ReadOnly, false, false, false, false},
+    {RouteId::TideMarketBuy, "/api/tide/market/buy", RouteEffect::Mutation, false, false, false, false},
     {RouteId::TideFight, "/api/tide/fight", RouteEffect::Mutation, false, false, false, false},
     {RouteId::TideHunker, "/api/tide/hunker", RouteEffect::Mutation, false, false, false, false},
     {RouteId::TradeStock, "/api/trade-stock", RouteEffect::Mutation, false, false, false, false},

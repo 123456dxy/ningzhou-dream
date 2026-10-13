@@ -13,6 +13,8 @@ namespace nz::api::view {
 // access saves, advance a clock, or consume randomness.
 struct ViewContext { bool endingClaimed = false; };
 json::Value state(const Game& game, const ViewContext& context = {});
+// 用途：完整状态与独立查询共用兽潮视图；只读，不重投积分或库存。
+json::Value tideState(const Game& game);
 // 用途：生成当前斗法双方状态与动作预览。
 // 参与流程：HTTP请求分派、前端状态或动作预览。
 // 使用方式：传入const Game& game，按本模块入口调用。

@@ -88,6 +88,7 @@ enum class RouteId {
     Task,
     Tide,
     TideFight,
+    TideMarketBuy,
     TideHunker,
     TradeStock,
     Travel,

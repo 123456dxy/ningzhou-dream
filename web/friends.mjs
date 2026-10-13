@@ -1,4 +1,4 @@
-﻿// 宁州一梦 · C++ 版 — 道友往来界面
+// 宁州一梦 · C++ 版 — 道友往来界面
 //
 // 两块东西：
 //   1. 名单 —— 地图页显示「当地仙友」，宗门页只显示本宗门的人
@@ -9,6 +9,8 @@
 
 'use strict';
 import { renderPortrait } from './portraits.mjs';
+// 兼容旧调用；兽潮展示集中到独立模块，避免道友功能与全州事件耦合。
+export { renderTidePanel } from './tide-panel.mjs';
 
 // ------------------------------------------------------------
 // 缓存
@@ -293,48 +295,4 @@ export function renderBondActions(state, kinds) {
       + `${!a.enabled && a.reason ? ` · ${esc(a.reason)}` : ''}</span></span>`
       + `<button data-action="bond" data-id="${esc(a.id)}" ${a.enabled ? '' : 'disabled'}>${a.enabled ? esc(a.name) : '条件未满足'}</button></div>`).join('')
     + `</div>`;
-}
-
-// ------------------------------------------------------------
-// 兽潮：全图事件面板
-// ------------------------------------------------------------
-// 用途：展示兽潮和风险。
-// 流程：读取兽潮强度、战况与检查点，给出响应入口和失败提示。
-// 调用方式：纪事页传入tide与checkpoint。
-// 返回值：兽潮HTML字符串。
-export function renderTidePanel(tide, checkpoint) {
-  if (!tide) return '';
-  if (!tide.active) {
-    return `<div class="tide-panel calm">
-      <div class="tp-head"><strong>宁州暂安</strong>
-        <span class="tp-tag">无兽潮</span></div>
-      <p class="tp-note">${esc(tide.status || '各处险地未见异动。')}</p>
-    </div>`;
-  }
-  const sevName = tide.severity >= 3 ? '滔天'
-                : tide.severity === 2 ? '猖獗' : '初起';
-  const sevCls = tide.severity >= 3 ? 'sev3' : tide.severity === 2 ? 'sev2' : 'sev1';
-  const fallen = (tide.fallen || []).slice(0, 8);
-  return `<div class="tide-panel ${sevCls}">
-    <div class="tp-head"><strong>兽潮${esc(sevName)}</strong>
-      <span class="tp-tag">还剩 ${tide.monthsLeft} 个月</span></div>
-    <p class="tp-note">${esc(tide.status || '')}</p>
-    <div class="tp-stats">
-      <span>全图危险 <b>+${tide.dangerBonus ?? 0}</b></span>
-      <span>你迎战 <b>${tide.wavesFought ?? 0}</b> 场</span>
-      <span>击退 <b>${tide.wavesWon ?? 0}</b> 场</span>
-      <span>陨落修士 <b class="bad">${tide.npcDeaths ?? 0}</b> 人</span>
-    </div>
-    ${fallen.length ? `<div class="tp-fallen">
-      <span>此役已知陨落：</span>${fallen.map(n => esc(n)).join('、')}
-      ${tide.npcDeaths > fallen.length ? ' 等' : ''}
-    </div>` : ''}
-    <div class="tp-actions">
-      <button class="primary" data-action="tide-fight">迎战兽潮</button>
-      <button data-action="tide-hunker">固守不出</button>
-    </div>
-    <p class="tp-hint">迎战战败会陨落，胜后有厚赏（灵石、声望、材料）。
-      ${checkpoint?.enabled ? '意外陨落后可选择接受结局，或回到最近存档；回档会撤回保存之后的进度。' : '战败将结束这一世。'}
-      兽潮波及全州，你认识的人也可能死。</p>
-  </div>`;
 }

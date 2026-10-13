@@ -1,6 +1,6 @@
 # HTTP API 参考与统计
 
-核对日期：2026-10-12。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
+核对日期：2026-10-13。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
 
 责任边界：我们维护核心规则与桌面 UI；账号、联机传输、天机大比由另一位成员维护。服务层增加可选本地启动模式与只读模式探测；默认公网模式和 Tianji Store 业务实现保持原样。
 
@@ -8,16 +8,16 @@
 
 | 分派归属 | 精确端点 | 查询 | 写操作 | ReplaceGame | Persistence |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 核心 RouteInfo 表 | 85 | 20 ReadOnly | 59 Mutation | 3 | 3 |
+| 核心 RouteInfo 表 | 86 | 20 ReadOnly | 60 Mutation | 3 | 3 |
 | 服务层模式/账号/社区（排除转发Tianji） | 8 | 4 | 4 | 0 | 0 |
 | Tianji Store | 5 | 2 | 3 | 0 | 0 |
-| 总计（路径去重） | **98** | **26** | **66** | **3** | **3** |
+| 总计（路径去重） | **99** | **26** | **67** | **3** | **3** |
 
 核心四类取自真实 `RouteEffect`。服务层/Tianji 的查询与写操作按用途列示，它们没有使用该 enum；查询可维护会话、缓存或天机窗口记录，不能据此推断服务器完全没有 I/O。`/api/tianji/board` 在 web_main 与 Store 均出现，但最终归 Tianji，仅计一次。web_main 的精确分派共9条，其中8条为服务专属。
 
 ## 请求、登录与通用返回
 
-- 多人 Web 服务中，全部85个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
+- 多人 Web 服务中，全部86个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
 - 显式 `--local` 启动时强制监听 `127.0.0.1`，使用内置本地会话，空档按默认配置开局。账号、反馈、排行榜、导出及全部 `/api/tianji/` 返回404；不初始化或读取 Tianji Store。默认不加此参数，继续使用上述公网鉴权。
 - 核心输入从 JSON **请求正文**读取，不从URL查询串读取；需要参数的查询建议使用POST JSON。表中未列默认值的字符串参数缺省为`""`，随后由对应规则校验；“无”表示没有业务输入。非空正文必须是JSON对象。
 - 所有20条核心 ReadOnly 端点均支持 **GET和POST**；其余核心端点只支持POST。成功的核心动作通常返回 `{ok:true,state:{...}}`，某些动作附加text/report；可能出现checkpointWarning。state包括玩家、功法、世界、经济、社交、秘境与恢复点视图。
@@ -81,7 +81,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 
 报名/挑战需已有角色、处于本人入道50–59、100–109等十年窗口、人生未结束且无普通斗法/抉择/安排/秘境或当前留影挑战；已关闭窗口不能用回档重开。报名构筑按服务器当前存档冻结，移除临时丹药准备，双方满气血开局。每个同届同组对手一次，胜3分、24回合平1分、败/认输0分。Store健康失败可先返回503。
 
-## 核心领域清单（85条）
+## 核心领域清单（86条）
 
 下表“只读/动作/换世/存档”分别对应ReadOnly/Mutation/ReplaceGame/Persistence。所有行在多人Web服务中都需要登录；“状态”指上述标准ok+state响应。实际领域校验仍由规则层负责，字段表不会替代可用性预览。
 
@@ -194,8 +194,9 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 | `/api/expedition` | POST | 动作 | 是 | 无 | 后山7天游历；状态 |
 | `/api/travel` | POST | 动作 | 是 | `to`, `mode="boat"`, `begin=false` | 扣旅费并启程；begin=true只开始，默认推进；状态、text、arrived、report |
 | `/api/location-service` | POST | 动作 | 是 | `id`, `begin=false` | 当前地点服务；begin=true只开始安排，默认推进；状态、targetTab |
-| `/api/tide` | GET/POST | 只读 | 是 | 无 | 兽潮完整展示：active/severity/monthsLeft等统计与fallen |
-| `/api/tide/fight` | POST | 动作 | 是 | 无 | 参与抵御兽潮，可能斗法；状态、text、lethal |
+| `/api/tide` | GET/POST | 只读 | 是 | 无 | 统一只读兽潮state视图，含daysLeft、battlefields、leaderboard、market；不更新检查点 |
+| `/api/tide/fight` | POST | 动作 | 是 | battlefield=本人最高战场，显式值仅整数0–3 | 对应大境界妖兽；四战场每杀1/3/9/27分；状态、text、lethal |
+| `/api/tide/market/buy` | POST | 动作 | 是 | eventId,kind=herb/material,id,count=1,expectedUnitPrice可选 | 当前城市且开放期可购有限高阶库存；全部预检成功后一次性扣钱/发货；状态、text、cost |
 | `/api/tide/hunker` | POST | 动作 | 是 | 无 | 避险度过兽潮；状态、text |
 
 ## 展示预览的权威边界
@@ -212,7 +213,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 
 ## 精确路径核对规则
 
-本表98条路径全部在实际分派中存在，逐行路径无重复，核心表85条全覆盖。服务层的前缀转发、HTML页面、assets文件与JSON字段不是API端点；不同请求方法和同一路径在多层出现也不重复计数。新增端点需同时更新RouteInfo（核心）、真实handler与本表，再复核方法/登录/阻塞和错误契约。
+本表99条路径全部在实际分派中存在，逐行路径无重复，核心表86条全覆盖。服务层的前缀转发、HTML页面、assets文件与JSON字段不是API端点；不同请求方法和同一路径在多层出现也不重复计数。新增端点需同时更新RouteInfo（核心）、真实handler与本表，再复核方法/登录/阻塞和错误契约。
 
 ## 工坊整单补料（本版新增）
 

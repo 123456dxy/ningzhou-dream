@@ -22,6 +22,7 @@
 #include "core/economy.h"
 #include "core/society.h"
 #include "core/tide.h"
+#include "core/content/npc_combat_profiles.h"
 #include "core/npc_learning.h"
 #include "core/location_services.h"
 #include "core/friendship.h"
@@ -1147,6 +1148,8 @@ Game createGame(const CreateOptions& opts) {
     ensureSociety(g);
     ensureAdventure(g);
     ensureDungeons(g);
+    tide::ensureTide(g);
+    content::ensureChampionNpcs(g);
     socInitPayroll(g);
     // 五项开局天赋会发放实际物品（法器/丹炉/材料）
     adventureBirth(g);

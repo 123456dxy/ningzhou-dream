@@ -47,5 +47,8 @@
 <ClCompile Include="..\tests\test_state_integrity.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_talents.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tianji.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_tide_api.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_tide_integration.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_tide_rules.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_travel.cpp"><Filter>Tests</Filter></ClCompile>
 </ItemGroup></Project>

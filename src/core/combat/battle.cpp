@@ -21,6 +21,7 @@
 #include "core/sim.h"
 #include "core/society.h"
 #include "core/tide.h"
+#include "core/calendar.h"
 #include "data/reference_tables.h"
 
 namespace nz {
@@ -671,6 +672,8 @@ void battleStart(Game& game, const EnemySpec& enemy) {
     battle.npcId = enemy.id;
     battle.quest = enemy.quest;
     battle.kind = content::legacyValue(*battleKind);
+    battle.tideEventId = enemy.tideEventId;
+    battle.tideBattlefield = enemy.tideBattlefield;
     battle.lethal = enemy.lethal;
     battle.huntFee = enemy.huntFee;
     battle.wildTask = enemy.wildTask;
@@ -749,7 +752,8 @@ void battleStart(Game& game, const EnemySpec& enemy) {
 
     logEvent(game, "self",
              "与" + enemy.name + "开始" + (battleDefeatEndsLife(battle) ? "生死斗法" : "斗法") +
-                 "，月历暂停。",
+                 (content::parseBattleKind(battle.kind) == BattleKind::Tide
+                     ? "，兽潮中每回合推进一天。" : "，月历暂停。"),
              true);
     if (!arts.battle->playerFirst) {
         arts.battle->log.push_back("对方遁速更快，抢先施放首轮神通。");
@@ -824,6 +828,12 @@ void battleFinish(Game& game, bool win, bool escape) {
     const bool fatalDefeat = battleDefeatEndsLife(battle);
     if (!win && !escape && fatalDefeat) {
         player.health=0;
+        if (battleKind==BattleKind::Tide) {
+            // 致命回合先记日，再写结局和纪事；跨年时年龄、年份保持一致。
+            calendarBattleDay(game,"野外战败：" + battle.enemy);
+            tide::settleIfDue(game);
+            return;
+        }
         finish(game,"野外战败：" + battle.enemy);
         return;
     }
@@ -850,8 +860,8 @@ void battleFinish(Game& game, bool win, bool escape) {
         addRelation(game, battle.npcId, 4);
 
     // 兽潮迎战：赏赐比普通野外悬赏厚得多，这是「成长动力」的来源
-    if (battleKind == BattleKind::Tide && game.tide.active && !escape)
-        tide::tideReward(game, win);
+    if (battleKind == BattleKind::Tide && !escape)
+        tide::tideReward(game, win, &battle);
 
     const string outcome = escape ? "撤离"
                                    : win ? "获胜"
@@ -2061,7 +2071,7 @@ static void battleEndTurn(Game& g) {
 // 参与流程：斗法动作公共入口。
 // 使用方式：传游戏、手牌 UID/神通 ID/end/escape 与可选移除目标。
 // 返回值：操作成功或拒绝原因；成功更新战斗并可能触发结算。
-TurnResult battleTurn(Game& g, const string& id, const string& target) {
+static TurnResult executeBattleTurn(Game& g, const string& id, const string& target) {
     TurnResult out;
     Player& p = g.player;
     if (!p.arts.battle.has_value()) {
@@ -2191,6 +2201,34 @@ TurnResult battleTurn(Game& g, const string& id, const string& target) {
     if (b.hp <= 0) battleFinish(g, false);
     else if (b.enemyHp <= 0) battleFinish(g, true);
     return out;
+}
+
+// 用途：兽潮动作收口记日；参与出牌击杀、完整回合、撤离；传合法动作，返回原动作结果。
+// 先完成战果登记再推进一天，避免末日漏分；推进前释放Battle引用，普通/天机战不耗此时间。
+TurnResult battleTurn(Game& game, const string& id, const string& target) {
+    const int previousDay=game.clock.days;
+    bool tideBattle = false;
+    string eventId;
+    if (game.player.arts.battle) {
+        const auto& battle = *game.player.arts.battle;
+        tideBattle = !battle.shadowPlayer && content::parseBattleKind(battle.kind) == BattleKind::Tide;
+        eventId = battle.tideEventId;
+    }
+    const TurnResult result = executeBattleTurn(game, id, target);
+    if (!result.ok || !tideBattle) return result;
+    if (game.clock.days!=previousDay) return result; // 致命收口已记本日，不能重复扣天。
+    const bool endedBattle = !game.player.arts.battle;
+    if (id != "end" && id != "escape" && !endedBattle) return result;
+    if (game.player.arts.battle) ++game.player.arts.battle->tideDaysCharged;
+    calendarBattleDay(game);
+    // 到期只撤出仍未完成的本期对局；已击杀对局已先记分，不会被该分支抹去。
+    if (game.player.arts.battle && game.player.arts.battle->tideEventId == eventId &&
+        eventId == game.tide.eventId && game.clock.days >= game.tide.endDay) {
+        game.player.arts.battle->log.push_back("兽潮战期结束，守军鸣金收兵。");
+        battleFinish(game, false, true);
+    }
+    tide::settleIfDue(game);
+    return result;
 }
 
 // 用途：把当前手牌 UID 映射为神通 ID 列表。

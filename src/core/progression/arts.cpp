@@ -1,6 +1,7 @@
 // 宁州一梦 · C++ 版 — 洞府道法实现（对应 JS 版 arts.mjs）
 #include "core/arts.h"
 #include "core/content/game_ids.h"
+#include "core/content/npc_combat_profiles.h"
 #include "core/content/text_table.h"
 #include "core/crafting/material_supply.h"
 #include "core/economy.h"
@@ -580,12 +581,13 @@ Arts artNpcLoadout(const Npc& npc) {
     const int stage = clampInt(npc.stage, 0, 12);
     const int major = stage / 3;
     const bool sect = !npc.sect.empty();
+    const auto* profile = content::findNpcCombatProfile(npc);
     // Unknown NPC affinities retain the historical sword fallback explicitly.
     DaoId daoId = content::parseDaoId(npc.dao).value_or(DaoId::Sword);
     if (const auto sectId = content::parseSectId(npc.sect)) daoId = content::sectDao(*sectId);
     const string dao(content::legacyDaoKey(daoId));
     arts.focus = dao;
-    const int level = std::min(5, (sect ? 2 : 1) + major);
+    const int level = std::min(5, (profile ? 3 : sect ? 2 : 1) + major);
     const auto equipManual = [&](const string& id, bool main) {
         const ManualEntry* man = findManual(id);
         if (!man || man->stage > stage || arts.manuals.count(id)) return false;
@@ -608,17 +610,19 @@ Arts artNpcLoadout(const Npc& npc) {
     else if (daoId == DaoId::Artifact) { manuals = {"forge", "earth", "bull", "heavy"}; spells = {"earth", "mountainSeal", "gold", "collapse"}; }
     else if (daoId == DaoId::Qi) { manuals = {"zhou", "cloud", "tuna", "wheel"}; spells = {"gather", "hoard", "skim", "qiFlow"}; }
     else { manuals = {"sword", "hidden", "swordcraft", "human"}; spells = {"sword", "swordFocus", "goldcover", "humanSword", "rain"}; }
+    // 特殊传承复用同一套真实功法、神通与境界校验，不额外叠加无来源伤害。
+    if (profile) { manuals = profile->manuals; spells = profile->spells; }
     // 初期散修只具吐纳与少量本命神通；高境界逐步取得完整传承。
     arts.main.clear();
     if (!sect && stage < 3) equipManual("tuna", true);
     else for (const auto& id : manuals) if (equipManual(id, true)) break;
     if (arts.main.empty()) equipManual("tuna", true);
-    const int auxLimit = sect ? std::min(4, 1 + major) : (stage < 3 ? 0 : std::min(3, major));
+    const int auxLimit = profile ? 4 : sect ? std::min(4, 1 + major) : (stage < 3 ? 0 : std::min(3, major));
     for (const auto& id : manuals) {
         if (static_cast<int>(arts.aux.size()) >= auxLimit) break;
         equipManual(id, false);
     }
-    const int nodeLevel = sect ? std::min(5, 2 + major) : (stage < 3 ? 0 : std::min(5, 1 + major));
+    const int nodeLevel = profile ? std::min(5, 3 + major) : sect ? std::min(5, 2 + major) : (stage < 3 ? 0 : std::min(5, 1 + major));
     const int daoIndexValue = daoIndex(dao);
     arts.exp[dao] = ART_THRESHOLDS[nodeLevel];
     for (int l = 1; l <= nodeLevel; ++l)

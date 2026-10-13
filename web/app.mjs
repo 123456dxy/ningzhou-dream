@@ -17,7 +17,7 @@ import { mode, hideOnlineEntries } from './nz-mode.mjs';
 import { loadRoster, invalidateRoster, renderRoster, bindRoster } from './roster.mjs';
 import { heading, panel, layout, asideBlock, timeline, yearControls, hintBox } from './shell.mjs';
 import { renderDaos, renderArtsAside, loadNodes, invalidateNodes,
-         loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds } from './arts.mjs';
+         loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds, renderManualIllustration } from './arts.mjs';
 import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect, marketGrade } from './economy.mjs';
 import { loadLegacy, invalidateLegacy, draftTalents, renderEnding, renderLegacyPanel, renderDraftPanel } from './legacy.mjs';
 import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks, renderAchievements } from './sects.mjs';
@@ -33,6 +33,7 @@ import { renderArtifactAbility, renderEquippedArtifacts, renderBattleArtifacts, 
 import { renderInventoryPanel } from './inventory-panel.mjs';
 import { renderTaskPanel } from './task-panel.mjs';
 import { renderCraftSupply, renderSalvageQuote } from './workshop.mjs';
+import { shouldRenderTide, renderTideMarket, renderTideBattleNotice } from './tide-panel.mjs';
 import {
   renderFriendList, renderFriendPanel, loadNpcBag, invalidateFriendCache,
   renderTidePanel, renderBondActions,
@@ -74,9 +75,17 @@ try {
   const savedBrewGrade = localStorage.getItem('nz-desktop-brew-grade');
   if (savedBrewGrade === 'all' || /^[1-9]\d*$/.test(savedBrewGrade || '')) brewGrade = savedBrewGrade;
   const savedKind = localStorage.getItem('nz-desktop-market-kind');
-  if (['herb', 'material', 'potion', 'gear', 'book', 'stock'].includes(savedKind)) shopKind = savedKind;
+  if (['herb', 'material', 'potion', 'gear', 'book', 'stock', 'tide'].includes(savedKind)) shopKind = savedKind;
 } catch { /* 本机偏好存储不可用时默认一阶。 */ }
 let shopQty = {};        // 各货品的购买数量
+let tideMarketKind = 'all', tideMarketGrade = '3';
+const tideMarketQuantities = {};
+try {
+  const savedKind = localStorage.getItem('nz-desktop-tide-market-kind');
+  if (['all', 'herb', 'material'].includes(savedKind)) tideMarketKind = savedKind;
+  const savedGrade = localStorage.getItem('nz-desktop-tide-market-grade');
+  if (savedGrade === 'all' || /^[3-9]\d*$/.test(savedGrade || '')) tideMarketGrade = savedGrade;
+} catch { /* 战后坊市偏好不可用时显示三阶全部材料。 */ }
 let feed = [];           // 动作流（本会话的操作反馈）
 let lastReport = null;   // 上次推进的报告
 let requestBusy = false;
@@ -491,7 +500,7 @@ function viewChronicle() {
     `<div class="action-feed">${feedHTML}</div>`);
 
   // 兽潮是全图大事：起了就摆在最上面，玩家一眼看到
-  const tideBlock = (S.tide && S.tide.active)
+  const tideBlock = shouldRenderTide(S.tide)
     ? `<div style="padding:0 0 16px">${renderTidePanel(S.tide, S.checkpoint)}</div>` : '';
 
   return tideBlock
@@ -636,6 +645,7 @@ function manualCards() {
   if (!list.length) return `<div class="empty">还没有修习任何功法。</div>`;
   return `<div class="manual-list">` + list.map(m => `
     <div class="manual-card ${m.isMain ? 'is-main' : ''} ${m.isAux ? 'is-aux' : ''}">
+      ${renderManualIllustration(m)}
       <div class="mc-top">
         <strong>${escape(m.name)}</strong>
         <span class="mc-dao">${escape(m.dao)}</span>
@@ -676,7 +686,7 @@ function manualSourceRows(list, action) {
       : '';
     const canLearn = owned && !S.job && level < 5 && m.canLearn !== false;
     const disabled = owned ? !canLearn : !!why;
-    return `<div class="pill-row"><span>${escape(m.name)}${owned ? ` · 抄本已得${level ? ` · 已修 ${level} 层` : ''}` : ''}`
+    return `<div class="pill-row">${renderManualIllustration(m, { compact: true })}<span>${escape(m.name)}${owned ? ` · 抄本已得${level ? ` · 已修 ${level} 层` : ''}` : ''}`
       + `<span class="item-sub">${escape(owned ? `${m.learnDays || 20 + level * 10} 天 · ${m.learnCost || 8 + (level + 1) * 4} 灵石` : m.how)}</span></span>`
       + `<button data-action="${owned ? 'learn' : action}" data-id="${escape(m.id)}" ${disabled ? 'disabled' : ''}>`
       + `${escape(disabled ? why || '暂不可修习' : owned ? level ? '修习下一层' : '开始修习' : action === 'library' ? '兑换抄本' : '购入抄本')}</button></div>`;
@@ -1299,9 +1309,14 @@ function viewMarket() {
   const a = S.arts;
 
   // ---- 坊市买卖 ----
-  const KINDS = [['herb', '药材'], ['material', '炼器材料'], ['potion', '丹药'], ['gear', '法器'], ['book', '功法 / 书坊'], ['stock', '突破物品']];
+  const KINDS = [['herb', '药材'], ['material', '炼器材料'], ['potion', '丹药'], ['gear', '法器'], ['book', '功法 / 书坊'], ['stock', '突破物品'], ['tide', '兽潮坊市']];
   const tabs = KINDS.map(([k, name]) =>
     `<button class="${shopKind === k ? 'active' : ''}" data-shop="${k}">${name}</button>`).join('');
+
+  if (tab === 'market' && shopKind === 'tide') {
+    return heading('兽潮坊市', '妖潮平定后开放三十天；查看正常价、排名价和剩余库存。', S.tide?.market?.open ? '已开放' : '未开放')
+      + panel('战后交易', '', `<div class="task-content"><div class="shop-tabs">${tabs}</div>${renderTideMarket(S, { kind: tideMarketKind, grade: tideMarketGrade, quantities: tideMarketQuantities })}</div>`);
+  }
 
   let shopBody;
   if (!S.inCity) {
@@ -1577,7 +1592,8 @@ function viewBattle() {
     + `<span>${b.lethal
         ? '<b class="lethal-tag">生死斗法</b>'
         : S.dungeons?.run ? '秘境斗法' : '切磋 / 考核'} · 第 <b>${b.turn + 1}</b> / 24 回合</span>`
-    + `<span>月历暂停 · 出牌阶段${b.playerFirst != null ? ` · ${b.playerFirst ? '你方先手' : '敌方先手'}` : ''}</span></header>`
+    + `<span>${b.kind === 'tide' ? '兽潮斗法 · 每回合一天' : '月历暂停'} · 出牌阶段${b.playerFirst != null ? ` · ${b.playerFirst ? '你方先手' : '敌方先手'}` : ''}</span></header>`
+    + renderTideBattleNotice(b, S.tide)
     + (b.lethal
         ? `<div class="lethal-warn">${S.checkpoint?.enabled ? '战败会陨落。意外死亡后可选择接受结局，或回到最近存档；回档会撤回保存之后的进度。' : '战败会陨落并结束这一世，请留意双方气血与敌方意图。'}</div>`
         : S.dungeons?.run ? '<p class="panel-note">本场不致死。战败或斗法撤离会结束探索，只带回一半已得物资；未通关入口消失，临时神通与遗物离境后消散。</p>' : '')
@@ -2139,6 +2155,8 @@ document.addEventListener('click', async e => {
   if (intelKind) { dungeonIntelKind = intelKind.dataset.dungeonIntelKind; render(); return; }
   const shopTab = e.target.closest('[data-shop]');
   if (shopTab) { shopKind = shopTab.dataset.shop; try { localStorage.setItem('nz-desktop-market-kind', shopKind); } catch {} render(); return; }
+  const tideKind = e.target.closest('[data-tide-market-kind]');
+  if (tideKind) { tideMarketKind = tideKind.dataset.tideMarketKind; try { localStorage.setItem('nz-desktop-tide-market-kind', tideMarketKind); } catch {} render(); return; }
 
   // 分类筛选只更新本地纪事视图，不请求服务端或推进时间。
   const logTab = e.target.closest('[data-logfilter]');
@@ -2498,9 +2516,25 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'tide-fight': {
-      const r = await call('tide/fight');
+      const battlefield = btn.dataset.battlefield;
+      const r = await call('tide/fight', battlefield == null ? {} : { battlefield: Number(battlefield) });
       if (r && r.error) { toast(r.error, 'warn'); break; }
       if (r) toast(r.text || '你迎战兽潮。', 'good');
+      render();
+      break;
+    }
+    case 'tide-market-open': {
+      shopKind = 'tide';
+      try { localStorage.setItem('nz-desktop-market-kind', shopKind); } catch {}
+      navigateTab('market');
+      break;
+    }
+    case 'tide-market-buy': {
+      const r = await call('tide/market/buy', {
+        eventId: btn.dataset.eventId, kind: btn.dataset.kind, id,
+        count: Number(btn.dataset.count), expectedUnitPrice: Number(btn.dataset.unitPrice),
+      });
+      if (r && !r.error) tideMarketQuantities[`${btn.dataset.kind}:${id}`] = 1;
       render();
       break;
     }
@@ -2747,6 +2781,9 @@ document.addEventListener('click', async e => {
 // 调用方式：由 document 的 change 事件自动调用。
 // 返回值：Promise；无显式返回值。
 document.addEventListener('change', async e => {
+  const tideQuantity = e.target.closest('[data-tide-quantity]');
+  if (tideQuantity) { tideMarketQuantities[tideQuantity.dataset.tideQuantity] = Math.max(1, Math.min(Number(tideQuantity.max) || 99, Math.floor(Number(tideQuantity.value)) || 1)); render(); return; }
+  if (e.target.matches('[data-tide-market-grade]')) { tideMarketGrade = e.target.value; try { localStorage.setItem('nz-desktop-tide-market-grade', tideMarketGrade); } catch {} render(); return; }
   const inp = e.target.closest('[data-qtyinput]');
   if (inp) {
     const id = inp.dataset.qtyinput;

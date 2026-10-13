@@ -22,6 +22,10 @@ Value dungeonWorldToJson(const DungeonWorld& world);
 void dungeonWorldFromJson(const Value& value, DungeonWorld& world);
 Value gameToJson(const Game& game);
 Game gameFromJson(const Value& root);
+Value tideToJson(const BeastTide& tide);
+void tideFromJson(const Value& value, BeastTide& tide);
+bool tideShapeValid(const Value& value);
+std::string tideStateError(const Game& game);
 
 // Shape validation runs before codecs; state validation runs after migration.
 bool saveInteger(const Value& value, double low, double high);

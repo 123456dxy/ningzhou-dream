@@ -13,8 +13,10 @@
 <ItemGroup>
 <ClInclude Include="..\data\reference_tables.h"/>
 <None Include="..\docs\BACKEND_ARCHITECTURE.md"/>
+<None Include="..\docs\BEAST_TIDE.md"/>
 <None Include="..\docs\CPP_API_INDEX.md"/>
 <None Include="..\docs\HTTP_API_REFERENCE.md"/>
+<None Include="..\docs\LOCAL_FULL_SERVER.md"/>
 <None Include="..\docs\mobile-frontend-v2.md"/>
 <None Include="..\docs\tianji-rollback-performance.md"/>
 <ClInclude Include="..\src\core\adventure.h"/>
@@ -35,6 +37,8 @@
 <ClInclude Include="..\src\core\conflict.h"/>
 <ClCompile Include="..\src\core\content\game_ids.cpp"/>
 <ClInclude Include="..\src\core\content\game_ids.h"/>
+<ClCompile Include="..\src\core\content\npc_combat_profiles.cpp"/>
+<ClInclude Include="..\src\core\content\npc_combat_profiles.h"/>
 <None Include="..\src\core\content\README.md"/>
 <ClCompile Include="..\src\core\content\text_table.cpp"/>
 <ClInclude Include="..\src\core\content\text_table.h"/>
@@ -69,6 +73,7 @@
 <ClInclude Include="..\src\core\interface\routes.h"/>
 <ClCompile Include="..\src\core\interface\social_views.cpp"/>
 <ClCompile Include="..\src\core\interface\state_views.cpp"/>
+<ClCompile Include="..\src\core\interface\tide_views.cpp"/>
 <ClInclude Include="..\src\core\interface\view_helpers.h"/>
 <ClCompile Include="..\src\core\interface\view_policy.cpp"/>
 <ClInclude Include="..\src\core\interface\view_policy.h"/>
@@ -93,6 +98,7 @@
 <None Include="..\src\core\persistence\README.md"/>
 <ClCompile Include="..\src\core\persistence\shape_validation.cpp"/>
 <ClCompile Include="..\src\core\persistence\state_validation.cpp"/>
+<ClCompile Include="..\src\core\persistence\tide_codec.cpp"/>
 <ClInclude Include="..\src\core\play.h"/>
 <ClCompile Include="..\src\core\progression\arts.cpp"/>
 <ClCompile Include="..\src\core\progression\cultivate.cpp"/>
@@ -117,6 +123,9 @@
 <ClCompile Include="..\src\core\simulation\rules.cpp"/>
 <ClCompile Include="..\src\core\simulation\sim.cpp"/>
 <ClCompile Include="..\src\core\simulation\tide.cpp"/>
+<ClCompile Include="..\src\core\simulation\tide_market.cpp"/>
+<ClCompile Include="..\src\core\simulation\tide_rules.cpp"/>
+<ClInclude Include="..\src\core\simulation\tide_rules.h"/>
 <ClCompile Include="..\src\core\social\friendship.cpp"/>
 <ClCompile Include="..\src\core\social\npc_learning.cpp"/>
 <None Include="..\src\core\social\README.md"/>

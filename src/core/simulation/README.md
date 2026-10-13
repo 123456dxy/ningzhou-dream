@@ -12,7 +12,9 @@
 | `rules.cpp` | model.h 中的查表、建号属性和基础规则声明实现 | `model.h` |
 | `calendar.cpp` | 日历与余数积攒、工作逐日推进 | `calendar.h` |
 | `play.cpp` | 市场/社交/制作玩法聚合与操作 | `play.h` |
-| `tide.cpp` | 兽潮年度/月度变化与战斗奖励 | `tide.h` |
+| `tide.cpp` | 兽潮固定战期、日积分、金榜与结算 | `tide.h` |
+| `tide_rules.*` | 战场、排名奖金、折扣和库存参数与纯计算 | `tide_rules.h` |
+| `tide_market.cpp` | 兽潮战后高阶材料目录、库存和原子购买 | `tide.h` |
 | `checkpoint.cpp` | 检查点开启、更新、手动记录和恢复 | `checkpoint.h` |
 | `reward_receipt.cpp` | 动作前后资源/能力变化的奖励纪事 | `reward_receipt.h` |
 | `../tianji.cpp`（core 根，朋友维护） | 只供对接：快照冻结、大比窗口、服务端 Store、挑战与榜单 | `tianji.h` |

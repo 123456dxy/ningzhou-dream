@@ -30,22 +30,7 @@ void appendWorldState(const Game& game, Value& state) {
         state.set("clock", std::move(entry));
     }
 
-    // ---- 兽潮（全图事件）----
-    {
-        Value t(json::Object{});
-        t.set("active", Value(game.tide.active));
-        t.set("severity", num(game.tide.severity));
-        t.set("monthsLeft", num(game.tide.monthsLeft));
-        t.set("wavesFought", num(game.tide.wavesFought));
-        t.set("wavesWon", num(game.tide.wavesWon));
-        t.set("npcDeaths", num(game.tide.npcDeaths));
-        t.set("dangerBonus", num(tide::dangerBonus(game)));
-        t.set("status", str(tide::statusText(game)));
-        json::Array fa;
-        for (const auto& nm : game.tide.fallen) fa.push_back(str(nm));
-        t.set("fallen", Value(std::move(fa)));
-        state.set("tide", std::move(t));
-    }
+    state.set("tide", tideState(game));
 
     // ---- 世界 ----
     {

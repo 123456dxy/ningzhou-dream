@@ -31,6 +31,7 @@ bool nonnegativeMap(const map<string, int>& values) {
 } // namespace
 
 std::string saveStateError(const Game& game) {
+    if (const auto error=tideStateError(game); !error.empty()) return error;
     if (!validPerson(game.player)) return "角色属性、境界或地点无效";
     if (!game.ended && (game.player.health == 0 || game.player.age >= game.player.lifespan))
         return "死亡角色尚未结算";
@@ -147,6 +148,9 @@ std::string saveStateError(const Game& game) {
     }
     if (arts.battle.has_value()) {
         const Battle& battle = *arts.battle;
+        if (battle.tideBattlefield < -1 || battle.tideBattlefield > 3 || battle.tideDaysCharged < 0 || battle.tideDaysCharged > 24 ||
+            (!battle.tideEventId.empty() && (battle.kind != "tide" || battle.tideEventId != game.tide.eventId)))
+            return "兽潮对局来源或记日无效";
         const bool terminalShadow = battle.shadowPlayer && !battle.shadowOutcome.empty();
         if (battle.shadowPlayer) {
             const Player& shadow = *battle.shadowPlayer;
