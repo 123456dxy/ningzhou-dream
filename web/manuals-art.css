@@ -1,0 +1,40 @@
+/* 插图只补充识别线索，名称、境界、效果与操作按钮仍由原有文字显示。 */
+.manual-art {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 88px;
+  height: 88px;
+  overflow: hidden;
+  border: 1px solid rgba(154, 136, 93, .35);
+  border-radius: 9px;
+  background: #183c37;
+  vertical-align: middle;
+}
+.manual-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.manual-art img[hidden] { display: none; }
+.manual-art-fallback {
+  margin: auto;
+  color: #e4d9bf;
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+  font-size: 32px;
+  line-height: 1;
+}
+.manual-art--compact { width: 42px; height: 42px; border-radius: 6px; }
+.manual-art--compact .manual-art-fallback { font-size: 20px; }
+.manual-card > .manual-art { align-self: center; margin-bottom: 5px; }
+.pill-row > .manual-art { margin-right: 10px; }
+.build-component:has(> .manual-art) {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.build-component > .manual-art { width: 32px; height: 32px; }
+.build-component > .manual-art .manual-art-fallback { font-size: 17px; }
+.build-component-copy { min-width: 0; }

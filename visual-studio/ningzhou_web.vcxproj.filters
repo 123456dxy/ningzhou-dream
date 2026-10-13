@@ -2,6 +2,8 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><ItemGroup>
 <Filter Include="Entry"><UniqueIdentifier>{0DEC990E-2494-5244-B784-423777AF07E2}</UniqueIdentifier></Filter>
 <Filter Include="Web UI"><UniqueIdentifier>{5F9832C7-E616-576F-B177-123AFC7629CC}</UniqueIdentifier></Filter>
+<Filter Include="Web UI\assets"><UniqueIdentifier>{C0E43DDA-58E3-5774-A2C3-48FF18E6117A}</UniqueIdentifier></Filter>
+<Filter Include="Web UI\assets\manuals"><UniqueIdentifier>{3B92D091-E8A8-50AC-95DF-D8146FED0708}</UniqueIdentifier></Filter>
 <Filter Include="Web UI\v2"><UniqueIdentifier>{5ACED9D6-3D38-598B-A4FD-897195922F73}</UniqueIdentifier></Filter>
 <Filter Include="Web UI\v2\views"><UniqueIdentifier>{6E1D632B-309B-5624-B750-D5DDA57AD2B3}</UniqueIdentifier></Filter>
 </ItemGroup><ItemGroup>
@@ -9,12 +11,16 @@
 <None Include="..\web\app.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\artifacts.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\arts.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\assets\manuals\manifest.mjs"><Filter>Web UI\assets\manuals</Filter></None>
 <None Include="..\web\build-panel.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\build-preview.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\build-preview.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\build.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\cards.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\cave-panel.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\cave-panel.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\cave-ui.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\craft-pricing.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\dungeons.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\economy.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\enhance.css"><Filter>Web UI</Filter></None>
@@ -26,6 +32,7 @@
 <None Include="..\web\legacy.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\location-art.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\login.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\manuals-art.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\map.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\mobile.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\mobile.mjs"><Filter>Web UI</Filter></None>
@@ -40,6 +47,7 @@
 <None Include="..\web\task-panel.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\tianji.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\tianji.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\tide-panel.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\v2\api.mjs"><Filter>Web UI\v2</Filter></None>
 <None Include="..\web\v2\app.mjs"><Filter>Web UI\v2</Filter></None>
 <None Include="..\web\v2\battle-mobile.css"><Filter>Web UI\v2</Filter></None>

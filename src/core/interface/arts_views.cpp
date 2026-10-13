@@ -6,10 +6,71 @@
 #include "core/economy.h"
 #include "core/shop.h"
 #include "core/talents.h"
+#include "core/content/text_table.h"
+#include "core/legacy.h"
 #include "data/reference_tables.h"
 #include <algorithm>
+#include <stdexcept>
 
 namespace nz::api::view {
+
+namespace {
+// 用途：将权威成就进度键映射为集中维护的明确条件文案。
+// 流程：成就 JSON 展示；目标直接来自静态成就定义。
+// 返回值：拥有的中文条件文本；未知键明确抛错，不伪造规则。
+std::string mfAchievementCondition(const data::AchievementDef& Achievement) {
+    using content::TextId;
+    const TextId ConditionId = [&]() {
+        if (Achievement.key == "brew") return TextId::AchievementBrewCondition;
+        if (Achievement.key == "forge") return TextId::AchievementForgeCondition;
+        if (Achievement.key == "wins") return TextId::AchievementWinsCondition;
+        if (Achievement.key == "nodes") return TextId::AchievementNodesCondition;
+        if (Achievement.key == "manuals") return TextId::AchievementManualsCondition;
+        if (Achievement.key == "quests") return TextId::AchievementQuestsCondition;
+        if (Achievement.key == "wealth") return TextId::AchievementWealthCondition;
+        throw std::invalid_argument("Unknown achievement progress key");
+    }();
+    const std::string Target = std::to_string(Achievement.target);
+    return content::formatText(ConditionId, {{"Target", Target}});
+}
+} // namespace
+
+// 用途：组合成就的真实进度、条件与跨世奖励说明。
+// 流程：成就只读查询；奖励点数及领取状态复用传承里程碑查询。
+// 使用方式：借用稳定的人生与账号档案快照，不保存引用。
+// 返回值：拥有数据的 JSON；未知定义抛错，无时间、RNG、状态或文件副作用。
+Value mfAchievementsView(const Game& GameState, const legacy::Archive& ArchiveState) {
+    const auto Milestones = legacy::milestonesOf(GameState, ArchiveState);
+    Value Result(json::Object{});
+    Result.set("ok", Value(true));
+    const std::string PointLimit = std::to_string(MAX_POINTS - BASE_POINTS);
+    Result.set("rewardNote", str(content::formatText(content::TextId::AchievementRewardNote,
+        {{"PointLimit", PointLimit}})));
+    json::Array Achievements;
+    for (const auto& Achievement : data::AchievementDef_TABLE()) {
+        const auto Milestone = std::find_if(Milestones.begin(), Milestones.end(),
+            [&](const legacy::Milestone& Entry) { return Entry.key == Achievement.id; });
+        if (Milestone == Milestones.end()) throw std::invalid_argument("Unknown achievement milestone");
+        const int Progress = artProgress(GameState.player, Achievement.key);
+        const std::string RewardPoints = std::to_string(Milestone->points);
+        Value Entry(json::Object{});
+        Entry.set("id", str(Achievement.id));
+        Entry.set("name", str(Achievement.name));
+        Entry.set("key", str(Achievement.key));
+        Entry.set("target", num(Achievement.target));
+        Entry.set("progress", num(Progress));
+        Entry.set("points", num(Achievement.points));
+        Entry.set("done", Value(Progress >= Achievement.target));
+        Entry.set("condition", str(mfAchievementCondition(Achievement)));
+        Entry.set("rewardClaimed", Value(Milestone->alreadyHad));
+        Entry.set("reward", str(content::formatText(Milestone->alreadyHad
+            ? content::TextId::AchievementClaimedReward : content::TextId::AchievementReward,
+            {{"Points", RewardPoints}})));
+        Achievements.push_back(std::move(Entry));
+    }
+    Result.set("achievements", Value(std::move(Achievements)));
+    return Result;
+}
 
 // 用途：追加功法神通悟道目录与实际状态。
 // 参与流程：HTTP请求分派、前端状态或动作预览。

@@ -22,7 +22,12 @@ enum class TextId {
     ArtifactYangDirectSword, ArtifactYangSword, ArtifactYinQiSeal,
     ArtifactYinMetalSeal, ArtifactYinSeal, ArtifactYangSeal, ArtifactYinArmor,
     ArtifactYangArmor, ArtifactBell, ArtifactHeal, ArtifactWard, ArtifactEmpower,
-    ArtifactSuffix
+    ArtifactSuffix, AchievementBrewCondition, AchievementForgeCondition,
+    AchievementWinsCondition, AchievementNodesCondition, AchievementManualsCondition,
+    AchievementQuestsCondition, AchievementWealthCondition, AchievementReward,
+    AchievementClaimedReward, AchievementRewardNote,
+    PillCultivationCompleteEffect, PillCultivationUseLimit,
+    GardenReserveRequiresBottle, GardenBottleGrowthRule, GardenNoBottleGrowthRule
 };
 
 struct TextArg { std::string_view name, value; };

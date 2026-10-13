@@ -196,11 +196,9 @@ void runMechanicsRegressionTests() {
         check(!play::marketBuy(g, "gear", "sword-0", 1).empty(), "零品阶法器不能购买");
         check(!play::marketBuy(g, "gear", "sword-4", 1).empty(), "法器商店不能越境购买");
         check(!play::marketBuy(g, "gear", "sword-1junk", 1).empty(), "畸形法器参数不能购买");
-        checkStr(play::marketBuy(g, "gear", "sword-1", 1), "", "可购买一阶法器");
-        const string oldId = g.player.arts.gear.back().id;
-        g.player.arts.gear.clear();
-        checkStr(play::marketBuy(g, "gear", "sword-1", 1), "", "售出后可重新购买法器");
-        check(g.player.arts.gear.back().id != oldId, "购买法器不复用删除过的标识");
+        const auto BeforeGearPurchase = saveToJson(g);
+        checkStr(play::marketBuy(g, "gear", "sword-1", 1), "成品法器未上架，可在工坊自行炼制。", "标准法器旧购买入口明确下架");
+        check(saveToJson(g) == BeforeGearPurchase, "下架商品购买不扣费不造法器也不推进标识序列");
         for (const auto& item : play::marketList(g))
             if (item.kind == "potion") check(item.price > item.sellPrice, "丹药买价高于售价：" + item.name);
     }

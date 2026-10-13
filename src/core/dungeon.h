@@ -74,7 +74,7 @@ string dungeonLeave(Game& g);
 void dungeonAbandon(Game& g);
 // 用途：报价高阶定向材料秘境情报。
 // 参与流程：天机阁地点服务目录。
-// 使用方式：传只读游戏，检查位置、境界、月额和灵石。
+// 使用方式：传只读游戏，检查位置、月额和灵石；stage保留探索最低境界，购买不设境界限制。
 // 返回值：情报选项与门槛列表，不生成入口或消费资源。
 vector<DungeonIntelOption> dungeonIntelOptions(const Game& g);
 // 用途：支付情报价款并生成定向材料秘境。

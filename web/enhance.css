@@ -819,6 +819,8 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 .ach-row.done .ach-top strong { color: var(--jade); }
 .ach-bar { height: 5px; border-radius: 3px; background: rgba(0,0,0,.07); overflow: hidden; }
 .ach-bar i { display: block; height: 100%; background: var(--jade); }
+.ach-condition, .ach-reward, .ach-reward-note { font-size: 12px; line-height: 1.6; color: var(--ink-2); margin: 5px 0 0; overflow-wrap: anywhere; }
+.ach-reward-note { margin-bottom: 12px; }
 
 .dead-tag { font-size: 11px; color: #8a4436; margin-left: 6px; }
 
@@ -1589,4 +1591,25 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
   .market-catalog-controls .shop-tabs{flex-wrap:wrap}
   .shop-grade-control{font-size:12px;white-space:nowrap}
   .shop-grade-control select{padding:7px 10px;background:var(--surface);border:1px solid var(--line);border-radius:5px;color:var(--ink)}
+}
+
+/* 兽潮桌面：先展示剩余天数与战场，金榜在有边界的卷轴中展开。 */
+.tide-battlefields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}
+.tide-battlefield{min-width:0}.tide-battlefield button{display:flex;flex-direction:column;gap:5px;width:100%;padding:13px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--green);font:inherit;text-align:left;cursor:pointer}
+.tide-battlefield button:hover:not(:disabled){border-color:var(--green)}.tide-battlefield button:disabled{opacity:.55;cursor:default}
+.tide-battlefield span,.tide-battlefield small{font-size:12px}.tide-battlefield small{display:block;line-height:1.6;margin-top:5px;color:var(--muted)}
+.tide-reward{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;padding:13px 0;border-top:1px solid var(--line)}.tide-reward strong{color:var(--green)}.tide-reward span{font-size:12px;color:var(--muted)}
+.tide-goldboard{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}.tide-goldboard summary{cursor:pointer;color:var(--green);font-weight:bold}
+.tide-ranking-scroll{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:6px}.tide-ranking-scroll table{width:100%;border-collapse:collapse;font-size:13px}.tide-ranking-scroll th,.tide-ranking-scroll td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line)}.tide-ranking-scroll thead th{position:sticky;top:0;background:var(--surface);color:var(--muted);font-weight:normal}.tide-ranking-scroll tbody th small{display:block;color:var(--muted);font-size:11px;font-weight:normal;margin-top:3px}.tide-ranking-scroll .tide-self{background:#e6eddf}.tide-row-tag{display:inline-block;margin-left:7px;font-size:10px;padding:2px 5px;border-radius:4px;background:#ebe6d7;color:var(--green);font-weight:normal}
+.tide-combat-clock{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0;padding:11px 20px;background:#f3ecd7;border-bottom:1px solid var(--line);color:var(--green);font-size:13px}.tide-combat-clock span{color:var(--muted);font-size:12px}
+.tide-market-rule{line-height:1.9;font-size:13px;color:var(--muted)}.tide-market-rule strong{color:var(--green)}.tide-market-controls{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0}.tide-market-controls label{font-size:12px}.tide-market-controls select{padding:7px 10px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:5px}.tide-market-controls .shop-tabs{flex-wrap:wrap}
+.tide-market-list{display:grid;gap:12px}.tide-market-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:14px;border:1px solid var(--line);border-radius:8px;padding:16px}.tide-market-row p{margin:5px 0 0}.tide-market-price{display:flex;flex-direction:column;gap:5px;font-size:12px}.tide-market-price span,.tide-market-price small{color:var(--muted)}.tide-market-price strong{color:var(--green)}.tide-market-quantity{font-size:12px;white-space:nowrap}.tide-market-quantity input{width:57px;margin-left:5px;padding:7px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)}
+@media (min-width:761px) and (max-width:1200px){.tide-battlefields{grid-template-columns:repeat(2,minmax(0,1fr))}.tide-market-row{grid-template-columns:minmax(0,1fr) auto}.tide-market-quantity{justify-self:start}.tide-market-row>.buy{justify-self:end}}
+@media (max-width:760px){
+  .tide-market-row{grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:14px}
+  .tide-market-row>:first-child{grid-column:1/-1;min-width:0}
+  .tide-market-price{min-width:0}
+  .tide-market-quantity{justify-self:end}
+  .tide-market-quantity input{min-height:44px}
+  .tide-market-row>.buy{grid-column:1/-1;width:100%;min-height:44px}
 }

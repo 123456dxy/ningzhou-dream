@@ -2,6 +2,8 @@
 // 本文件覆盖 sim.mjs 的：纪事、数值公式、世界年度推进、NPC 年度行动、
 // 宗门刷新、人口修剪、新游戏生成、结算。
 #include "core/sim.h"
+#include "core/crafting/cave_garden.h"
+#include "core/crafting/herb_acquisition.h"
 #include "core/social/npc_consumables.h"
 #include "core/character_build.h"
 #include "core/dungeon.h"
@@ -24,6 +26,7 @@
 #include "core/economy.h"
 #include "core/society.h"
 #include "core/tide.h"
+#include "core/content/npc_combat_profiles.h"
 #include "core/npc_learning.h"
 #include "core/location_services.h"
 #include "core/friendship.h"
@@ -1131,10 +1134,13 @@ Game createGame(const CreateOptions& source) {
     artGain(p, "剑", std::max(0, std::max(0, build.sword - 2) * 2 - (hasTalent(p, "gold") ? 6 : 0)));
     if (hasTalent(p, "gold")) artGain(p, "金", 6);
     ensureCalendar(g);
+    crafting::mfInitializeGarden(g);
     ensureEconomy(g);
     ensureSociety(g);
     ensureAdventure(g);
     ensureDungeons(g);
+    tide::ensureTide(g);
+    content::ensureChampionNpcs(g);
     socInitPayroll(g);
     // 五项开局天赋会发放实际物品（法器/丹炉/材料）
     adventureBirth(g);
@@ -1365,13 +1371,8 @@ void monthComplete(Game& g, const Job& job) {
                 g.world.herbs);
             p.herbs += found;
             g.world.herbs -= found;
-            // 按品阶上限随机分类到具体药材
-            const int tier = ordinaryHerbGradeLimit(p);
-            vector<const data::HerbDef*> pool;
-            for (const auto& h : data::HerbDef_TABLE())
-                if (h.grade <= tier &&
-                    h.name.find("妖丹") == string::npos)
-                    pool.push_back(&h);
+            // 野外共用丹方用途阶段与原生境，城中仍只采低品草药；妖丹不会被当作草采到。
+            const auto pool = crafting::mfGatherableHerbs(p, p.location);
             for (int i = 0; i < found && !pool.empty(); ++i) {
                 const data::HerbDef* h = pickOf(g, pool);
                 a.herbs[h->name]++;

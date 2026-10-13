@@ -1,5 +1,8 @@
-param([string]$ReleaseName = '宁州一梦-单文件版-20261012-宗门修正版')
+param([string]$ReleaseName = '宁州一梦-单文件版-20261012-宗门修正版', [switch]$Local)
 $ErrorActionPreference = 'Stop'
+# Keep the escaped -D string arguments compatible with Windows PowerShell 5.1
+# and PowerShell 7. This script-scoped setting does not change the caller.
+$PSNativeCommandArgumentPassing = 'Legacy'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $compilerRoot = 'C:/msys64/ucrt64/bin'
 $compiler = Join-Path $compilerRoot 'g++.exe'
@@ -19,13 +22,14 @@ $allowed = @('.html','.css','.mjs','.png','.jpg','.jpeg','.webp','.woff','.woff2
 $manifest = @()
 Get-ChildItem -LiteralPath $assetRoot -File -Recurse | Sort-Object FullName | ForEach-Object {
     if ($allowed -notcontains $_.Extension.ToLowerInvariant()) { return }
-    $relative = [IO.Path]::GetRelativePath($assetRoot,$_.FullName)
+    # 注意：Windows PowerShell 5.1 的 [IO.Path] 没有 GetRelativePath，改用前缀截取，5.1/7 都能跑。
+    $relative = $_.FullName.Substring($assetRoot.Length + 1)
     $target = Join-Path (Join-Path $runtime 'web') $relative
     New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
     Copy-Item -LiteralPath $_.FullName -Destination $target
 }
 Get-ChildItem -LiteralPath $staging -File -Recurse | Sort-Object FullName | ForEach-Object {
-    $manifest += [ordered]@{path=[IO.Path]::GetRelativePath($staging,$_.FullName).Replace('\','/'); length=$_.Length; sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash}
+    $manifest += [ordered]@{path=$_.FullName.Substring($staging.Length + 1).Replace('\','/'); length=$_.Length; sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash}
 }
 $manifestJson = $manifest | ConvertTo-Json -Depth 10
 [IO.File]::WriteAllText((Join-Path $buildRoot 'manifest.json'),$manifestJson,[Text.UTF8Encoding]::new($false))
@@ -75,11 +79,23 @@ $appManifest = @'
 [IO.File]::WriteAllText((Join-Path $buildRoot 'app.manifest'),$appManifest,[Text.UTF8Encoding]::new($false))
 Push-Location $buildRoot
 try {
-    & $windres '--input=payload.rc' '--output=payload.o' '--output-format=coff'
+    & $windres '--input=payload.rc' '--output=payload.o' '--output-format=coff' 2>&1 | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) { throw 'Could not embed package resource.' }
 } finally { Pop-Location }
 $output = Join-Path $destination ($ReleaseName + '.exe')
-& $compiler '-std=c++20' '-O2' '-Wall' '-Wextra' '-municode' '-mwindows' '-static' '-static-libgcc' '-static-libstdc++' '-finput-charset=UTF-8' '-fexec-charset=UTF-8' ('-DNZ_PACKAGE_ID="'+$packageId+'"') ('-I'+(Join-Path $workspace 'src')) (Join-Path $PSScriptRoot 'launcher.cpp') (Join-Path $workspace 'src/core/json.cpp') (Join-Path $buildRoot 'payload.o') '-lcabinet' '-lwinhttp' '-lws2_32' '-lshell32' '-lole32' '-luuid' '-lcomctl32' '-o' $output
+$localDefine = if ($Local) { '-DNZ_LOCAL_MODE=1' } else { '-DNZ_LOCAL_MODE=0' }
+# 双引号要写成 \"：Windows PowerShell 5.1 会吃掉 -D 值里的普通引号，宏会变成裸十六进制串而编译失败（invalid digit in octal constant）。
+$packageDefine = '-DNZ_PACKAGE_ID=\"' + $packageId + '\"'
+$launcherArgs = @(
+    '-std=c++20','-O2','-Wall','-Wextra','-municode','-mwindows','-static','-static-libgcc','-static-libstdc++',
+    '-finput-charset=UTF-8','-fexec-charset=UTF-8',$localDefine,$packageDefine,
+    ('-I' + (Join-Path $workspace 'src')),(Join-Path $PSScriptRoot 'launcher.cpp'),
+    (Join-Path $workspace 'src/core/foundation/json.cpp'),(Join-Path $buildRoot 'payload.o'),
+    '-lcabinet','-lwinhttp','-lws2_32','-lshell32','-lole32','-luuid','-lcomctl32','-o',$output)
+# g++ 的告警走 stderr，Windows PowerShell 5.1 在 Stop 偏好下会把它当成终止错误，这里临时放宽（5.1/7 都能跑）。
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try { & $compiler @launcherArgs } finally { $ErrorActionPreference = $previousPreference }
 if ($LASTEXITCODE -ne 0) { throw 'Could not build the single-file launcher.' }
 $record = [ordered]@{exe=$output; size=(Get-Item -LiteralPath $output).Length; sha256=(Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash; payloadId=$packageId; buildRoot=$buildRoot; files=$manifest.Count; gameSha256=(Get-FileHash -LiteralPath $builtGame -Algorithm SHA256).Hash}
 [IO.File]::WriteAllText((Join-Path $buildRoot 'release.json'),($record | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))

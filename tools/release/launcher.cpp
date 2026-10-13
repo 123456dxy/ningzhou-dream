@@ -57,9 +57,14 @@ struct Internet {
     explicit Internet(HINTERNET h) : value(h) {}
     ~Internet() { if (value) WinHttpCloseHandle(value); }
 };
+#ifndef NZ_LOCAL_MODE
+// 打包本地测试版时，build-release.ps1 -Local 会以 -DNZ_LOCAL_MODE=1 编译本文件，
+// 让单文件启动器默认以 --local（关闭创建角色/登录/注册与联网模块）运行内置游戏。
+#define NZ_LOCAL_MODE 0
+#endif
 struct Options {
     fs::path dataDir;
-    bool noOpen = false, extractOnly = false, headless = false;
+    bool noOpen = false, extractOnly = false, headless = false, local = NZ_LOCAL_MODE != 0;
     int port = 0;
 };
 struct App {
@@ -386,6 +391,7 @@ void worker() {
         if (!SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) winFail(L"无法设置游戏退出保护");
         fs::path executable = app.runtime/L"ningzhou_web.exe";
         std::wstring command = quote(executable.wstring())+L" --port "+std::to_wstring(port)+L" --no-open";
+        if (app.options.local) command += L" --local";
         STARTUPINFOW startup{}; startup.cb = sizeof(startup);
         PROCESS_INFORMATION process{};
         if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE,
@@ -411,7 +417,7 @@ void worker() {
         bool restored = false;
         const fs::path sessionPath = app.runtime/L"latest-session.json";
         checkNormalPath(app.options.dataDir, sessionPath);
-        if (ready && !app.closing && fs::exists(sessionPath)) {
+        if (ready && !app.closing && !app.options.local && fs::exists(sessionPath)) {
             status(L"正在恢复上次游玩进度……");
             auto saved = readFile(sessionPath);
             std::string error; auto data = Value::parse(saved, &error);
@@ -438,7 +444,8 @@ void worker() {
             auto response = request(port, L"GET", L"/api/state");
             auto state = parsed(response);
             if (response.code != 200 || !state["ok"].asBool()) fail(L"退出前无法读取游戏状态");
-            if (state["hasGame"].asBool()) {
+            // 本地测试版关闭了 /api/export，进度由内置游戏自己的存档目录保存，不走续玩导出。
+            if (state["hasGame"].asBool() && !app.options.local) {
                 auto exported = request(port, L"GET", L"/api/export");
                 auto data = parsed(exported);
                 if (exported.code != 200 || !validExport(data)) fail(L"自动续玩保存失败："+apiError(data));
@@ -516,6 +523,8 @@ Options arguments() {
     for (int i = 1; i < argc; ++i) {
         const std::wstring argument = argv[i];
         if (argument == L"--no-open") options.noOpen = true;
+        else if (argument == L"--local") options.local = true;
+        else if (argument == L"--online") options.local = false;
         else if (argument == L"--headless") { options.headless = true; options.noOpen = true; }
         else if (argument == L"--extract-only") { options.extractOnly = true; options.noOpen = true; }
         else if (argument == L"--data-dir" && i+1 < argc) options.dataDir = argv[++i];

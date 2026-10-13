@@ -295,6 +295,12 @@ struct PillEffect {
 // 使用方式：传角色与丹方，套用原有属性上限和天赋条件。
 // 返回值：基础效果值及说明，不消耗丹药。
 PillEffect artPillEffect(const Player& p, const data::RecipeDef& r);
+// 用途：查询本地丹药标称能力，不受当前角色小境、属性、天赋、库存或耐药截断。
+// 参数：Recipe 为有效目录丹方；返回：本地效果值与说明，修为丹仍按真实规则受吸收上限限制。
+// 副作用：无；不消耗 RNG、推进时间或写档，不保存参数引用；目录不变时可并行调用。
+PillEffect mfCompletePillEffect(const data::RecipeDef& Recipe);
+// 用途：以稳定丹方 ID 查询突破准备门槛；流程：服药资格与材料取得目标；用法：传目录 RecipeId；返回：小境序号，非突破丹或未登记时空值。
+optional<int> mfBreakthroughPillStage(const string& RecipeId);
 
 // 只读服药计划与实际服药共用结算；不复制角色、不消耗随机数。
 // enabled 只表示场外服药自身条件，API 另叠加任务/抉择/斗法等全局阻塞。
@@ -329,9 +335,9 @@ struct CombatPill {
     double value = 0;
     string text;
 };
-// 用途：从丹药源效果提取下场战斗准备种类。
+// 用途：从稳定丹方 ID 获取下场战斗准备种类。
 // 参与流程：战斗丹服药计划与准备提示。
-// 使用方式：传丹方，按既有关键词顺序选择一种准备。
+// 使用方式：传丹方，读取本地已实现的准备规则，不匹配中文文案。
 // 返回值：准备键、值和原有说明，不叠加同类准备。
 CombatPill artCombatPill(const data::RecipeDef& r);
 

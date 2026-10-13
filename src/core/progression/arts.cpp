@@ -3,6 +3,7 @@
 #include "core/progression/manual_study.h"
 #include "core/social/npc_consumables.h"
 #include "core/content/game_ids.h"
+#include "core/content/npc_combat_profiles.h"
 #include "core/content/text_table.h"
 #include "core/crafting/material_supply.h"
 #include "core/economy.h"
@@ -586,12 +587,13 @@ Arts artNpcLoadout(const Npc& npc) {
     const int stage = clampInt(npc.stage, 0, 12);
     const int major = stage / 3;
     const bool sect = !npc.sect.empty();
+    const auto* profile = content::findNpcCombatProfile(npc);
     // Unknown NPC affinities retain the historical sword fallback explicitly.
     DaoId daoId = content::parseDaoId(npc.dao).value_or(DaoId::Sword);
     if (const auto sectId = content::parseSectId(npc.sect)) daoId = content::sectDao(*sectId);
     const string dao(content::legacyDaoKey(daoId));
     arts.focus = dao;
-    const int level = std::min(5, (sect ? 2 : 1) + major);
+    const int level = std::min(5, (profile ? 3 : sect ? 2 : 1) + major);
     const auto equipManual = [&](const string& id, bool main) {
         const ManualEntry* man = findManual(id);
         if (!man || man->stage > stage || arts.manuals.count(id)) return false;
@@ -614,17 +616,19 @@ Arts artNpcLoadout(const Npc& npc) {
     else if (daoId == DaoId::Artifact) { manuals = {"forge", "earth", "bull", "heavy"}; spells = {"earth", "mountainSeal", "gold", "collapse"}; }
     else if (daoId == DaoId::Qi) { manuals = {"zhou", "cloud", "tuna", "wheel"}; spells = {"gather", "hoard", "skim", "qiFlow"}; }
     else { manuals = {"sword", "hidden", "swordcraft", "human"}; spells = {"sword", "swordFocus", "goldcover", "humanSword", "rain"}; }
+    // 特殊传承复用同一套真实功法、神通与境界校验，不额外叠加无来源伤害。
+    if (profile) { manuals = profile->manuals; spells = profile->spells; }
     // 初期散修只具吐纳与少量本命神通；高境界逐步取得完整传承。
     arts.main.clear();
     if (!sect && stage < 3) equipManual("tuna", true);
     else for (const auto& id : manuals) if (equipManual(id, true)) break;
     if (arts.main.empty()) equipManual("tuna", true);
-    const int auxLimit = sect ? std::min(4, 1 + major) : (stage < 3 ? 0 : std::min(3, major));
+    const int auxLimit = profile ? 4 : sect ? std::min(4, 1 + major) : (stage < 3 ? 0 : std::min(3, major));
     for (const auto& id : manuals) {
         if (static_cast<int>(arts.aux.size()) >= auxLimit) break;
         equipManual(id, false);
     }
-    const int nodeLevel = sect ? std::min(5, 2 + major) : (stage < 3 ? 0 : std::min(5, 1 + major));
+    const int nodeLevel = profile ? std::min(5, 3 + major) : sect ? std::min(5, 2 + major) : (stage < 3 ? 0 : std::min(5, 1 + major));
     const int daoIndexValue = daoIndex(dao);
     arts.exp[dao] = ART_THRESHOLDS[nodeLevel];
     for (int l = 1; l <= nodeLevel; ++l)
@@ -1013,21 +1017,73 @@ ForgeInfo artForgeInfo(const Player& p, const string& mainId,
 // ------------------------------------------------------------
 // 丹药效果（对应 artPillEffect / artCombatPill）
 // ------------------------------------------------------------
-// 用途：从丹药源效果提取下场战斗准备种类。
+namespace {
+// 本地六类战斗准备；不把原游戏的源文案当作本地已实现规则。
+enum class PillPreparationKind { Attack, Shield, Reduction, SwordQi, Mana, Speed };
+
+constexpr double CultivationPillValueScale = 4.0;
+constexpr double CultivationPillStageRatio = 0.25;
+
+// 用途：将参考修为换算为本地标称药效；流程：完整目录与真实服丹共用；返回：按既有 JS 四舍五入得到的本地修为点。
+int mfPillCultivationNominalValue(const data::RecipeDef& Recipe) {
+    return jsRound(jsSqrt(static_cast<double>(Recipe.value)) * CultivationPillValueScale);
+}
+
+// 用途：查询角色小境单次吸收上限；流程：当前服丹预览与结算限制；返回：本小境修为需求的25%，沿用既有四舍五入。
+int mfPillCultivationStageLimit(const Player& Player) {
+    return jsRound(realmOf(Player.stage).need * CultivationPillStageRatio);
+}
+
+// 用途：以稳定丹方 ID 确定既有战斗准备；流程：玩家/NPC服丹；用法：传目录 RecipeId；返回：现有六类准备之一。
+PillPreparationKind mfCombatPreparationKind(const string& RecipeId) {
+    static const map<string, PillPreparationKind> Rules = {
+        {"5008", PillPreparationKind::Shield}, {"5120", PillPreparationKind::Shield},
+        {"5009", PillPreparationKind::Reduction}, {"5121", PillPreparationKind::Reduction},
+        {"5203", PillPreparationKind::Reduction}, {"5204", PillPreparationKind::Reduction},
+        {"5225", PillPreparationKind::Reduction},
+        {"5113", PillPreparationKind::SwordQi}, {"5219", PillPreparationKind::SwordQi},
+        {"5005", PillPreparationKind::Mana}, {"5007", PillPreparationKind::Mana},
+        {"5304", PillPreparationKind::Mana}, {"5310", PillPreparationKind::Mana},
+        {"5311", PillPreparationKind::Mana}, {"5312", PillPreparationKind::Mana},
+        {"5313", PillPreparationKind::Mana}, {"5314", PillPreparationKind::Mana},
+        {"5103", PillPreparationKind::Speed}
+    };
+    const auto Rule = Rules.find(RecipeId);
+    return Rule == Rules.end() ? PillPreparationKind::Attack : Rule->second;
+}
+} // namespace
+
+// 用途：以稳定丹方 ID 确定对应大境界准备门槛；流程：服药资格与目录；用法：传 RecipeId；返回：小境序号，未登记时空值。
+optional<int> mfBreakthroughPillStage(const string& RecipeId) {
+    static const map<string, int> RequiredStages = {
+        {"5205", 2},
+        {"5220", 5}, {"5221", 5}, {"5222", 5}, {"5223", 5}, {"5224", 5}, {"5317", 5},
+        {"5406", 8}, {"5421", 8}, {"5422", 8}, {"5424", 8}, {"5425", 8},
+        {"5520", 11}, {"5521", 11}, {"5522", 11}
+    };
+    const auto Required = RequiredStages.find(RecipeId);
+    return Required == RequiredStages.end() ? optional<int>{} : optional<int>{Required->second};
+}
+
+// 用途：从稳定丹方 ID 获取下场战斗准备种类。
 // 参与流程：战斗丹服药计划与准备提示。
-// 使用方式：传丹方，按既有关键词顺序选择一种准备。
+// 使用方式：传丹方，读取本地已实现的准备规则，不匹配中文文案。
 // 返回值：准备键、值和原有说明，不叠加同类准备。
 CombatPill artCombatPill(const data::RecipeDef& r) {
-    const string& t = r.sourceEffect;
-    auto has = [&](const char* kw) { return t.find(kw) != string::npos; };
-    if (has("护罩") || has("护盾"))
+    switch (mfCombatPreparationKind(r.id)) {
+    case PillPreparationKind::Shield:
         return {"shield", 0.2, "下一场起手护盾 +20%气血"};
-    if (has("减伤") || has("免疫") || has("抗性"))
+    case PillPreparationKind::Reduction:
         return {"reduction", 0.12, "下一场所受伤害 −12%"};
-    if (has("剑气")) return {"qi", 2, "下一场起手剑气 +2"};
-    if (has("抽") || has("神识"))
-        return {"mana", 2, "下一场初始与上限灵力 +2"};
-    if (has("遁速")) return {"speed", 10, "下一场撤出切磋损伤减轻"};
+    case PillPreparationKind::SwordQi:
+        return {"qi", 2, "下一场起手剑气 +2"};
+    case PillPreparationKind::Mana:
+        return {"mana", 2, "下一场开局灵力 +1（仅开局生效，容量及每轮恢复量不变）"};
+    case PillPreparationKind::Speed:
+        return {"speed", 10, "下一场先手与撤离判定遁速 +10"};
+    case PillPreparationKind::Attack:
+        break;
+    }
     return {"attack", 0.1, "下一场伤害 +10%（同类不叠加）"};
 }
 
@@ -1036,15 +1092,11 @@ CombatPill artCombatPill(const data::RecipeDef& r) {
 // 使用方式：传角色与丹方，套用原有属性上限和天赋条件。
 // 返回值：基础效果值及说明，不消耗丹药。
 PillEffect artPillEffect(const Player& p, const data::RecipeDef& r) {
-    // 各境界所需修为
-    static const int needs[13] = {110, 190, 320, 900, 1600, 2800, 3600,
-                                  5400, 8000, 18000, 30000, 46000, 0};
     PillEffect e;
-    const int stage = clampInt(p.stage, 0, 12);
 
     if (r.kind == "xp") {
         e.value = hasTalent(p, "oddMeridian") ? 0 :
-            std::min(jsRound(needs[stage] * 0.25), jsRound(jsSqrt(static_cast<double>(r.value)) * 4));
+            std::min(mfPillCultivationStageLimit(p), mfPillCultivationNominalValue(r));
     } else if (r.kind == "dao") {
         e.value = jsRound(r.value / 10.0);
     } else if (r.kind == "body") {
@@ -1091,6 +1143,22 @@ PillEffect artPillEffect(const Player& p, const data::RecipeDef& r) {
     else
         e.text = "斗法伤害 +10%";
     return e;
+}
+
+// 用途：生成角色无关的本地完整药效；流程：坊市/炼丹目录；返回：标称值与实际吸收限制说明，不改变服用结算。
+PillEffect mfCompletePillEffect(const data::RecipeDef& Recipe) {
+    if (Recipe.kind == "xp") {
+        PillEffect Effect;
+        Effect.value = mfPillCultivationNominalValue(Recipe);
+        Effect.text = content::formatText(TextId::PillCultivationCompleteEffect,
+            {{"NominalValue", std::to_string(Effect.value)}});
+        return Effect;
+    }
+    Player Reference;
+    Reference.apt = 0;
+    Reference.arts.aptPills = 0;
+    Reference.traits.clear();
+    return artPillEffect(Reference, Recipe);
 }
 
 namespace {
@@ -1155,15 +1223,22 @@ PillPlan pillPlan(const Player& p, const data::RecipeDef& r) {
     };
     const string& kind = r.kind;
     if (kind == "breakthrough") {
-        info.requiredStage = r.sourceEffect.find("结婴") != string::npos ? 8 :
-            r.sourceEffect.find("化神") != string::npos ? 11 : r.name == "筑基丹" ? 2 : 5;
-        info.usage += "；仅在" + realmName(info.requiredStage) + "服用，准备对应大境界突破";
+        const auto RequiredStage = mfBreakthroughPillStage(r.id);
+        info.requiredStage = RequiredStage.value_or(-1);
+        if (RequiredStage)
+            info.usage += "；仅在" + realmName(*RequiredStage) + "服用，准备对应大境界突破";
+        else if (info.reason.empty()) info.reason = "这味丹药尚未定义对应的突破境界。";
         info.effect = "下一次大境界突破成功率加成 +6个百分点（同类不叠加，仍受总成功率上限约束）";
         if (!a.breakBuff.empty()) info.effect += "；将覆盖已有突破准备";
         if (info.reason.empty() && p.stage != info.requiredStage)
             info.reason = "该丹只用于对应的大境界准备。";
     } else if (kind == "xp") {
         personValue(&Person::xp, std::min(realmOf(p.stage).need, p.xp + value), "修为");
+        info.usage += content::formatText(TextId::PillCultivationUseLimit, {
+            {"NominalValue", std::to_string(mfPillCultivationNominalValue(r))},
+            {"StageLimit", std::to_string(mfPillCultivationStageLimit(p))},
+            {"RemainingValue", std::to_string(std::max(0, realmOf(p.stage).need - p.xp))}
+        });
         if (hasTalent(p, "oddMeridian")) info.effect = info.baseEffect.text;
     } else if (kind == "heal") {
         personValue(&Person::health, std::min(100, p.health + value), "健康度", "个百分点");
@@ -1217,9 +1292,9 @@ PillPlan pillPlan(const Player& p, const data::RecipeDef& r) {
         const Battle after = battleReferenceWithPreparation(p, plan.prep.key, plan.prep.value);
         if (plan.prep.key == "mana") {
             info.effect = describe("下一场开局灵力", before.mana, after.mana);
-            info.effect += "；灵力上限" + std::to_string(battleManaCap(p));
+            info.effect += "；容量仍为" + std::to_string(battleManaCap(p)) + "，每轮恢复量不变";
         } else if (plan.prep.key == "speed") {
-            info.effect = describe("下一场撤离判定遁速", battleSpeed(p) + before.speed, battleSpeed(p) + after.speed);
+            info.effect = describe("下一场先手与撤离判定遁速", battleSpeed(p) + before.speed, battleSpeed(p) + after.speed);
         } else if (plan.prep.key == "shield") {
             info.effect = describe("下一场开局护盾", before.shield, after.shield);
             info.effect += "；总开局护盾最多为斗法气血上限30%";
@@ -1232,7 +1307,7 @@ PillPlan pillPlan(const Player& p, const data::RecipeDef& r) {
         } else {
             info.effect = describe("下一场丹药伤害加成", jsRound(before.buff * 100), jsRound(after.buff * 100), "个百分点");
         }
-        info.usage += "；下场斗法生效，同类准备覆盖、不叠加";
+        info.usage += "；下场斗法开局后消费准备，同类准备覆盖、不叠加";
     }
     const int afterDetox = kind == "detox" ? std::max(0, a.poison - value) : a.poison;
     info.poisonAfter = std::min(100, afterDetox + info.poison);
@@ -1275,14 +1350,16 @@ string artApplyPill(Player& p, const string& id) {
     return "";
 }
 
+// 用途：服丹后记录实际收益及净丹毒变化；流程：玩家行囊服药；用法：传游戏与丹方 ID；返回：成功为空、失败为原因，失败不写纪事。
 string artUsePill(Game& g, const string& id) {
     const auto* recipe = findRecipe(id);
     if (!recipe) return "没有这张丹方。";
     const auto info = artPillUseInfo(g.player, *recipe);
     const string error = artApplyPill(g.player, id);
     if (!error.empty()) return error;
-    logEvent(g, "self", "服下" + recipe->name + "：" + info.baseEffect.text, true, "",
-             "丹毒 +" + std::to_string(info.poison));
+    const string PoisonChange = "丹毒 " + string(info.poisonDelta >= 0 ? "+" : "") +
+        std::to_string(info.poisonDelta);
+    logEvent(g, "self", "服下" + recipe->name + "：" + info.effect, true, "", PoisonChange);
     return "";
 }
 
@@ -1436,23 +1513,35 @@ static bool lookupManual(const string& id, ManualEntryView& out) {
     return false;
 }
 
-// 公开版：给界面用（lookupManual 是本文件的内部实现）
-// 用途：公开功法元信息并补实际触发机制说明。
-// 参与流程：功法目录、学习与配装展示。
-// 使用方式：传 ID 和可写输出记录。
-// 返回值：找到时为真并填写 out；无定义时为假。
+// 用途：一次构建不可变功法展示目录；流程：功法/NPC授业纯查询；返回：静态目录常量引用，仅包含内容定义，不缓存玩家境界、权限、价格或已学状态。静态初始化无IO/RNG，线程安全。
+static const map<string, ManualInfo>& mfManualInfoCatalog() {
+    static const map<string, ManualInfo> Catalog = [] {
+        map<string, ManualInfo> Entries;
+        // 用途：按原基础表优先规则加入一个内容定义；返回：无，不重写重复ID或访问玩家状态。
+        const auto AddDefinition = [&](const string& ManualId) {
+            if (Entries.count(ManualId)) return;
+            ManualEntryView Definition;
+            if (!lookupManual(ManualId, Definition)) return;
+            ManualInfo Info;
+            Info.found = true; Info.id = Definition.id; Info.name = Definition.name; Info.dao = Definition.dao;
+            const auto* Manual = findManual(ManualId);
+            Info.effect = Manual ? Manual->effect + manualTriggerDesc(*Manual) : Definition.effect;
+            Info.coefficients = Definition.coefficients; Info.stage = Definition.stage; Info.price = Definition.price;
+            Entries.emplace(ManualId, std::move(Info));
+        };
+        for (const auto& Definition : data::BaseManualDef_TABLE()) AddDefinition(Definition.id);
+        for (const auto& Definition : data::ManualDef_TABLE()) AddDefinition(Definition.id);
+        return Entries;
+    }();
+    return Catalog;
+}
+
+// 用途：兼容原公共功法查询并复制不可变定义；流程：功法目录、NPC请教和配装；用法：传稳定ID和可写输出，动态学习资格仍由调用方计算；返回：找到为真，无定义返回假且保持out不变；无时间、RNG、IO或游戏写入。
 bool findManualInfo(const string& id, ManualInfo& out) {
-    ManualEntryView v;
-    if (!lookupManual(id, v)) return false;
-    out.found = true;
-    out.id = v.id;
-    out.name = v.name;
-    out.dao = v.dao;
-    const ManualEntry* man = findManual(id);
-    out.effect = man ? man->effect + manualTriggerDesc(*man) : v.effect;
-    out.coefficients = v.coefficients;
-    out.stage = v.stage;
-    out.price = v.price;
+    const auto& Catalog = mfManualInfoCatalog();
+    const auto Found = Catalog.find(id);
+    if (Found == Catalog.end()) return false;
+    out = Found->second;
     return true;
 }
 

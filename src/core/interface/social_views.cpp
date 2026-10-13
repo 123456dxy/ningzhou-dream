@@ -10,6 +10,7 @@
 #include "core/conflict.h"
 #include "core/renown.h"
 #include "core/economy.h"
+#include "core/shop.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 
@@ -20,10 +21,14 @@ namespace nz::api::view {
 // 使用方式：传入const Game& game, Value& state，按本模块入口调用。
 // 返回值：无；完成说明所述写入或展示操作。
 void appendSocialState(const Game& game, Value& state) {
+    mfAppendSocialState(game, state, shop::mfMarketSaleContext(game));
+}
+
+void mfAppendSocialState(const Game& GameState, Value& State, const shop::MarketSaleContext& MarketContext) {
 
     // ---- 人情 ----
     {
-        const Bonds& bonds = game.bonds;
+        const Bonds& bonds = GameState.bonds;
         Value entry(json::Object{});
         entry.set("master", str(bonds.master));
         entry.set("partner", str(bonds.partner));
@@ -41,13 +46,13 @@ void appendSocialState(const Game& game, Value& state) {
             for (const auto& [key, value] : bonds.stories) st.set(key, num(value));
             entry.set("stories", std::move(st));
         }
-        state.set("bonds", std::move(entry));
+        State.set("bonds", std::move(entry));
     }
     {
         json::Array actions;
         for (const char* kind : {"lesson", "teach", "together", "part", "dismiss"}) {
-            const auto info = bondActionInfo(game, kind);
-            const auto reason = bondActionError(game, kind);
+            const auto info = bondActionInfo(GameState, kind);
+            const auto reason = bondActionError(GameState, kind);
             Value action(json::Object{});
             action.set("id", str(info.id));
             action.set("name", str(info.name));
@@ -58,13 +63,13 @@ void appendSocialState(const Game& game, Value& state) {
             action.set("reason", str(reason));
             actions.push_back(std::move(action));
         }
-        state.set("bondActions", Value(std::move(actions)));
+        State.set("bondActions", Value(std::move(actions)));
     }
 
     // ---- 附近的人（带好感度，供 NPC 面板直接用）----
     {
         json::Array arr;
-        for (const auto* npc : play::nearbyPeople(game)) {
+        for (const auto* npc : play::nearbyPeople(GameState)) {
             Value entry(json::Object{});
             entry.set("id", str(npc->id));
             entry.set("name", str(npc->name));
@@ -91,64 +96,64 @@ void appendSocialState(const Game& game, Value& state) {
             }
             {
                 json::Array lessons;
-                for (const auto& item : npcLessons(game, npc->id)) {
+                for (const auto& item : npcLessons(GameState, npc->id)) {
                     Value lesson(json::Object{}); lesson.set("kind", str(item.kind)); lesson.set("id", str(item.id)); lesson.set("name", str(item.name)); lesson.set("dao", str(item.dao)); lesson.set("stage", num(item.stage)); lesson.set("stageName", str(realmName(item.stage))); lesson.set("days", num(item.days)); lesson.set("creditCost", num(item.creditCost)); lesson.set("stoneCost", num(item.stoneCost)); lesson.set("affinityNeed", num(item.affinityNeed)); lesson.set("learned", Value(item.learned)); lesson.set("enabled", Value(item.enabled)); lesson.set("reason", str(item.reason)); lessons.push_back(std::move(lesson));
                 }
                 entry.set("learning", Value(std::move(lessons)));
             }
             entry.set("apt", num(npc->apt));
             entry.set("insight", num(npc->insight));
-            entry.set("relation", num(relationOf(game, npc->id)));
+            entry.set("relation", num(relationOf(GameState, npc->id)));
             // 道友往来：交情与「是否打过招呼」
             {
-                const int cr = friendship::creditOf(game, npc->id);
+                const int cr = friendship::creditOf(GameState, npc->id);
                 entry.set("credit", num(cr));
                 entry.set("creditLabel", str(friendship::creditLabel(cr)));
-                auto bit = game.player.npcBonds.find(npc->id);
+                auto bit = GameState.player.npcBonds.find(npc->id);
                 entry.set("greeted",
-                      Value(bit != game.player.npcBonds.end() && bit->second.greeted));
+                      Value(bit != GameState.player.npcBonds.end() && bit->second.greeted));
             }
-            entry.set("relationLabel", str(play::relationLabel(relationOf(game, npc->id))));
-            entry.set("isMaster", Value(game.bonds.master == npc->id));
-            entry.set("isPartner", Value(game.bonds.partner == npc->id));
+            entry.set("relationLabel", str(play::relationLabel(relationOf(GameState, npc->id))));
+            entry.set("isMaster", Value(GameState.bonds.master == npc->id));
+            entry.set("isPartner", Value(GameState.bonds.partner == npc->id));
             entry.set("isDisciple",
-                  Value(std::find(game.bonds.disciples.begin(),
-                                  game.bonds.disciples.end(),
-                                  npc->id) != game.bonds.disciples.end()));
+                  Value(std::find(GameState.bonds.disciples.begin(),
+                                  GameState.bonds.disciples.end(),
+                                  npc->id) != GameState.bonds.disciples.end()));
             arr.push_back(std::move(entry));
         }
-        state.set("nearby", Value(std::move(arr)));
+        State.set("nearby", Value(std::move(arr)));
     }
 
     // ---- 通讯录统计 ----
     {
         int known = 0, here = 0;
-        for (const auto& npc : game.npcs) {
+        for (const auto& npc : GameState.npcs) {
             if (!npc.alive) continue;
-            if (npc.location == game.player.location) ++here;
-            const bool isBond = (game.bonds.master == npc.id) ||
-                                (game.bonds.partner == npc.id) ||
-                                std::find(game.bonds.disciples.begin(),
-                                          game.bonds.disciples.end(),
-                                          npc.id) != game.bonds.disciples.end();
-            if (relationOf(game, npc.id) != 0 || isBond) ++known;
+            if (npc.location == GameState.player.location) ++here;
+            const bool isBond = (GameState.bonds.master == npc.id) ||
+                                (GameState.bonds.partner == npc.id) ||
+                                std::find(GameState.bonds.disciples.begin(),
+                                          GameState.bonds.disciples.end(),
+                                          npc.id) != GameState.bonds.disciples.end();
+            if (relationOf(GameState, npc.id) != 0 || isBond) ++known;
         }
         Value entry(json::Object{});
         entry.set("known", num(known));
         entry.set("here", num(here));
-        state.set("rosterStat", std::move(entry));
+        State.set("rosterStat", std::move(entry));
     }
 
     // ---- 坊市与洞府的额外信息 ----
-    state.set("contribution", num(game.economy.contribution));
+    State.set("contribution", num(GameState.economy.contribution));
     // 身份与恶名：宗门页常显，缺了会显示成「—」和 0
-    state.set("rank", str(socRank(game.player)));
-    state.set("notoriety", num(game.bonds.notoriety));
+    State.set("rank", str(socRank(GameState.player)));
+    State.set("notoriety", num(GameState.bonds.notoriety));
 
-    state.set("notorietyNote", str(conflict::notorietyNote(game)));
+    State.set("notorietyNote", str(conflict::notorietyNote(GameState)));
     // ---- 声望：档位 + 实际加成，让玩家看得见它有什么用 ----
     {
-        const int rn = game.player.renown;
+        const int rn = GameState.player.renown;
         Value entry(json::Object{});
         entry.set("value", num(rn));
         entry.set("tier", str(renown::tierOf(rn).name));
@@ -159,9 +164,9 @@ void appendSocialState(const Game& game, Value& state) {
         entry.set("buyDiscount", num(renown::buyDiscount(rn)));
         entry.set("sellBonus", num(renown::sellBonus(rn)));
         entry.set("sellLimit", num(renown::sellLimit(rn)));
-        entry.set("marketCashCap", num(ecoMarketBudget(game)));
-        entry.set("marketTier", num(ecoMarketTier(game.player)));
-        entry.set("marketBudgetRule", str("声望基础额度与当前市场层级最高单枚丹药收购价取较高值，每月刷新；同月交易只扣减剩余资金。"));
+        entry.set("marketCashCap", num(MarketContext.NextMonthBudget));
+        entry.set("marketTier", num(ecoMarketTier(GameState.player)));
+        entry.set("marketBudgetRule", str(mfMarketBudgetRule()));
         entry.set("firstImpression", num(renown::firstImpression(rn)));
         entry.set("libraryDiscount", num(renown::libraryDiscount(rn)));
         entry.set("stipendBonus", num(renown::stipendBonus(rn)));
@@ -181,7 +186,7 @@ void appendSocialState(const Game& game, Value& state) {
         }
         {
             json::Array arr;
-            for (const auto& source : renown::sources(game)) {
+            for (const auto& source : renown::sources(GameState)) {
                 Value value(json::Object{});
                 value.set("id", str(source.id)); value.set("name", str(source.name)); value.set("gainText", str(source.gainText));
                 json::Array conditions; for (const auto& condition : source.conditions) conditions.push_back(str(condition));
@@ -194,7 +199,7 @@ void appendSocialState(const Game& game, Value& state) {
             }
             entry.set("sources", Value(std::move(arr)));
         }
-        state.set("renownInfo", std::move(entry));
+        State.set("renownInfo", std::move(entry));
     }
 }
 

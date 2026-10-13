@@ -52,9 +52,24 @@ int main() {
     nztest::runPlayerFixTests();
     nztest::runCraftingFixTests();
     nztest::runCatalogDisplayTests();
+    nztest::runTideRuleTests();
+    nztest::runTideIntegrationTests();
+    nztest::runTideApiTests();
+
     nztest::runCharacterBuildTests();
     nztest::runAlchemyEconomyTests();
     nztest::runStudyNpcTests();
+    nztest::mfRunCraftPriceTests();
+    nztest::mfRunCraftTimingTests();
+    nztest::mfRunResourcePointTests();
+    nztest::mfRunCaveGardenTests();
+    nztest::mfRunCaveApiTests();
+    nztest::mfRunBattleScalingTests();
+    nztest::mfRunCombatHealthTests();
+    nztest::mfRunIntelPurchaseTests();
+    nztest::mfRunPillEffectsTests();
+    nztest::mfRunHerbAcquisitionTests();
+    nztest::mfRunTimePerformanceTests();
 
     const int f = nztest::failures();
     std::printf("\n===== 结果: %s（%d 项失败）=====\n",

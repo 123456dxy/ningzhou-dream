@@ -4,6 +4,7 @@
 
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/checkpoint.h"
 #include "core/sim.h"
 
@@ -221,7 +222,7 @@ void runBattleMechanismTests() {
         Game g = fight({"fire", "fireburst"}); Battle& b = *g.player.arts.battle;
         hand(b, {"fire", "fire"});
         battleTurn(g, "fire"); const int first = b.burn;
-        checkEq(first, jsRound((BATTLE_POWER[g.player.stage] + 12) * 0.1), "无功法火诀施加基础灼烧");
+        checkEq(first, jsRound(mfBattleDamageBasis(g.player.stage) * 0.1), "无功法火诀按统一伤害基底施加基础灼烧");
         battleTurn(g, "fire"); checkEq(b.burn, first * 2, "无功法重复施火天然累积灼烧");
         for (int i = 0; i < 6; ++i) { hand(b, {"fire"}); battleTurn(g, "fire"); }
         checkEq(b.burn, first * 8, "多次施火不被旧战力60%上限截断");
@@ -247,7 +248,7 @@ void runBattleMechanismTests() {
         check(master.player.arts.battle->burn > novice.player.arts.battle->burn, "功法层数提高灼烧附加量");
         Game combo = fight({"woodSeal", "fire"}, {"3-2", "3-4"}); Battle& b = *combo.player.arts.battle;
         hand(b, {"woodSeal", "fire"}); battleTurn(combo, "woodSeal"); battleTurn(combo, "fire");
-        checkEq(b.burn, jsRound((BATTLE_POWER[combo.player.stage] + 12) * 0.1 * 1.5 * 2 * 1.5),
+        checkEq(b.burn, jsRound(mfBattleDamageBasis(combo.player.stage) * 0.1 * 1.5 * 2 * 1.5),
                 "相生、灼烧翻倍与薪火加成相乘，不受旧24%单次截断");
     }
     {
@@ -285,7 +286,7 @@ void runBattleMechanismTests() {
         for (int i = 0; i < 3; ++i) { hand(b, {"corrode"}); battleTurn(g, "corrode"); }
         checkEq(b.poison, 9, "无功法三次腐毒咒天然累积九层，不被六层封顶");
         const int enemyHp = b.enemyHp; b.intentKind = "guard"; battleTurn(g, "end");
-        checkEq(enemyHp - b.enemyHp, jsRound((BATTLE_POWER[g.player.stage] + 12) * 0.035 * 9),
+        checkEq(enemyHp - b.enemyHp, jsRound(mfBattleDamageBasis(g.player.stage) * 0.035 * 9),
                 "九层毒按真实层数跳伤");
         checkEq(b.poison, 9, "无毒增长功法时持续中的毒保留全部层数");
         b.enemyShield = 0; hand(b, {"poisonBurst"}); const auto preview = battlePreview(g.player, b, "poisonBurst");
@@ -387,7 +388,10 @@ void runBattleMechanismTests() {
         battleStart(g, enemy);
         const Battle& b = *g.player.arts.battle;
         check(!b.playerFirst, "更快的妖兽实际取得先手");
-        checkEq(b.shield, 0, "妖兽先手攻击实际消耗开局护盾");
+        // 固定种子下新伤害尺度的首击为19；器道开局20盾吸收19后保留1，不能要求盾必定耗尽。
+        checkEq(b.intentRaw, 19, "新伤害尺度下固定种子妖兽先手攻击为19");
+        checkEq(b.shield, 1, "妖兽先手攻击实际消耗19点开局护盾，剩余1");
+        checkEq(b.hp, b.max, "妖兽先手攻击被开局护盾完全吸收，气血不减少");
         checkEq(b.enemyMax - b.enemyHp, 3, "妖兽先手攻击的盾挡也触发体道反震");
     }
     {

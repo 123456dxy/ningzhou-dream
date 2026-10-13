@@ -2,6 +2,7 @@
 #include "core/api.h"
 #include "core/arts.h"
 #include "core/crafting/material_supply.h"
+#include "core/crafting/craft_prices.h"
 #include "core/economy.h"
 #include "core/play.h"
 #include "core/save.h"
@@ -23,7 +24,7 @@ Game alchemyGame() {
     player.arts.main.clear(); player.arts.aux.clear(); player.arts.manuals.clear(); player.arts.nodes.clear();
     player.arts.herbs.clear(); player.herbs=0; player.arts.potions.clear();
     player.arts.furnace="furnace-1"; player.arts.durability=40;
-    game.economy.sold.clear(); game.economy.marketCash=400;
+    game.economy.sold.clear(); game.economy.marketCash=310;
     return game;
 }
 // 用途：准备指定炉数配料；流程：各结算路径回归；返回：无，只按真实配方入库。
@@ -47,15 +48,17 @@ void runAlchemyEconomyTests() {
         const auto before=saveToJson(game);
         // 固定案例独立锁定真实采购成本与经济目标，避免只复述实现公式。
         struct Sample { const char* id; int materials, fee, sale; };
-        for (const auto& row: {Sample{"5001",27,14,90}, Sample{"5101",144,20,361}, Sample{"5201",180,26,453}}) {
+        for (const auto& row: {Sample{"5001",21,14,32}, Sample{"5101",112,20,168}, Sample{"5201",140,26,210}}) {
             const auto quote=crafting::materialQuote(game,"brew",row.id,1);
             check(quote.enabled,"一至三品代表丹方的低阶配料确实能采购");
             checkEq(quote.totalCost,row.materials,"全成本使用坊市真实药材采购报价");
             const auto brew=artBrewInfo(game.player,row.id);
             checkEq(brew.cost,row.fee,"开炉费用保持原值");
-            checkEq(shop::salePrice(game,"potion",row.id),row.sale,"售价覆盖真实采购基价及失败风险");
-            check(brew.chance*brew.output*row.sale-row.materials-row.fee-0.5>0,
-                  "丹术10无增产天赋的代表丹方含耐久摊销后期望盈利");
+            checkEq(shop::salePrice(game,"potion",row.id),row.sale,"成品基础售价按完整原料当前市价一点五倍计算");
+            const auto Market = play::marketList(game);
+            const auto Offer = std::find_if(Market.begin(), Market.end(), [&](const auto& Item) { return Item.kind == "potion" && Item.id == row.id; });
+            check(Offer != Market.end() && Offer->price == row.materials * 3,
+                  "成品基础买价按完整原料当前市价三倍计算");
         }
         const auto high=crafting::materialQuote(game,"brew","5202",1);
         check(!high.enabled,"高阶配料不因炼丹利润调整而出现在普通坊市");
@@ -88,11 +91,11 @@ void runAlchemyEconomyTests() {
         const auto result=shop::sell(game,"potion","5001");
         check(result.ok,"炼丹成品实际可卖给坊市");
         checkEq(result.gain,quote.returnStones,"报价与实际出售收入相同");
-        checkEq(game.player.stones,stones+90,"真实出售增加新版灵石金额");
-        checkEq(game.economy.marketCash,cash-90,"收购仍消耗商人资金");
-        game.economy.marketCash=89;
+        checkEq(game.player.stones,stones+32,"真实出售增加新版灵石金额");
+        checkEq(game.economy.marketCash,cash-32,"收购仍消耗商人资金");
+        game.economy.marketCash=31;
         check(!shop::sell(game,"potion","5001").ok,"商人现金不足仍不能透支收购");
-        game.economy.marketCash=400; game.economy.sold["potion:5001"]=8;
+        game.economy.marketCash=310; game.economy.sold["potion:5001"]=8;
         check(!shop::sell(game,"potion","5001").ok,"既有同类货品每月需求上限不变");
     }
     {
@@ -115,7 +118,7 @@ void runAlchemyEconomyTests() {
     for (const int stage : {0,3,6,9,12}) for (const double market : {0.88,1.0,1.16}) {
         Game game=alchemyGame(); game.player.stage=stage; game.world.market=market;
         const int tier=ecoMarketTier(game.player);
-        checkEq(tier,stage==12?6:1+stage/3,"大境界对应稳定收购市场层级，化神覆盖六品");
+        checkEq(tier,artTier(game.player),"收购市场层级覆盖真实炼制及突破准备品阶");
         string expensive; int price=0;
         for (const auto& recipe:data::RecipeDef_TABLE()) if (recipe.grade<=tier) {
             const int value=shop::salePrice(game,"potion",recipe.id);
@@ -125,13 +128,17 @@ void runAlchemyEconomyTests() {
         const int budget=ecoMarketBudget(game);
         checkEq(game.economy.marketCash,budget,"初始化采用统一月度预算");
         check(budget>=price,"每个市场层级至少能收购一枚该层级最贵丹药");
-        checkEq(budget,std::max(400,price),"预算有明确有限上限，不无限注资");
+        const int RealmMultiplier = 1 << (stage / 3);
+        const auto StandardGear = crafting::mfQuoteStandardGearPrice(game, tier);
+        checkEq(budget,std::max({400,price,StandardGear.SellPrice}) * 3 * RealmMultiplier,"整体月资金预算保障丹药和标准法器，再按基础三倍及大境界翻倍");
         game.player.arts.potions[expensive]=2;
         const int stones=game.player.stones;
         const auto sale=shop::sell(game,"potion",expensive);
         check(sale.ok && sale.gain==price,"对应境界真实卖出完整高价值丹药");
         checkEq(game.player.stones,stones+price,"高阶丹实际获得全额灵石");
         checkEq(game.economy.marketCash,budget-price,"高阶收购足额扣减本月资金");
+        // 翻倍后的预算可收多枚；将其余资金视为已经用于其他货物，再验证真实不足一枚时拒收。
+        game.economy.marketCash = price - 1;
         const int remaining=game.economy.marketCash;
         check(!shop::sell(game,"potion",expensive).ok,"月资金耗尽后不能再收同价丹药");
         ecoRefresh(game);
@@ -143,7 +150,7 @@ void runAlchemyEconomyTests() {
     }
     {
         Game game=alchemyGame(); game.economy.month=-1; ensureEconomy(game);
-        checkEq(game.economy.marketCash,447,"炼气无声望预算以原400为基础，仅提升到一品最高单价");
+        checkEq(game.economy.marketCash,1440,"炼气无声望新月预算覆盖二品标准法器480再乘三倍");
         game.player.arts.potions["5512"]=1;
         const int stones=game.player.stones, cash=game.economy.marketCash;
         check(!shop::sell(game,"potion","5512").ok,"低阶角色不能凭高阶丹药透支当前层级资金");
@@ -157,7 +164,7 @@ void runAlchemyEconomyTests() {
         restored.clock.days+=30; ecoRefresh(restored);
         check(shop::sell(restored,"potion","5512").ok,"晋阶后次月六品成品可以变现");
         Game famous=alchemyGame(); famous.player.renown=100000;
-        checkEq(ecoMarketBudget(famous),2400,"低阶高声望保留原2400额度为基础");
+        checkEq(ecoMarketBudget(famous),7200,"低阶高声望2400基础额度再乘三倍");
     }
     // 实际即时/年度动作分别覆盖成功和失败，验证加成没有只停留在预览层。
     for (const bool success: {false,true}) for (const bool annual: {false,true}) {
@@ -209,9 +216,9 @@ void runAlchemyEconomyTests() {
         for (const auto& entry:state["brewOptions"].asArray()) if (entry["id"].asString()=="5001") {
             found=true; const auto brew=artBrewInfo(scope.session.g.player,"5001");
             checkEq(entry["output"].asInt(),2,"真实状态接口下发丹童成丹数");
-            checkEq(entry["sellPrice"].asInt(),90,"真实状态接口下发统一成品收购价");
+            checkEq(entry["sellPrice"].asInt(),32,"真实状态接口下发统一成品收购价");
             checkNear(entry["expectedOutput"].asNumber(),brew.chance*2,"真实状态接口下发含失败风险的期望产量");
-            checkNear(entry["expectedSaleIncome"].asNumber(),brew.chance*2*90,"收入预览由后端统一计算");
+            checkNear(entry["expectedSaleIncome"].asNumber(),brew.chance*2*32,"收入预览由后端统一计算");
         }
         check(found,"状态接口保留化淤丹炼制选项");
         check(saveToJson(scope.session.g)==before,"经济展示接口不推进时间或修改存档");

@@ -6,6 +6,8 @@
 
 ## 统计口径
 
+本轮新增入口另列，不改写2026-10-12的历史口径：`crafting/craft_prices.h`提供完整材料定价报价，`crafting/craft_timing.h`提供品阶时长，`crafting/cave_garden.h`提供灵田纯报价和原子命令；`resource_points.h`提供默认关闭的强ID开发目录与功能闸门。`combat/battle_scaling.h`集中攻击、毒伤、灼烧的战力伤害基数。`shop.h`新增纯迁府报价。洞府和定价维护方式分别见 [洞府灵田](CAVE_GARDEN.md)、[制作时长](CRAFT_TIMING.md)、[资源点设计](RESOURCE_POINTS.md)。`interface/cave_views.h`和`interface/craft_price_views.h`为只读JSON适配，仍归内部接口而非新的HTTP协议入口。
+
 - 公共统计范围：core 根目录保留的兼容公共头，加 `content/game_ids.h`、`content/text_table.h` 、`interface/routes.h` 和 `crafting/material_supply.h`。这里的“公共”指调用方可使用的 C++ 入口；项目目前没有安装/导出头的独立边界。
 - 只计 namespace 顶层、以分号结束的显式自由函数声明。每一处声明计 1 条，函数重载分别计数；重复声明仍是两条声明，另给去重数。
 - 不计 struct/class 成员、构造函数、静态成员函数、函数对象/回调类型、控制语句、数据字段、常量、类型声明，以及 cpp 文件中的实现或局部函数。
@@ -505,6 +507,7 @@ BrewInfo artBrewInfo(const Player& p, const string& recipeId);
 ForgeInfo artForgeInfo(const Player& p, const string& mainId, const string& auxId, const string& coreId, const string& shapeId);
 vector<ForgeMaterialCost> artForgeMaterials(const Player& p, const string& mainId, const string& auxId, const string& coreId);
 PillEffect artPillEffect(const Player& p, const data::RecipeDef& r);
+PillEffect mfCompletePillEffect(const data::RecipeDef& Recipe);
 PillUseInfo artPillUseInfo(const Player& p, const data::RecipeDef& r);
 string artUsePill(Game& g, const string& id);
 CombatPill artCombatPill(const data::RecipeDef& r);
@@ -976,12 +979,13 @@ template <typename T> T* pickOf(Game& g, vector<T*>& items) { /* 头文件内定
 
 以下 15 条显式自由函数声明用于视图实现之间共享，并不表示新增 HTTP API。调用方优先使用 `api.h` / `api_exploration.h`；视图不得推进时间、消耗 RNG、绑定会话或访问存档。
 
-### `interface/views.h` · 13 条内部声明
+### `interface/views.h` · 14 条内部声明
 
 namespace：`nz::api::view`。类型 `ViewContext` 定义于 views.h，用显式上下文传入账号拥有的展示事实。
 
 ```cpp
 json::Value state(const Game& game, const ViewContext& context = {});
+json::Value mfAchievementsView(const Game& GameState, const legacy::Archive& ArchiveState);
 json::Value battle(const Game& game);
 json::Value equipment(const Player& player, const Gear& gear);
 json::Value spellPreview(const Player& player, const SpellDef& spell);
@@ -1016,3 +1020,19 @@ std::string breakthroughReason(const Game& game, const BreakthroughInfo& info);
 - crafting/material_supply.h：materialQuote、buyMaterials、materialQuoteJson、recordForgeMaterials、salvageQuote、salvageMaterials、salvageQuoteJson（7条；namespace nz::crafting）。
 - adventure.h：adventureHarvestHerbs（具体药材奖励1条）。
 - npc_learning.h：npcPortrait(id,gender,sect)、npcPortrait(Npc)（稳定画像2条）。
+
+### 2026-10-13 战斗与药材补充
+
+以下入口不改写上方历史数量，也不新增 HTTP 路由。所有查询不推进时间、不消耗随机数、不写存档。
+
+| 公共头 | namespace 与调用入口 | 契约 |
+| --- | --- | --- |
+| `combat/battle_scaling.h` | `nz::mfBattleDamageBasisFromPower(BasePower)`、`mfBattleDamageBasis(Stage)` | 返回统一伤害基数 `战力 × 0.3 + 18`，具体技能保留各自倍率与取整流程 |
+| `arts.h` | `nz::mfBreakthroughPillStage(RecipeId)` | 返回已登记突破丹对应的准备阶段；非突破丹或未知 ID 返回空值 |
+| `crafting/herb_acquisition.h` | `nz::crafting::mfEarliestRecipeCraftStage(RecipeId)` | 返回丹方品阶与实际炉容量都满足的最早阶段；非法目录返回 -1 |
+| 同上 | `mfHerbAcquisitionStage(HerbId)` | 返回按所有丹方最早用途推导的获取阶段；未知 ID 返回 -1 |
+| 同上 | `mfIsPlantHerb(HerbId)` | 统一采集与灵田的草药分类，稳定 ID 排除妖丹 |
+| 同上 | `mfGatherableHerbs(Character, LocationId)` | 返回地点生境与角色阶段允许的真实采集池；未知地点或非法阶段为空 |
+| `content/herb_habitats.h` | `nz::content::mfHerbHabitatIds(LocationId)` | 返回稳定地点 ID 对应的药材 ID 常量目录；未知地点为空 |
+
+维护与实际规则见 [丹药效果](PILL_EFFECTS.md)、[药材取得](HERB_ACQUISITION.md) 和 combat/crafting 模块 README。

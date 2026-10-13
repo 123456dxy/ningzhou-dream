@@ -1,4 +1,4 @@
-// 宁州一梦 · C++ 版 — 洞府道法页
+// 宁州一梦 · C++ 版 — 功法与悟道页
 //
 // 为什么单独一个文件：
 //   十二大道有 60 个节点，每个都有名称（金道入门…）和效果说明（金系伤害 +10%）。
@@ -12,6 +12,7 @@
 
 import { cardKind, cardRule } from './cards.mjs';
 import { renderNumericPreview } from './numeric-preview.mjs';
+import { MANUAL_ART, MANUAL_ART_BY_DAO, MANUAL_ART_BY_ID } from './assets/manuals/manifest.mjs';
 
 // 用途：转义插入HTML的文字。
 // 流程：将空值转为空串，再替换五种HTML特殊字符。
@@ -23,6 +24,43 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g,
 export const DAOS = ['金', '木', '水', '火', '土', '神', '体', '剑', '气', '阵', '丹', '器'];
 export const DAO_LEVELS = ['未入门', '初窥门径', '略有小成', '融会贯通', '道之真境', '大道已成'];
 const THRESHOLDS = [0, 30, 100, 300, 900, 2000];
+
+// 用途：按稳定功法 ID 选择每本独立插图。
+// 流程：正式功法 ID 优先；未来未知功法才按大道使用默认图，无映射则文字回退。
+// 调用方式：功法卡、书坊和流派组件传入功法目录对象。
+// 返回值：插图定义；未知功法返回 null。
+export function manualIllustration(manual = {}) {
+  const key = (Object.hasOwn(MANUAL_ART_BY_ID, manual?.id) ? MANUAL_ART_BY_ID[manual.id] : null)
+    || (Object.hasOwn(MANUAL_ART_BY_DAO, manual?.daoId) ? MANUAL_ART_BY_DAO[manual.daoId] : null)
+    || (Object.hasOwn(MANUAL_ART_BY_DAO, manual?.dao) ? MANUAL_ART_BY_DAO[manual.dao] : null);
+  return typeof key === 'string' && Object.hasOwn(MANUAL_ART, key) ? { key, ...MANUAL_ART[key] } : null;
+}
+
+// 用途：生成可降级的功法插图，避免图片失败影响修习和交易。
+// 流程：输出目录内固定地址与独立文字底图；卡片的效果和名称不写进图片。
+// 调用方式：传入功法；交易行和流派组件可设 compact=true。
+// 返回值：装饰性插图 HTML，未知条目仅显示“卷”字。
+export function renderManualIllustration(manual = {}, options = {}) {
+  const art = manualIllustration(manual);
+  const glyph = typeof manual?.dao === 'string' && manual.dao.length === 1 ? manual.dao : '卷';
+  return `<span class="manual-art${options?.compact ? ' manual-art--compact' : ''}" aria-hidden="true">`
+    + `<span class="manual-art-fallback">${esc(glyph)}</span>`
+    + (art ? `<img data-manual-art="${esc(art.key)}" src="${esc(art.src)}" alt="" loading="lazy" decoding="async" width="512" height="512">` : '')
+    + `</span>`;
+}
+
+// 用途：处理插图载入失败，让失败图片退回底层道字。
+// 流程：只识别本模块的 img，隐藏失败图片，保留同一张卡的文字和按钮。
+// 调用方式：文档 capture error 监听器传入事件；不产生 API 请求。
+// 返回值：无返回值。
+export function handleManualIllustrationError(event) {
+  const image = event?.target;
+  if (image?.matches?.('img[data-manual-art]')) image.hidden = true;
+}
+
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('error', handleManualIllustrationError, true);
+}
 
 // 用途：按大道经验显示境界。
 // 流程：用既有阈值表计算已跨过的等级数。
@@ -37,7 +75,7 @@ let nodeCache = null;
 
 // 用途：读取大道节点目录。
 // 流程：优先复用缓存，必要时POST arts/nodes并缓存nodes。
-// 调用方式：洞府道法页面可传force强制刷新。
+// 调用方式：功法与悟道页面可传force强制刷新。
 // 返回值：Promise，节点数组。
 export async function loadNodes(force) {
   if (nodeCache && !force) return nodeCache;
@@ -160,7 +198,7 @@ export function renderDaos(state, nodes) {
 export function renderArtsAside(state) {
   const a = state.arts;
   const m = a.mods;
-  return `<h3>洞府概览</h3>`
+  return `<h3>修行概览</h3>`
     + `<p class="intro">悟道点 ${a.points} · 主修 ${esc(a.focus)}道</p>`
     + `<div class="detail-list" style="border-top:0;padding-top:0">`
     + `<div><label>修炼效率</label><strong>×${m.cult.toFixed(3)}</strong></div>`
@@ -277,7 +315,12 @@ export function renderArtBuilds(state, data, nodes, selected = 'all') {
     if (!refs?.length) return '';
     return `<div class="build-components"><b>${label}</b>` + refs.map(ref => {
       const item = resolve(kind, ref);
-      return `<span class="build-component ${item.ready ? 'ready' : item.known ? 'known' : 'missing'}">${esc(item.name)}<small>${esc(item.note)}</small></span>`;
+      const manualId = typeof ref === 'string' ? ref : ref.id;
+      const manual = kind === 'manual'
+        ? (state.manualCatalog || state.arts.manualList || []).find(entry => entry.id === manualId) || { id: manualId }
+        : null;
+      const art = manual ? renderManualIllustration(manual, { compact: true }) : '';
+      return `<span class="build-component ${item.ready ? 'ready' : item.known ? 'known' : 'missing'}">${art}<span class="build-component-copy">${esc(item.name)}<small>${esc(item.note)}</small></span></span>`;
     }).join('') + `</div>`;
   };
   return `<div class="art-build-controls"><label>流派组合 <select data-art-build-filter><option value="all">全部流派</option>`

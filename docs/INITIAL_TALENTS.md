@@ -53,7 +53,7 @@
 | `blessing` | 天道福泽 | 4 | 开局基础属性不变；正向大道经验 ×1.2，再取整；同时影响剑心/师承/金灵根开局经验 | `progression/arts.cpp::daoGainPlan → artGain` |
 | `dragonBlood` | 龙族血脉 | 5 | 体魄 +1；每回合结束回复3%斗法气血，不超过上限 | `buildCharacter；combat/battle.cpp 回合结算，包含留影` |
 | `oddMeridian` | 先天异脉 | -3 | 返还3点预算；丹药与妖丹不会提升修为 | `progression/arts.cpp 丹药效果/计划/服用共同路径` |
-| `greenBottle` | 神秘绿瓶 | 3 | 开局不额外发药；月界消耗5灵石，催熟一份已有适境一、二品草药 | `talentMonthTick → simulation/calendar.cpp::calendarRun；秘境/战斗/抉择/死亡或资源不足不触发` |
+| `greenBottle` | 神秘绿瓶 | 3 | 灵田每真实世界日按格内储备自动加速，每份需加速种苗每日耗品阶数量灵石，额外增加200成长点；外出照常生效，不复制背包药材 | `crafting::mfGardenDayTick → simulation/calendar.cpp；格内储备不足全额费用时自然生长、不扣主背包灵石；成熟批次不收费` |
 | `lightStep` | 轻功高手 | 2 | 遁速 +6（影响先手、赶路、逃遁） | `talentMods → artEscapeSpeed → battleSpeed/travelPlan/battleEscapeChance` |
 | `artisan` | 百炼匠心 | 3 | 开局不送法器；炼器耗时减少15%、自炼法器售值增加15%，仍受总上限约束 | `talentMods → 工坊耗时/自炼售值规则` |
 | `family` | 修真家族 | 3 | 实际修得蛮牛护体功1层，并将聚气加入已领悟神通；不会自动替换主修/四个已装备神通 | `talentBirth` |

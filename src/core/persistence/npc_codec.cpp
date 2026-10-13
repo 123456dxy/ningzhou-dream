@@ -72,6 +72,7 @@ Value npcToJson(const Npc& npc) {
     }
     // 功法与流派
     npcObject.set("dao", str(npc.dao));
+    npcObject.set("combatProfileId", str(npc.combatProfileId));
     npcObject.set("beast", Value(npc.beast));
     {
         json::Array sp;
@@ -116,6 +117,8 @@ Npc npcFromJson(const Value& npcObject) {
     }
     npc.equipped = jsonToStrMap(npcObject["equipped"]);
     npc.pillsUsed = jsonToStringVec(npcObject["pillsUsed"]);
+    npc.combatProfileId = npcObject["combatProfileId"].asString();
+
     const auto& pills = npcObject["pillState"];
     auto& state = npc.pillState;
     state.used = jsonToMap<int>(pills["used"]);

@@ -19,6 +19,7 @@ Value gameToJson(const Game& game) {
     root.set("plan", str(game.plan));
     root.set("flags", mapToJson(game.flags));
     root.set("dungeons", dungeonWorldToJson(game.dungeons));
+    root.set("garden", mfGardenToJson(game.Garden));
     {
         Value checkpoint(json::Object{});
         checkpoint.set("enabled", Value(game.checkpoint.enabled)); checkpoint.set("days", num(game.checkpoint.days));
@@ -44,22 +45,7 @@ Value gameToJson(const Game& game) {
     }
 
     root.set("player", playerToJson(game.player));
-    // 兽潮（全图事件）
-    {
-        Value tideObject(json::Object{});
-        tideObject.set("active", Value(game.tide.active));
-        tideObject.set("startYear", num(game.tide.startYear));
-        tideObject.set("monthsLeft", num(game.tide.monthsLeft));
-        tideObject.set("severity", num(game.tide.severity));
-        tideObject.set("wavesFought", num(game.tide.wavesFought));
-        tideObject.set("wavesWon", num(game.tide.wavesWon));
-        tideObject.set("npcDeaths", num(game.tide.npcDeaths));
-        tideObject.set("warned", Value(game.tide.warned));
-        json::Array fallenArray;
-        for (const auto& name : game.tide.fallen) fallenArray.push_back(str(name));
-        tideObject.set("fallen", Value(std::move(fallenArray)));
-        root.set("tide", std::move(tideObject));
-    }
+    root.set("tide", tideToJson(game.tide));
 
     // 世界
     {
@@ -274,6 +260,7 @@ Game gameFromJson(const Value& root) {
     game.plan = root["plan"].asString("cultivate");
     game.flags = jsonToMap<int>(root["flags"]);
     dungeonWorldFromJson(root["dungeons"], game.dungeons);
+    mfGardenFromJson(root["garden"], game.Garden);
     if (root["checkpoint"].isObject()) {
         const auto& checkpoint = root["checkpoint"];
         game.checkpoint.enabled = checkpoint["enabled"].asBool(); game.checkpoint.days = checkpoint["days"].asInt();
@@ -295,20 +282,7 @@ Game gameFromJson(const Value& root) {
 
     playerFromJson(root["player"], game.player, game.seed);
     // 兽潮（旧档没有这个字段，缺了就是「没有兽潮」）
-    if (root["tide"].isObject()) {
-        const Value& tideObject = root["tide"];
-        game.tide.active = tideObject["active"].asBool();
-        game.tide.startYear = tideObject["startYear"].asInt(-1);
-        game.tide.monthsLeft = tideObject["monthsLeft"].asInt();
-        game.tide.severity = tideObject["severity"].asInt(1);
-        game.tide.wavesFought = tideObject["wavesFought"].asInt();
-        game.tide.wavesWon = tideObject["wavesWon"].asInt();
-        game.tide.npcDeaths = tideObject["npcDeaths"].asInt();
-        game.tide.warned = tideObject["warned"].asBool();
-        game.tide.fallen.clear();
-        for (const auto& name : tideObject["fallen"].asArray())
-            game.tide.fallen.push_back(name.asString());
-    }
+    tideFromJson(root["tide"], game.tide);
 
     {
         const Value& worldObject = root["world"];

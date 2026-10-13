@@ -93,8 +93,23 @@ void runCombatFixTests();
 void runPlayerFixTests();
 void runCraftingFixTests();
 void runCatalogDisplayTests();
+void runTideRuleTests();
+void runTideIntegrationTests();
+void runTideApiTests();
+
 void runCharacterBuildTests();
 void runAlchemyEconomyTests();
 void runStudyNpcTests();
+void mfRunCraftPriceTests();
+void mfRunCraftTimingTests();
+void mfRunResourcePointTests();
+void mfRunCaveGardenTests();
+void mfRunCaveApiTests();
+void mfRunBattleScalingTests();
+void mfRunCombatHealthTests();
+void mfRunIntelPurchaseTests();
+void mfRunPillEffectsTests();
+void mfRunHerbAcquisitionTests();
+void mfRunTimePerformanceTests();
 
 } // namespace nztest

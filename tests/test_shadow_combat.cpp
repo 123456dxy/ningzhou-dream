@@ -165,7 +165,8 @@ void runShadowCombatTests() {
     Player cleanser = shadowFixture("清浊"); cleanser.arts.nodes = {"10-5"};
     Game cleanse = shadowFight(p, cleanser);
     auto& cb = *cleanse.player.arts.battle;
-    cb.poison = 3; cb.poisonTurns = 3; cb.poisonDamage = jsRound((BATTLE_POWER[p.stage] + 12) * .035 * 3);
+    // 已经形成并保存的23点毒伤属于状态快照；调整伤害基底不应重新放大/缩小它，仍测试精确清掉2点。
+    cb.poison = 3; cb.poisonTurns = 3; cb.poisonDamage = 23;
     cb.enemyHp = cb.enemyMax / 2; cb.hand.clear();
     shadowHand(cb, "wood");
     battleTurn(cleanse, "end");

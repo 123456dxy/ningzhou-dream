@@ -12,7 +12,9 @@
 | `rules.cpp` | model.h 中的查表、建号属性和基础规则声明实现 | `model.h` |
 | `calendar.cpp` | 日历与余数积攒、工作逐日推进 | `calendar.h` |
 | `play.cpp` | 市场/社交/制作玩法聚合与操作 | `play.h` |
-| `tide.cpp` | 兽潮年度/月度变化与战斗奖励 | `tide.h` |
+| `tide.cpp` | 兽潮固定战期、日积分、金榜与结算 | `tide.h` |
+| `tide_rules.*` | 战场、排名奖金、折扣和库存参数与纯计算 | `tide_rules.h` |
+| `tide_market.cpp` | 兽潮战后高阶材料目录、库存和原子购买 | `tide.h` |
 | `checkpoint.cpp` | 检查点开启、更新、手动记录和恢复 | `checkpoint.h` |
 | `reward_receipt.cpp` | 动作前后资源/能力变化的奖励纪事 | `reward_receipt.h` |
 | `../tianji.cpp`（core 根，朋友维护） | 只供对接：快照冻结、大比窗口、服务端 Store、挑战与榜单 | `tianji.h` |
@@ -30,6 +32,8 @@ simulation 当前依赖几乎所有领域公共头，并被多个领域反向引
 - 一个世界月为 30 天、年为 360 天；推进应按实际跨界触发，不能用动作次数代替时间。
 - 中断和检查点恢复可能替换整个 Game；不要继续使用恢复前的 `Job` / Player 引用。
 - 奖励只在完成/结算时落账，读取回执或预览不应重新发奖。
+- 兽潮NPC节奏集中在 `tide_rules.h` 的 `NormalNpcBattlePace` / `EliteNpcBattlePace`：普通每天仅1/15概率出战、出战后0..1杀且本期最多9杀；真实完整构筑精英每天1/10概率、0..2杀且本期最多12杀。未出战不抽击杀，死亡、未参战或已封顶不消耗出战RNG。默认节奏值表示本期零击杀，集中常量显式启用两种规则。
+- NPC积分始终按本期冻结的 `participant.entryStage` 战场计算，1/3/9/27分不变；已杀量由积分除冻结单杀分反推，不新增持久字段。晋阶不改变同期积分倍率；旧大积分只停止继续增长，不反向削减。全州同榜、并列排名与奖励规则保持原样，最高战场玩家13杀为351分，超过精英12杀324分上限。
 - 对接天机时保持既有契约：留影不写入可导入的人生存档，挑战请求遵守既有修订号与幂等参数；不在本轮调整其服务端规则。
 
 ## 已有测试
@@ -37,3 +41,5 @@ simulation 当前依赖几乎所有领域公共头，并被多个领域反向引
 `tests/test_calendar.cpp`、`test_play.cpp`、`test_checkpoint.cpp`、`test_tianji.cpp`、`test_event_rewards.cpp`、`test_mechanics_regression.cpp`、`test_passive_life_travel.cpp`、`test_core.cpp`。统一编入 `ningzhou_tests`；此处不暗示本次文档更新已重新执行全部测试。
 
 完整函数声明与对象入口见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。
+
+NPC节奏定向回归位于 `tests/test_tide_rules.cpp`：固定12种子，每期32名普通和五宗各一名真实精英，以真实 `dayTick` 推进60天、真实 `tideReward` 记13次元婴战场胜果；覆盖日增量、本期上限、最后仅余1杀、封顶/死亡/未参战RNG、冻结战场、旧大积分保留，以及逐日/批量推进确定一致。该无渲染策略测量NPC积分分布与名次，不模拟玩家实战获胜率。配对种子的本轮样本中普通均值由29.904降为2.091杀（新范围0..7）、精英由60.15降为6.05杀（新范围0..12），玩家13胜在12种子均为全州第一；代表体验仍由根任务的真实浏览器检查核验。

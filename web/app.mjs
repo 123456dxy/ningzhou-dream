@@ -17,7 +17,7 @@ import { mode, hideOnlineEntries } from './nz-mode.mjs';
 import { loadRoster, invalidateRoster, renderRoster, bindRoster } from './roster.mjs';
 import { heading, panel, layout, asideBlock, timeline, yearControls, hintBox } from './shell.mjs';
 import { renderDaos, renderArtsAside, loadNodes, invalidateNodes,
-         loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds } from './arts.mjs';
+         loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds, renderManualIllustration } from './arts.mjs';
 import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect, renderBrewIncome, marketGrade } from './economy.mjs';
 import { loadLegacy, invalidateLegacy, draftTalents, renderEnding, renderLegacyPanel, renderDraftPanel } from './legacy.mjs';
 import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks, renderAchievements } from './sects.mjs';
@@ -32,7 +32,10 @@ import { caveSupplyAccess, renderCaveUpgrade, renderCaveSupplyLimits } from './c
 import { renderEquippedArtifacts, renderBattleArtifacts, renderForgePreview } from './artifacts.mjs';
 import { renderInventoryPanel } from './inventory-panel.mjs';
 import { renderTaskPanel } from './task-panel.mjs';
+import { renderCavePage, cavePlantCountLimit, cavePlantCount } from './cave-panel.mjs';
+import { renderCraftPricing } from './craft-pricing.mjs';
 import { renderCraftSupply, renderSalvageQuote } from './workshop.mjs';
+import { shouldRenderTide, renderTideMarket, renderTideBattleNotice } from './tide-panel.mjs';
 import {
   renderFriendList, renderFriendPanel, loadNpcBag, invalidateFriendCache,
   renderTidePanel, renderBondActions,
@@ -66,7 +69,7 @@ function subOf(tabKey, def) { return subTab[tabKey] || def; }
 // 返回值：无返回值。
 function setSub(tabKey, id) { subTab[tabKey] = id; }
 let shopKind = 'herb';   // 坊市当前分类
-let shopGrades = { herb: '1', material: '1', potion: '1', gear: '1' };
+let shopGrades = { herb: '1', material: '1', potion: '1' };
 let brewGrade = '1';
 try {
   const savedGrades = JSON.parse(localStorage.getItem('nz-desktop-market-grades') || '{}');
@@ -74,14 +77,25 @@ try {
   const savedBrewGrade = localStorage.getItem('nz-desktop-brew-grade');
   if (savedBrewGrade === 'all' || /^[1-9]\d*$/.test(savedBrewGrade || '')) brewGrade = savedBrewGrade;
   const savedKind = localStorage.getItem('nz-desktop-market-kind');
-  if (['herb', 'material', 'potion', 'gear', 'book', 'stock'].includes(savedKind)) shopKind = savedKind;
+  if (['herb', 'material', 'potion', 'book', 'stock', 'tide'].includes(savedKind)) shopKind = savedKind;
 } catch { /* 本机偏好存储不可用时默认一阶。 */ }
 let shopQty = {};        // 各货品的购买数量
+let tideMarketKind = 'all', tideMarketGrade = '3';
+const tideMarketQuantities = {};
+try {
+  const savedKind = localStorage.getItem('nz-desktop-tide-market-kind');
+  if (['all', 'herb', 'material'].includes(savedKind)) tideMarketKind = savedKind;
+  const savedGrade = localStorage.getItem('nz-desktop-tide-market-grade');
+  if (savedGrade === 'all' || /^[3-9]\d*$/.test(savedGrade || '')) tideMarketGrade = savedGrade;
+} catch { /* 战后坊市偏好不可用时显示三阶全部材料。 */ }
 let feed = [];           // 动作流（本会话的操作反馈）
 let lastReport = null;   // 上次推进的报告
 let requestBusy = false;
-let economyReady = false;
-let economyLoading = null;
+let economyRevision = 0;
+let ecoReady = false;
+let forgeReady = false;
+let ecoLoading = null;
+let forgeLoading = null;
 let nodesLoading = null;
 let spellsLoading = null;
 let brewSearch = '';
@@ -89,6 +103,7 @@ let brewBatch = 1;
 let forgeSelection = {};
 let forgePreview = null;
 let forgePreviewSerial = 0;
+let forgePreviewLoading = null;
 let artBuildFilter = 'all';
 let spellDaoFilter = 'all';
 let removalSelection = null;
@@ -109,6 +124,30 @@ try { chronicleHeight = Math.max(180, Math.min(900, Number(localStorage.getItem(
 let chronicleResizeObserver = null;
 let brewSupplyRecipeId = '';
 let craftSupplyQuote = null;
+const gardenSelections = {};
+const gardenFilters = { grade: '1', search: '' };
+try {
+  const savedFilters = JSON.parse(localStorage.getItem('nz-desktop-garden-filters') || '{}');
+  if (savedFilters.grade === 'all' || /^[1-6]$/.test(savedFilters.grade || '')) gardenFilters.grade = savedFilters.grade;
+} catch { /* 灵田偏好不可读时使用一阶已有材料。 */ }
+
+// 用途：保存灵田品阶偏好；流程：本地筛选交互。
+// 用法：修改gardenFilters后调用；返回：无，只写浏览器偏好，不提交游戏动作。
+function saveGardenFilters() {
+  try { localStorage.setItem('nz-desktop-garden-filters', JSON.stringify({ grade: gardenFilters.grade })); }
+  catch { /* 偏好存储不可用不阻断本次筛选。 */ }
+}
+
+// 用途：应用灵田名称搜索并保留输入焦点与选区；流程：输入完成或中文组词完成。
+// 用法：传搜索控件，组词期间延后调用；返回：无，只更新本地筛选，不发请求。
+function applyGardenSearch(input) {
+  gardenFilters.search = input.value;
+  const start = input.selectionStart, end = input.selectionEnd;
+  render();
+  const restored = document.querySelector('[data-cave-plant-search]');
+  restored?.focus();
+  if (start !== null && end !== null) restored?.setSelectionRange(start, end);
+}
 
 // 用途：兼容旧页面链接，并解析新顶级页签的 hash。
 // 流程：读取 hash 主路径，将丹毒/装备/炼丹/炼器旧入口映射到新页面。
@@ -121,7 +160,7 @@ function tabFromHash() {
   const next = aliases[key] || key;
   // 本地测试版没有天机大比，地址栏里残留的 #tianji 回到岁月纪事
   if (window.__NZ_LOCAL__ && next === 'tianji') return 'chronicle';
-  return ['chronicle', 'map', 'arts', 'society', 'roster', 'quests', 'market', 'economy', 'workshop', 'inventory', 'tianji', 'dungeon'].includes(next) ? next : 'chronicle';
+  return ['chronicle', 'map', 'cave', 'arts', 'society', 'roster', 'quests', 'market', 'economy', 'workshop', 'inventory', 'tianji', 'dungeon'].includes(next) ? next : 'chronicle';
 }
 const tianji = createTianji({
   onChange: () => {
@@ -253,8 +292,11 @@ async function call(path, body) {
       }
       // 实际费用会随功法、道法与配装变化；重新取定义，拥有状态仍以 S 为准。
       invalidateSpells(); spellsReady = false; spellsRevision++;
-      invalidateEco(); economyReady = false;
-      forgePreview = null; forgePreviewSerial++;
+      invalidateEco(); economyRevision++;
+      ecoReady = false; forgeReady = false;
+      ecoLoading = null; forgeLoading = null;
+      ecoOpts = []; forgeOpts = { materials: [], shapes: [] };
+      forgePreview = null; forgePreviewSerial++; forgePreviewLoading = null;
       craftSupplyQuote = null;
       invalidateRoster(); rosterReady = false;
       invalidateSects(); sectData = null; achData = null;
@@ -267,7 +309,6 @@ async function call(path, body) {
         checkpointNotice = '';
         feed = []; lastReport = null;
       }
-      if (['economy', 'society', 'workshop', 'inventory'].includes(tab)) await refreshEconomy();
       render();
       animateBattleImpacts(battleImpacts(battleBefore, S.battle));
     }
@@ -363,7 +404,9 @@ function renderSidebar() {
   + stat('年龄', p.age, '岁')
   + stat('余寿', Math.max(0, p.lifespan - p.age), '年')
   + stat('灵石', fmt(p.stones), '枚')
-  + stat('气血', p.health, '/ 100', 'health')
+  + (S.battle
+      ? stat('斗法气血', Math.max(0, S.battle.hp), `/ ${S.battle.max}`, 'health')
+      : stat('气血', p.health, '/ 100', 'health'))
   + stat('遁速', p.escapeSpeed ?? '—', '赶路 / 先手 / 脱身')
   + `</div><button class="wide-btn" data-action="goto-tab" data-tab="inventory">行囊与人物面板 →</button>`;
 
@@ -491,7 +534,7 @@ function viewChronicle() {
     `<div class="action-feed">${feedHTML}</div>`);
 
   // 兽潮是全图大事：起了就摆在最上面，玩家一眼看到
-  const tideBlock = (S.tide && S.tide.active)
+  const tideBlock = shouldRenderTide(S.tide)
     ? `<div style="padding:0 0 16px">${renderTidePanel(S.tide, S.checkpoint)}</div>` : '';
 
   return tideBlock
@@ -584,7 +627,7 @@ function viewMap() {
   if (sub === 'friends') {
     // 左边名单（自己滚），右边交互面板（粘住不动）
     const right = selectedNpc
-      ? renderFriendPanel(S, selectedNpc, friendBag, { materials: forgeOpts?.materials })
+      ? renderFriendPanel(S, selectedNpc, friendBag, { materials: S.materialCatalog || forgeOpts.materials })
       : `<div class="empty">点左边任意一位仙友，即可当面往来。<br><br>
            见礼只有第一次给好感；<br>
            往后靠送礼与切磋、请教、游历。</div>`;
@@ -613,7 +656,7 @@ function showTravelResult(result, to) {
 
 // ------------------------------------------------------------
 // ------------------------------------------------------------
-// 页签：洞府道法
+// 页签：功法与悟道
 // 每道一张卡，列出 5 个节点的名称 / 花费 / 效果，另有「参悟 30 天」
 // ------------------------------------------------------------
 let artsReady = false;
@@ -629,13 +672,14 @@ let spellsRevision = 0;
 // ------------------------------------------------------------
 // 用途：展示已修功法。
 // 流程：读取主辅修、层数、来源与当前效果，生成管理按钮。
-// 调用方式：洞府道法页面无参调用。
+// 调用方式：功法与悟道页面无参调用。
 // 返回值：功法列表HTML字符串。
 function manualCards() {
   const list = S.arts.manualList || [];
   if (!list.length) return `<div class="empty">还没有修习任何功法。</div>`;
   return `<div class="manual-list">` + list.map(m => `
     <div class="manual-card ${m.isMain ? 'is-main' : ''} ${m.isAux ? 'is-aux' : ''}">
+      ${renderManualIllustration(m)}
       <div class="mc-top">
         <strong>${escape(m.name)}</strong>
         <span class="mc-dao">${escape(m.dao)}</span>
@@ -676,7 +720,7 @@ function manualSourceRows(list, action) {
       : '';
     const canLearn = owned && !S.job && level < 5 && m.canLearn !== false;
     const disabled = owned ? !canLearn : !!why;
-    return `<div class="pill-row"><span>${escape(m.name)}${owned ? ` · 抄本已得${level ? ` · 已修 ${level} 层` : ''}` : ''}`
+    return `<div class="pill-row">${renderManualIllustration(m, { compact: true })}<span>${escape(m.name)}${owned ? ` · 抄本已得${level ? ` · 已修 ${level} 层` : ''}` : ''}`
       + `<span class="item-sub">${escape(owned ? `${m.learnDays || 20 + level * 10} 天 · ${m.learnCost || 8 + (level + 1) * 4} 灵石` : m.how)}</span></span>`
       + `<button data-action="${owned ? 'learn' : action}" data-id="${escape(m.id)}" ${disabled ? 'disabled' : ''}>`
       + `${escape(disabled ? why || '暂不可修习' : owned ? level ? '修习下一层' : '开始修习' : action === 'library' ? '兑换抄本' : '购入抄本')}</button></div>`;
@@ -706,7 +750,7 @@ function spellCards() {
     </div>`).join('') + `</div>`;
 }
 
-// 用途：展示洞府道法与构筑。
+// 用途：展示功法与悟道与构筑。
 // 流程：异步加载节点和神通目录，按子页组合功法、神通、流派与道法。
 // 调用方式：主渲染选择arts时调用。
 // 返回值：页面HTML字符串，未加载时占位HTML。
@@ -721,7 +765,7 @@ function viewArts() {
       nodesLoading = null;
       if (tab === 'arts') render();
     });
-    return heading('洞府道法', '十二大道各有点亮的节点；境界到位才能往上走。',
+    return heading('功法与悟道', '十二大道各有点亮的节点；境界到位才能往上走。',
                    `悟道点 ${a.points}`)
          + layout(panel('十二大道', '正在读取……',
              `<div class="empty">正在读取节点定义……</div>`),
@@ -761,11 +805,11 @@ function viewArts() {
   const builds = renderArtBuilds(S, spellData, artsNodes, artBuildFilter);
 
   const sub = subOf('arts', 'practice');
-  const top = heading('洞府道法',
-                 '安排修炼与配给，搭配功法神通，再参悟十二大道。',
+  const top = heading('功法与悟道',
+                 '搭配功法神通，修习抄本，再参悟十二大道。',
                  `悟道点 ${a.points} · 已点亮 ${a.nodes.length} 个节点`)
     + subTabs('arts', [
-        ['practice', '功法与洞府', `${(a.manualList || []).length} 部`],
+        ['practice', '功法修习', `${(a.manualList || []).length} 部`],
         ['spells', '神通搭配', `${extraCount} / ${slots}`],
         ['builds', '流派组合', `${(S.artBuilds || []).length} 组`],
         ['daos', '十二大道', `${a.nodes.length} / 60`],
@@ -781,8 +825,12 @@ function viewArts() {
         + hintBox(['普通攻击与防御固定常备，各五张，不占额外槽。', `额外槽当前 ${slots} 个，每种神通进入牌组两张。`, '换神通后下一场斗法生效。']));
   return top + layout(panel('已修功法', '选择主修、辅修或继续修习', `<div style="padding:14px 22px 18px">${manuals}</div>`), renderArtsAside(S))
     + panel('已得功法抄本', '事件、请教或兑换获得的抄本，修习后才能设置主辅修',
-      `<div style="padding:14px 22px 18px">${manualSourceRows((S.manualSources || []).filter(m => m.owned && !(S.arts.manuals?.[m.id] > 0)), 'learn') || '<div class="empty">暂无待修习的功法抄本。</div>'}</div>`)
-    + renderSupplyPanel(S);
+      `<div style="padding:14px 22px 18px">${manualSourceRows((S.manualSources || []).filter(m => m.owned && !(S.arts.manuals?.[m.id] > 0)), 'learn') || '<div class="empty">暂无待修习的功法抄本。</div>'}</div>`);
+}
+
+// 用途：展示独立洞府页；流程：读取权威管理条件、灵田批次与训练报价；返回：HTML；成长和扣费只在服务端世界日发生。
+function viewCave() {
+  return renderCavePage(S, { plantSelections: gardenSelections, plantFilters: gardenFilters, supplyHtml: renderSupplyPanel(S) });
 }
 
 // ------------------------------------------------------------
@@ -808,10 +856,10 @@ function renderSupplyPanel(st) {
     const btns = [];
     for (let i = 0; i <= maxLv; i++) {
       const access = caveSupplyAccess(st, kind, i);
-      const dis = (locked && i > 0) || !access.enabled;
+      const dis = !!st.cave?.access?.reason || (locked && i > 0) || !access.enabled;
       btns.push(`<button class="supply-btn ${i === level ? 'on' : ''}" `
         + `${dis ? 'disabled ' : ''}`
-        + `title="${escape(access.reason || `${i} 档配给`)}" `
+        + `title="${escape(st.cave?.access?.reason || access.reason || `${i} 档配给`)}" `
         + `data-action="supply" data-kind="${kind}" data-level="${i}">${i}</button>`);
     }
     return `<div class="supply-row">
@@ -849,10 +897,6 @@ function renderSupplyPanel(st) {
         <div><label>洞府</label><strong>${escape((st.player && st.player.caveName) || '尚未安府')}</strong></div>
         <div><label>灵气</label><strong>${st.player && st.player.qiActive ? '正在生效' : '未生效'}</strong></div>
       </div>`
-      + (st.player && st.player.atCave ? ''
-          : `<button class="wide-btn" data-action="cave-move">${
-              st.player && st.player.cave ? '迁府至此' : '在此安府'
-            }（${sup.moveCost || 0} 灵石）</button>`)
       + renderCaveUpgrade(st))
     + asideBlock('修炼速度', `<div class="speed-breakdown">
         <div><span>功法基础</span><strong>${f(cul.manual)}</strong></div>
@@ -971,7 +1015,7 @@ function viewSociety() {
 
   if (sub === 'members') {
     const right = sel
-      ? renderFriendPanel(S, sel.id, friendBag, { materials: forgeOpts?.materials })
+      ? renderFriendPanel(S, sel.id, friendBag, { materials: S.materialCatalog || forgeOpts.materials })
       : `<div class="empty">点左边任意一位同门，即可当面往来。<br><br>
            见礼只有第一次给好感；<br>
            好感 30 解锁彻夜论道；拜师还需同宗高境界、声望与拜师礼，可在「拜师与受业」查看。</div>`;
@@ -1118,8 +1162,8 @@ function viewQuests() {
     </div>
     <p class="panel-note">遁速影响赶路耗时、斗法先手和逃脱机会。学习遁法、修行境界与装备带来的变化，以当前实际遁速为准。</p></div>`);
 
-  // 成就（14 项）：规则层一直有，之前既没面板也从不发放
-  const achPanel = panel('成就', '达成后计入传承点',
+  // 成就奖励由结算或实际重开发放，查询与展示保持只读。
+  const achPanel = panel('成就', '结算时领取传承点',
                          `<div style="padding:16px 22px 20px">${renderAchievements(achData)}</div>`);
 
   // 野外悬赏与原创支线挪到这里 —— 它们是「出门闯荡」的事，与宗门无关。
@@ -1214,47 +1258,95 @@ function viewForgeWorkshop() {
     `<div style="padding:14px 22px 18px">${S.job?.type === 'forge' ? `<p class="choice-banner">正在铸炼：${escape(S.job.name)}，尚余 ${S.job.remaining} 天。下方为本炉配方成器后的效果。</p>` : ''}${r.forge}${renderForgePreview(forgePreview)}${renderCraftSupply(craftSupplyQuote?.key === JSON.stringify({ kind: 'forge', ...forgeSelection }) ? craftSupplyQuote.quote : null, { kind: 'forge', ...forgeSelection })}</div>`), aside);
 }
 
-// 切到该页时把行动清单拉回来
-// 用途：刷新营生与配料目录。
-// 流程：并行读取两个只读目录，校准选中配料，再刷新成器推演。
-// 调用方式：相关页面首次打开或动作改变状态时调用。
-// 返回值：Promise；更新缓存，无显式返回值。
+// 用途：声明当前子页缺少的经济数据；流程：按页面需求延迟加载；返回：目录需求，不计算报价。
+function economyNeeds() {
+  if (!S || S.battle || S.dungeons?.run || S.ended) return { actions: false, forge: false };
+  return {
+    actions: (tab === 'economy' && ['city', 'sect'].includes(subOf('economy', 'city')))
+      || (tab === 'society' && subOf('society', 'sect') === 'jobs'),
+    forge: tab === 'workshop' && subOf('workshop', 'brew') === 'forge',
+  };
+}
+// 用途：只读取当前页面需要的动态目录。
+// 流程：任务仅取行动；炼器取材料及预览；以状态修订号拒绝过期响应，并合并同类在途读取。
+// 调用方式：由主渲染在目录未就绪时调用；动作响应不等待它，炼丹和行囊直接使用state。
+// 返回值：Promise；失败向调用方传播以便提示和再次打开重试，不写游戏状态。
 async function refreshEconomy() {
-  if (economyLoading) return economyLoading;
-  economyLoading = (async () => {
-    const [o, f] = await Promise.all([loadEcoOptions(true), loadForgeOptions(true)]);
-    ecoOpts = o;
-    forgeOpts = f;
-    const defaults = { main: 'iron', aux: 'jade', core: 'wood', shape: f.shapes?.[0]?.id };
-    if (S.job?.type === 'forge') {
-      const [main, aux, core, shape] = (S.job.to || '').split('|');
-      if (main && aux && core && shape) forgeSelection = { main, aux, core, shape };
+  const needs = economyNeeds(), revision = economyRevision, reads = [];
+  if (needs.actions && !ecoReady) {
+    if (!ecoLoading) {
+      const loading = loadEcoOptions().then(options => {
+        if (revision !== economyRevision) return;
+        ecoOpts = options; ecoReady = true;
+      }).finally(() => { if (ecoLoading === loading) ecoLoading = null; });
+      ecoLoading = loading;
     }
-    for (const key of ['main', 'aux', 'core', 'shape']) {
-      const options = key === 'shape' ? f.shapes : f.materials;
-      if (!(options || []).some(option => option.id === forgeSelection[key]))
-        forgeSelection[key] = (options || []).find(option => option.id === defaults[key])?.id || options?.[0]?.id || '';
+    reads.push(ecoLoading);
+  }
+  if (needs.forge && !forgeReady) {
+    if (!forgeLoading) {
+      const loading = (async () => {
+        const definitions = await loadForgeOptions();
+        if (revision !== economyRevision) return;
+        forgeOpts = definitions;
+        const defaults = { main: 'iron', aux: 'jade', core: 'wood', shape: definitions.shapes?.[0]?.id };
+        if (S.job?.type === 'forge') {
+          const [main, aux, core, shape] = (S.job.to || '').split('|');
+          if (main && aux && core && shape) forgeSelection = { main, aux, core, shape };
+        }
+        for (const key of ['main', 'aux', 'core', 'shape']) {
+          const options = key === 'shape' ? definitions.shapes : definitions.materials;
+          if (!(options || []).some(option => option.id === forgeSelection[key]))
+            forgeSelection[key] = (options || []).find(option => option.id === defaults[key])?.id || options?.[0]?.id || '';
+        }
+        forgeReady = true;
+        if (economyNeeds().forge) await refreshForgePreview(false);
+      })().finally(() => { if (forgeLoading === loading) forgeLoading = null; });
+      forgeLoading = loading;
     }
-    economyReady = true;
-    await refreshForgePreview();
-  })();
-  try { await economyLoading; }
-  finally { economyLoading = null; }
+    reads.push(forgeLoading);
+  }
+  if (needs.forge && forgeReady && !forgePreview && !forgeLoading) reads.push(refreshForgePreview(false));
+  await Promise.all(reads);
+}
+// 用途：将延迟目录结果提交当前页面；流程：导航/动作后的异步补全；返回：Promise。
+// 使用方式：主渲染仅在缺少目录时调用；过期成功和失败均不重绘、不通知当前状态。
+function refreshEconomyView() {
+  const needs = economyNeeds(), revision = economyRevision;
+  const isCurrent = () => {
+    const current = economyNeeds();
+    return revision === economyRevision && ((needs.actions && current.actions) || (needs.forge && current.forge));
+  };
+  return refreshEconomy().then(() => { if (isCurrent()) render(); }).catch(error => {
+    if (isCurrent()) toast(error.message || '目录暂未读取成功，请重新打开此页重试。', 'bad');
+  });
 }
 // 用途：读取所选配方的权威效果。
 // 流程：生成请求序号，POST只读预览，丢弃过期响应并重绘工坊。
 // 调用方式：配方选择变化或目录刷新后调用。
 // 返回值：Promise；更新forgePreview，无显式返回值。
-async function refreshForgePreview() {
+async function refreshForgePreview(redraw = true) {
+  const selection = JSON.stringify(forgeSelection), revision = economyRevision;
+  if (forgePreviewLoading?.revision === revision && forgePreviewLoading.selection === selection)
+    return forgePreviewLoading.promise;
   const serial = ++forgePreviewSerial;
   forgePreview = null;
-  if (tab === 'workshop' && economyReady) render();
-  const response = await fetch('/api/forge-preview', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(forgeSelection),
-  }).then(response => response.json()).catch(() => ({ error: '配方推演暂未加载。' }));
-  if (serial !== forgePreviewSerial) return;
-  forgePreview = response;
-  if (tab === 'workshop') render();
+  const loading = (async () => {
+    const response = await fetch('/api/forge-preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: selection,
+    }).then(async response => {
+      const result = await response.json();
+      if (!response.ok || result?.ok === false || result?.error || !result?.info || typeof result.info !== 'object')
+        throw new Error(result?.error || '配方推演暂未加载。');
+      return result;
+    }).catch(error => ({ info: { valid: false, enabled: false, reason: `${error.message || '配方推演暂未加载。'}请重新选择配料重试。` } }));
+    if (serial !== forgePreviewSerial || revision !== economyRevision) return;
+    forgePreview = response;
+  })().finally(() => { if (forgePreviewLoading?.promise === loading) forgePreviewLoading = null; });
+  forgePreviewLoading = { promise: loading, revision, selection };
+  if (redraw && economyNeeds().forge) render();
+  await loading;
+  if (redraw && serial === forgePreviewSerial && economyNeeds().forge) render();
 }
 // ------------------------------------------------------------
 // 页签：坊市行囊
@@ -1268,10 +1360,21 @@ function viewMarket() {
   const p = S.player;
   const a = S.arts;
 
+  // 战后市场的关闭由服务端决定；结束后清除旧分类偏好，刷新或载入新档均回到普通市场。
+  if (tab === 'market' && (shopKind === 'gear' || (shopKind === 'tide' && S.tide?.market?.open !== true))) {
+    shopKind = 'herb';
+    try { localStorage.setItem('nz-desktop-market-kind', shopKind); } catch { /* 存储不可用仍即时返回。 */ }
+  }
+
   // ---- 坊市买卖 ----
-  const KINDS = [['herb', '药材'], ['material', '炼器材料'], ['potion', '丹药'], ['gear', '法器'], ['book', '功法 / 书坊'], ['stock', '突破物品']];
+  const KINDS = [['herb', '药材'], ['material', '炼器材料'], ['potion', '丹药'], ['book', '功法 / 书坊'], ['stock', '突破物品'], ['tide', '进入兽潮坊市']];
   const tabs = KINDS.map(([k, name]) =>
-    `<button class="${shopKind === k ? 'active' : ''}" data-shop="${k}">${name}</button>`).join('');
+    `<button class="${shopKind === k ? 'active' : ''}" data-shop="${k}" ${k === 'tide' && S.tide?.market?.open !== true ? 'disabled title="战后坊市尚未开放或已关闭"' : ''}>${name}</button>`).join('');
+
+  if (tab === 'market' && shopKind === 'tide') {
+    return heading('兽潮坊市', '妖潮平定后三十天开放，供应三至五阶药材与炼器材料；按本期排名价支付灵石。', S.tide?.market?.open ? '已开放' : '未开放')
+      + panel('战后高阶材料交易', '', `<div class="task-content"><button class="subtle" data-shop="herb">返回普通坊市</button>${renderTideMarket(S, { kind: tideMarketKind, grade: tideMarketGrade, quantities: tideMarketQuantities })}</div>`);
+  }
 
   let shopBody;
   if (!S.inCity) {
@@ -1292,7 +1395,7 @@ function viewMarket() {
             + `${i.owned ? ` · 已有 ${i.owned}` : ''}`
             + `${i.stageName ? ` · 需${escape(i.stageName)}` : ''}`
             + `${i.reason ? `<span class="market-item-reason">${escape(i.reason)}</span>` : ''}`
-            + `</div>${i.kind === 'potion' ? renderPillEffect(S, i.id, { catalog: true }) : ''}</div>
+            + `</div>${i.kind === 'potion' ? renderPillEffect(S, i.id, { catalog: true }) : ''}${['potion', 'gear'].includes(i.kind) ? renderCraftPricing(i.pricing, { kind: i.kind, compact: true }) : ''}</div>
             <div class="price">${i.price} 灵石</div>
             <div class="qty">
               <button data-qty="${i.id}" data-delta="-1" ${i.kind === 'gear' || qty === 1 ? 'disabled' : ''}>−</button>
@@ -1332,13 +1435,14 @@ function viewMarket() {
 
   // ---- 炼丹 ----
   const recipeCatalog = (S.brewOptions || []).map(o => ({ ...o, grade: o.grade ?? (S.pillCatalog || []).find(pill => pill.id === o.id)?.grade }));
+  const recipeGrades = [...new Set(recipeCatalog.map(o => Number(o.grade)).filter(grade => Number.isInteger(grade) && grade > 0))].sort((a, b) => a - b);
   const recipes = recipeCatalog.filter(o => (brewGrade === 'all' || Number(o.grade) === Number(brewGrade))
     && (!brewSearch || `${o.name} ${o.desc} ${o.reason}`.includes(brewSearch.trim())));
   const quotedRecipes = recipes.map(o => ({ ...o, batchQuote: brewRequirements(S, o, brewBatch) }));
   if (!recipes.some(recipe => recipe.id === brewSupplyRecipeId)) brewSupplyRecipeId = recipes[0]?.id || '';
   const brew = quotedRecipes.filter(o => o.batchQuote.enabled);
   const brewCards = quotedRecipes.map(o =>
-    `<button class="craft-card${o.batchQuote.enabled ? '' : ' card-disabled'}" data-action="craft" data-id="${o.id}" ${o.batchQuote.enabled ? '' : 'disabled'}>`
+    `<article class="craft-card${o.batchQuote.enabled ? '' : ' card-disabled'}">`
   + `<div class="craft-top"><strong>${escape(o.name)}</strong>`
   + `<span class="rate ${o.chance < 0.4 ? 'low' : ''}">成丹 ${pct(o.chance)}</span></div>`
   + `<div class="craft-cost">开炉 ${o.stoneCost} 灵石 · ${o.days} 天</div>`
@@ -1347,7 +1451,7 @@ function viewMarket() {
   + renderPillEffect(S, o.id, { catalog: true })
   + (o.batchQuote.rows.length ? `<p class="craft-materials">${o.batchQuote.rows.map(item => `${escape(item.name)}：需 ${item.required}，有 ${item.owned}${item.missing ? `，缺 ${item.missing}` : ''}`).join('；')}</p>` : '')
   + (o.batchQuote.reason ? `<p class="card-why">${escape(o.batchQuote.reason)}</p>` : '')
-  + `</button>`).join('')
+    + `<button class="primary" data-action="craft" data-id="${o.id}" ${o.batchQuote.enabled ? '' : 'disabled'}>开炉炼丹</button></article>`).join('')
     || `<div class="empty">材料或灵石不足，暂时无法开炉。</div>`;
 
   const blocked = quotedRecipes.filter(o => !o.batchQuote.enabled);
@@ -1409,15 +1513,15 @@ function viewMarket() {
     ['forge', '铸炼法器'],
     ['kit', '丹炉管理'],
   ], sub) : '';
-  const mHead = heading(tab === 'workshop' ? '工坊' : '坊市', tab === 'workshop' ? '选择丹方与配料，开炉前查看投入和实际效果。' : '买卖药材、材料、丹药与法宝。',
-                        S.inCity ? '在城中' : '不在城中');
+  const mHead = heading(tab === 'workshop' ? '工坊' : '普通坊市', tab === 'workshop' ? '选择丹方与配料，开炉前查看投入和实际效果。' : '购买药材、材料、丹药与功法；成品法器请在工坊自行炼制。',
+                        S.inCity ? '在城中' : S.player.atCave ? '在洞府' : '外出');
 
   if (sub === 'forge') return mHead + mTabs + viewForgeWorkshop();
 
   if (sub === 'brew') {
     return mHead + mTabs
       + layout(panel('开炉炼丹', `${brewGrade === 'all' ? '全部品阶' : brewGrade + ' 阶'} · ${recipes.length} 张丹方`, `<div style="padding:14px 22px 18px">
-          <div class="recipe-controls"><label>品阶 <select data-brew-grade><option value="all" ${brewGrade === 'all' ? 'selected' : ''}>全部品阶</option>${[1, 2, 3, 4, 5].map(grade => `<option value="${grade}" ${String(grade) === brewGrade ? 'selected' : ''}>${grade} 阶</option>`).join('')}</select></label><label>查丹方 <input data-brew-search type="search" placeholder="丹方名称、效果或药材" value="${escape(brewSearch)}"></label>
+          <div class="recipe-controls"><label>品阶 <select data-brew-grade><option value="all" ${brewGrade === 'all' ? 'selected' : ''}>全部品阶</option>${recipeGrades.map(grade => `<option value="${grade}" ${String(grade) === brewGrade ? 'selected' : ''}>${grade} 阶</option>`).join('')}</select></label><label>查丹方 <input data-brew-search type="search" placeholder="丹方名称、效果或药材" value="${escape(brewSearch)}"></label>
           <label>开炉次数 <select data-brew-batch>${[1, 3, 5, 10].map(n => `<option value="${n}" ${n === brewBatch ? 'selected' : ''}>${n} 炉</option>`).join('')}</select></label></div>
           <p class="panel-note">下方灵石、耗时为每炉投入；批量炼制会逐炉扣料，遇事暂停。</p>
           <div class="recipe-controls"><label>一键补料丹方 <select data-brew-supply-recipe>${recipes.map(recipe => `<option value="${escape(recipe.id)}" ${recipe.id === brewSupplyRecipeId ? 'selected' : ''}>${escape(recipe.name)}</option>`).join('')}</select></label></div>
@@ -1438,7 +1542,7 @@ function viewMarket() {
     : shopKind === 'stock' ? stock : shopBody;
   const gradeControls = ['book', 'stock'].includes(shopKind) ? '' : `<label class="shop-grade-control">品阶 <select data-shop-grade><option value="all" ${shopGrades[shopKind] === 'all' ? 'selected' : ''}>全部品阶</option>${[1, 2, 3, 4, 5].map(grade => `<option value="${grade}" ${String(grade) === shopGrades[shopKind] ? 'selected' : ''}>${grade} 阶</option>`).join('')}</select></label>`;
   return mHead + mTabs
-       + layout(panel('坊市', '', `<div style="padding:14px 22px 0">
+       + layout(panel('普通坊市', '', `<div style="padding:14px 22px 0">
            <div class="market-catalog-controls"><div class="shop-tabs">${tabs}</div>${gradeControls}</div>${['herb', 'material'].includes(shopKind) ? '<p class="market-material-note">普通坊市只供应一、二阶材料；高阶材料可在天机阁购买秘境位置，通关取得 ×10。</p>' : ''}</div>${selectedShopBody}`), aside);
 }
 // ------------------------------------------------------------
@@ -1532,7 +1636,8 @@ function viewBattle() {
     + `<span>${b.lethal
         ? '<b class="lethal-tag">生死斗法</b>'
         : S.dungeons?.run ? '秘境斗法' : '切磋 / 考核'} · 第 <b>${b.turn + 1}</b> / 24 回合</span>`
-    + `<span>月历暂停 · 出牌阶段${b.playerFirst != null ? ` · ${b.playerFirst ? '你方先手' : '敌方先手'}` : ''}</span></header>`
+    + `<span>${b.kind === 'tide' ? '兽潮斗法 · 每回合一天' : '月历暂停'} · 出牌阶段${b.playerFirst != null ? ` · ${b.playerFirst ? '你方先手' : '敌方先手'}` : ''}</span></header>`
+    + renderTideBattleNotice(b, S.tide)
     + (b.lethal
         ? `<div class="lethal-warn">${S.checkpoint?.enabled ? '战败会陨落。意外死亡后可选择接受结局，或回到最近存档；回档会撤回保存之后的进度。' : '战败会陨落并结束这一世，请留意双方气血与敌方意图。'}</div>`
         : S.dungeons?.run ? '<p class="panel-note">本场不致死。战败或斗法撤离会结束探索，只带回一半已得物资；未通关入口消失，临时神通与遗物离境后消散。</p>' : '')
@@ -1853,7 +1958,7 @@ function render() {
     $('#workspace').innerHTML = viewBattle();
   } else {
     const views = {
-      chronicle: viewChronicle, map: viewMap, arts: viewArts,
+      chronicle: viewChronicle, map: viewMap, cave: viewCave, arts: viewArts,
       society: viewSociety, roster: viewRoster, quests: viewQuests,
       market: viewMarket, workshop: viewMarket, economy: viewEconomy,
       inventory: () => renderInventoryPanel(S, { kind: inventoryKind, grade: inventoryGrade, sub: subOf('inventory', 'items'), materials: forgeOpts.materials, poisonHTML: poisonBox() }), tianji: () => tianji.render(),
@@ -1880,18 +1985,13 @@ function render() {
     if (['society', 'quests', 'economy'].includes(tab) && !sectData) {
       refreshSects().then(() => { if (['society', 'quests', 'economy'].includes(tab)) render(); });
     }
-    // 宗门页的「山门差事」也要用 ecoOpts，进页时一并拉回来
-    if (tab === 'society' && !economyReady) {
-      refreshEconomy().then(() => { if (tab === 'society') render(); });
-    }
-    if (['economy', 'workshop', 'inventory'].includes(tab) && !economyReady) {
-      refreshEconomy().then(() => { if (['economy', 'workshop', 'inventory'].includes(tab)) render(); });
+    const needs = economyNeeds();
+    if ((needs.actions && !ecoReady && !ecoLoading) || (needs.forge && !forgeReady && !forgeLoading)
+      || (needs.forge && forgeReady && !forgePreview && !forgeLoading && !forgePreviewLoading)) {
+      refreshEconomyView();
     }
     if ((tab === 'society' || (tab === 'map' && subOf('map', 'atlas') === 'friends')) && selectedNpc) {
       loadSocialActions(selectedNpc);
-      if (tab === 'map' && !economyReady && !economyLoading && Object.values(S.arts.materials || {}).some(count => count > 0)) {
-        refreshEconomy().then(() => { if (tab === 'map') render(); });
-      }
     }
     // 通讯录的筛选/排序/传讯是委托事件，插进 DOM 之后才绑得上
     if (tab === 'roster') bindRosterTab();
@@ -2094,6 +2194,16 @@ document.addEventListener('click', async e => {
   if (intelKind) { dungeonIntelKind = intelKind.dataset.dungeonIntelKind; render(); return; }
   const shopTab = e.target.closest('[data-shop]');
   if (shopTab) { shopKind = shopTab.dataset.shop; try { localStorage.setItem('nz-desktop-market-kind', shopKind); } catch {} render(); return; }
+  const tideKind = e.target.closest('[data-tide-market-kind]');
+  if (tideKind) { tideMarketKind = tideKind.dataset.tideMarketKind; try { localStorage.setItem('nz-desktop-tide-market-kind', tideMarketKind); } catch {} render(); return; }
+  const gardenGrade = e.target.closest('[data-cave-plant-grade]');
+  if (gardenGrade) {
+    const grade = gardenGrade.dataset.cavePlantGrade;
+    if (grade === 'all' || /^[1-6]$/.test(grade || '')) {
+      gardenFilters.grade = grade; saveGardenFilters(); render();
+    }
+    return;
+  }
 
   // 分类筛选只更新本地纪事视图，不请求服务端或推进时间。
   const logTab = e.target.closest('[data-logfilter]');
@@ -2317,6 +2427,44 @@ document.addEventListener('click', async e => {
     case 'cave-upgrade':
       await call('cave/upgrade', {});
       break;
+    case 'cave-return':
+      await call('travel', { to: S.cave.access.homeLocation, mode: S.cave.access.returnMode });
+      break;
+    case 'cave-train':
+      await call('eco', { type: id, id: '' });
+      break;
+    case 'cave-garden-plant': {
+      const plotId = btn.dataset.plotId;
+      const controls = btn.closest('.cave-plot');
+      const herbId = controls?.querySelector('[data-cave-plant-herb]')?.value;
+      if (!herbId) { toast('请先选择行囊中可播种的药材。', 'warn'); break; }
+      const garden = S?.cave?.garden;
+      const maximum = cavePlantCountLimit(garden?.plots?.find(plot => plot.plotId === plotId),
+        garden?.plantOptions?.find(option => option.herbId === herbId));
+      if (!maximum) { toast('当前库存或本格容量不足，请重新选择药材。', 'warn'); break; }
+      const countInput = controls?.querySelector('[data-cave-plant-count]');
+      const count = cavePlantCount(countInput?.value ?? gardenSelections[plotId]?.count, maximum);
+      if (countInput) countInput.value = String(count);
+      (gardenSelections[plotId] ||= {}).count = count;
+      await call('cave/garden/plant', { plotId, herbId, count });
+      break;
+    }
+    case 'cave-garden-harvest':
+      await call('cave/garden/harvest', { plotId: btn.dataset.plotId });
+      break;
+    case 'cave-garden-deposit':
+    case 'cave-garden-withdraw': {
+      const plotId = btn.dataset.plotId;
+      const amount = Number(btn.closest('.cave-plot')?.querySelector('[data-cave-reserve-amount]')?.value || gardenSelections[plotId]?.reserveAmount);
+      await call(`cave/garden/reserve/${a === 'cave-garden-deposit' ? 'deposit' : 'withdraw'}`, { plotId, amount });
+      break;
+    }
+    case 'cave-garden-clear':
+      if (window.confirm(S?.cave?.garden?.hasGreenBottle === true
+        ? '清理将放弃本格全部成熟和未成熟种苗；灵石储备保留。确认清理？'
+        : '清理将放弃本格全部成熟和未成熟种苗。确认清理？'))
+        await call('cave/garden/clear', { plotId: btn.dataset.plotId });
+      break;
     case 'set-main':
       await call('arts/main', { id });
       invalidateNodes();
@@ -2453,9 +2601,25 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'tide-fight': {
-      const r = await call('tide/fight');
+      const battlefield = btn.dataset.battlefield;
+      const r = await call('tide/fight', battlefield == null ? {} : { battlefield: Number(battlefield) });
       if (r && r.error) { toast(r.error, 'warn'); break; }
       if (r) toast(r.text || '你迎战兽潮。', 'good');
+      render();
+      break;
+    }
+    case 'tide-market-open': {
+      shopKind = 'tide';
+      try { localStorage.setItem('nz-desktop-market-kind', shopKind); } catch {}
+      navigateTab('market');
+      break;
+    }
+    case 'tide-market-buy': {
+      const r = await call('tide/market/buy', {
+        eventId: btn.dataset.eventId, kind: btn.dataset.kind, id,
+        count: Number(btn.dataset.count), expectedUnitPrice: Number(btn.dataset.unitPrice),
+      });
+      if (r && !r.error) tideMarketQuantities[`${btn.dataset.kind}:${id}`] = 1;
       render();
       break;
     }
@@ -2686,7 +2850,7 @@ document.addEventListener('click', async e => {
         + '【炼丹】在坊市的开炉炼丹页选择丹方与炉数，耗时与投入列在卡片上。'
         + '遇事暂停后去岁月纪事继续推进；所有丹方均可查看。\n\n'
         + '【功法与神通】抄本从武陵城书坊、宗门藏经阁取得，需修习后生效。'
-        + '洞府道法的神通搭配页可更换额外神通，槽位随大境界由 4 增至 12。'
+        + '功法与悟道的神通搭配页可更换额外神通，槽位随大境界由 4 增至 12。'
         + '普通攻击与防御固定常备，各五张，不占槽位；流派组合页列出搭配与触发条件。\n\n'
         + '【斗法】每回合抽 5 张，出牌不触发反击，'
         + '点「结束回合」才结算敌方行动。');
@@ -2702,13 +2866,38 @@ document.addEventListener('click', async e => {
 // 调用方式：由 document 的 change 事件自动调用。
 // 返回值：Promise；无显式返回值。
 document.addEventListener('change', async e => {
+  if (e.target.matches('[data-cave-plant-herb], [data-cave-plant-count], [data-cave-reserve-amount]')) {
+    const plotId = e.target.dataset.plotId;
+    const choices = gardenSelections[plotId] ||= {};
+    if (e.target.matches('[data-cave-plant-herb]')) {
+      choices.herbId = e.target.value;
+      const garden = S?.cave?.garden;
+      const maximum = cavePlantCountLimit(garden?.plots?.find(plot => plot.plotId === plotId),
+        garden?.plantOptions?.find(option => option.herbId === choices.herbId));
+      choices.count = cavePlantCount(choices.count, maximum);
+      render();
+    }
+    if (e.target.matches('[data-cave-plant-count]')) {
+      choices.count = cavePlantCount(e.target.value, Number(e.target.max));
+      e.target.value = String(choices.count);
+    }
+    if (e.target.matches('[data-cave-reserve-amount]')) choices.reserveAmount = Number(e.target.value);
+    return; // 数量失焦不能重建正在被点击的按钮，否则第一次点击会丢失。
+  }
+  const tideQuantity = e.target.closest('[data-tide-quantity]');
+  if (tideQuantity) { tideMarketQuantities[tideQuantity.dataset.tideQuantity] = Math.max(1, Math.min(Number(tideQuantity.max) || 99, Math.floor(Number(tideQuantity.value)) || 1)); render(); return; }
+  if (e.target.matches('[data-tide-market-grade]')) { tideMarketGrade = e.target.value; try { localStorage.setItem('nz-desktop-tide-market-grade', tideMarketGrade); } catch {} render(); return; }
   const inp = e.target.closest('[data-qtyinput]');
   if (inp) {
     const id = inp.dataset.qtyinput;
     shopQty[id] = Math.max(1, Math.min(99, Number(inp.value) || 1));
     render();
   }
-  if (e.target.matches('[data-plan-select]')) { await call('plan', { id: e.target.value }); return; }
+  if (e.target.matches('[data-plan-select]')) {
+    const result = await call('plan', { plan: e.target.value });
+    if (!result || result.error || result.ok === false) e.target.value = S?.plan || e.target.value;
+    return;
+  }
   if (e.target.matches('[data-inventory-grade]')) { inventoryGrade = e.target.value; render(); return; }
   if (e.target.matches('[data-shop-grade]')) { shopGrades[shopKind] = e.target.value; try { localStorage.setItem('nz-desktop-market-grades', JSON.stringify(shopGrades)); } catch {} render(); return; }
   if (e.target.matches('[data-dungeon-intel-grade]')) { dungeonIntelGrade = e.target.value; try { localStorage.setItem('nz-desktop-intel-grade', dungeonIntelGrade); } catch {} render(); return; }
@@ -2730,6 +2919,11 @@ document.addEventListener('change', async e => {
 // 调用方式：由 document 的 input 事件自动调用。
 // 返回值：无返回值；不修改游戏规则或推进时间。
 document.addEventListener('input', e => {
+  if (e.target.matches('[data-cave-plant-search]')) {
+    gardenFilters.search = e.target.value;
+    if (!e.isComposing) applyGardenSearch(e.target);
+    return;
+  }
   if (e.target.matches('[data-dungeon-intel-search]')) {
     dungeonIntelSearch = e.target.value;
     const cursor = e.target.selectionStart;
@@ -2752,6 +2946,12 @@ document.addEventListener('input', e => {
   render();
   const input = document.querySelector('[data-brew-search]');
   input?.focus(); input?.setSelectionRange(cursor, cursor);
+});
+
+// 用途：在中文组词确认后应用搜索；流程：灵田药材输入法事件。
+// 用法：由document的compositionend事件调用；返回：无，避免组词中重建控件打断输入法。
+document.addEventListener('compositionend', e => {
+  if (e.target.matches('[data-cave-plant-search]')) applyGardenSearch(e.target);
 });
 
 // 快捷键

@@ -34,6 +34,10 @@ struct MarketItem {
     std::string dao;         // 丹药对应大道
 };
 
+// 用途：计算药材/器材在当前声望、天赋与行情下的正常买价；流程：普通与战后坊市共用。
+// 使用方式：传稳定类别和物品 ID；不检查普通铺是否售卖高阶材料；返回：正常单价，未知物品为零。
+int normalMaterialBuyPrice(const Game& g, const string& kind, const string& id);
+
 // 当前所在地能买到的东西（只在城池有效）
 // 用途：列出当前城池实际可售的丹药草药器材。
 // 参与流程：人生推进、成长与世界模拟。

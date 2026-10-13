@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import * as tianji from '../web/tianji.mjs';
-import { renderDaos, renderSpellPicker, renderArtBuilds } from '../web/arts.mjs';
+import { renderDaos, renderSpellPicker, renderArtBuilds, renderManualIllustration } from '../web/arts.mjs';
+import { renderTidePanel, shouldRenderTide, renderTideMarket, renderTideBattleNotice } from '../web/tide-panel.mjs';
 import { renderFriendPanel, renderBondActions, renderNpcLearning, renderNpcLoadout } from '../web/friends.mjs';
 import { bindRoster } from '../web/roster.mjs';
 import { renderAtlas, selectedTravelMode, travelFeedback, isTravelJob } from '../web/map.mjs';
@@ -21,7 +22,9 @@ import { renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSect
 import * as artifacts from '../web/artifacts.mjs';
 import { renderNumericPreview } from '../web/numeric-preview.mjs';
 import { renderRenownSources } from '../web/renown.mjs';
-import { renderEconomy, forgeRequirements, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade } from '../web/economy.mjs';
+import { renderEconomy, forgeRequirements, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade, loadEcoOptions, loadForgeOptions, invalidateEco } from '../web/economy.mjs';
+import { renderCavePage } from '../web/cave-panel.mjs';
+import { renderCraftPricing } from '../web/craft-pricing.mjs';
 import { renderInventoryPanel } from '../web/inventory-panel.mjs';
 import { renderTaskPanel } from '../web/task-panel.mjs';
 import { renderCraftSupply, renderSalvageQuote } from '../web/workshop.mjs';
@@ -232,6 +235,8 @@ const document = { querySelector: element, getElementById(id) { return element('
 const requests = [];
 const context = { ...tianji, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
   renderSectMentors, renderSectTasks, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
+  renderCavePage, renderCraftPricing,
+  renderManualIllustration, renderTidePanel, shouldRenderTide, renderTideMarket, renderTideBattleNotice,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
   fetch: async (path, options) => { requests.push({ path, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; } };
@@ -242,17 +247,30 @@ for (const name of ['ningzhou-atlas']) {
 }
 let source = readFileSync(join(rootDir, 'web', 'app.mjs'), 'utf8').replace(/^import[\s\S]*?;\r?\n/gm, '');
 source = source.slice(0, source.indexOf('(async function boot()'));
-source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = { viewMarket, viewBattle, viewMap, renderSidebar, call, manualSourceRows, setSub, setTab:next=>tab=next, setShopKind:next=>shopKind=next, getTab:()=>tab, getState: () => S, focusMap: (id, mode) => { mapFocus = id; mapModes[id] = mode; } };`;
+source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = { viewMarket, viewBattle, viewMap, renderSidebar, call, refreshEconomy, refreshEconomyView, refreshForgePreview, manualSourceRows, setSub, setTab:next=>tab=next, setShopKind:next=>shopKind=next, getTab:()=>tab, getState: () => S, getEconomy:()=>({options:ecoOpts,forge:forgeOpts,preview:forgePreview}), focusMap: (id, mode) => { mapFocus = id; mapModes[id] = mode; } };`;
 vm.runInNewContext(source, context);
 context.api.renderSidebar();
 verify(element('#player-card').innerHTML.includes('<strong>16</strong><span>岁</span>'), '年龄显示单位而不粘连月份');
 verify(element('#player-card').innerHTML.includes('player-female.webp') && element('#player-card').innerHTML.includes('遁速')
   && !element('#player-card').innerHTML.includes('<label>剑意</label>'), '角色侧栏使用性别立绘与遁速，移除旧永久剑意属性');
+const sidebarState = context.api.getState(), savedBattleForSidebar = sidebarState.battle;
+sidebarState.battle = { hp: 83, max: 144 };
+context.api.renderSidebar();
+verify(element('#player-card').innerHTML.includes('<label>斗法气血</label>')
+  && element('#player-card').innerHTML.includes('<strong>83</strong><span>/ 144</span>'), '斗法侧栏即时显示当前战斗气血，不停留在战前健康度');
+sidebarState.battle = savedBattleForSidebar;
+context.api.renderSidebar();
+verify(element('#player-card').innerHTML.includes('<label>气血</label>')
+  && element('#player-card').innerHTML.includes(`/ 100</span>`), '斗法结束侧栏恢复健康度口径');
 context.api.setTab('workshop');
 context.api.setSub('workshop', 'brew');
 const brew = context.api.viewMarket();
 verify(brew.includes('丹方14'), '完整可炼丹方可访问，不截断为前九条');
 verify(brew.includes('data-brew-batch'), '批量炼丹入口可访问');
+const sixthGradeRecipe = { ...sidebarState.brewOptions[0], id: 'grade-six', grade: 6 };
+sidebarState.brewOptions.push(sixthGradeRecipe);
+verify(context.api.viewMarket().includes('<option value="6"'), '炼丹品阶筛选从真实丹方目录生成，六阶丹方可单独选择');
+sidebarState.brewOptions.pop();
 context.api.setTab('market');
 verify(!context.api.viewMarket().includes('功法13') && !context.api.viewMarket().includes('data-action="trade-stock"'), '坊市普通分类不附加书坊或突破物品长列表');
 context.api.setShopKind('book');
@@ -260,9 +278,65 @@ verify(context.api.viewMarket().includes('功法13'), '完整书坊可访问，�
 context.api.setShopKind('stock');
 verify(context.api.viewMarket().includes('data-action="trade-stock"') && !context.api.viewMarket().includes('功法13'), '突破物品集中在独立坊市分类');
 context.api.setShopKind('herb');
+const tideBeforeMarketCheck = sidebarState.tide;
+sidebarState.tide = { eventId: 'ui-market-scope', market: { open: true, daysLeft: 20, items: [
+  { kind: 'herb', id: '6201', name: '兽潮高阶药材', grade: 3, stock: 5, basePrice: 20, unitPrice: 10, enabled: true },
+  { kind: 'material', id: 'gold', name: '兽潮高阶器材', grade: 3, stock: 5, basePrice: 40, unitPrice: 20, enabled: true },
+  { kind: 'gear', id: 'scope-gear', name: '不应出现的法器', grade: 3, stock: 5, unitPrice: 20, enabled: true },
+  { kind: 'manual', id: 'scope-manual', name: '不应出现的功法', grade: 3, stock: 5, unitPrice: 20, enabled: true },
+  { kind: 'sect', id: 'scope-sect', name: '不应出现的贡献兑换', grade: 3, stock: 5, unitPrice: 20, enabled: true },
+] } };
+context.api.setShopKind('tide');
+const isolatedTideMarketHTML = context.api.viewMarket();
+verify(isolatedTideMarketHTML.includes('兽潮坊市') && isolatedTideMarketHTML.includes('返回普通坊市')
+  && isolatedTideMarketHTML.includes('兽潮高阶药材') && isolatedTideMarketHTML.includes('兽潮高阶器材'),
+  '兽潮坊市有明确标题、返回普通市场入口及高阶材料');
+verify(!/data-shop="(?:gear|book|stock|potion)"/.test(isolatedTideMarketHTML)
+  && !/data-action="(?:buy|book-buy|library|trade-stock|craft)"/.test(isolatedTideMarketHTML)
+  && !isolatedTideMarketHTML.includes('宗门贡献'), '兽潮坊市不渲染普通法器书坊突破物品或贡献兑换按钮');
+verify(!isolatedTideMarketHTML.includes('不应出现的'), '兽潮目录只展示合法高阶草药及器材');
+verify(shouldRenderTide({ active: true }) && shouldRenderTide({ active: false, settled: true, market: { open: true } }),
+  '兽潮战期与战后坊市开放期保留当前活动入口');
+verify(!shouldRenderTide({ active: false, settled: true, market: { open: false } }),
+  '兽潮及战后坊市都结束后移除长期驻留的活动面板');
+sidebarState.tide.market.open = false;
+const expiredTideMarketHTML = context.api.viewMarket();
+verify(expiredTideMarketHTML.includes('普通坊市') && !expiredTideMarketHTML.includes('战后高阶材料交易')
+  && !expiredTideMarketHTML.includes('data-action="tide-market-buy"'), '兽潮坊市到期后自动回普通坊市');
+sidebarState.tide.market.open = true;
+verify(context.api.viewMarket().includes('普通坊市') && !context.api.viewMarket().includes('战后高阶材料交易'),
+  '到期退出后新的兽潮坊市不会悄悄重开已关闭的选择');
+sidebarState.tide = tideBeforeMarketCheck;
+context.api.setShopKind('herb');
+const ordinaryMarketHTML = context.api.viewMarket();
+verify(!ordinaryMarketHTML.includes('data-shop="gear"'), '普通坊市不再提供无神通成品法器分类');
+context.api.setShopKind('gear');
+const obsoleteGearMarketHTML = context.api.viewMarket();
+verify(!obsoleteGearMarketHTML.includes('data-kind="gear"') && !obsoleteGearMarketHTML.includes('剑·1阶'),
+  '旧法器分类偏好自动退回普通药材，旧目录数据也不展示可购法器');
+context.api.setShopKind('herb');
 const clippedPill = {pillCatalog:[{id:'5001',effect:'当前回复气血0点',baseEffect:'回复气血15点',catalogEffect:'回复气血20点',basePoison:3,poisonAfter:3,poisonDelta:3}]};
 verify(renderPillEffect(clippedPill,'5001',{catalog:true}).includes('回复气血20点') && !renderPillEffect(clippedPill,'5001',{catalog:true}).includes('回复气血0点'), '丹药目录优先完整catalogEffect，不用健康度截断的当前回复');
 verify(renderPillEffect(clippedPill,'5001').includes('当前回复气血0点'), '实际服用详情保留当前健康度对应的真实效果');
+
+const saleChannelQuote = {
+  valid: true, materialCost: 100, baseSellPrice: 150, buyPrice: 300, sellPrice: 150, standardOutput: 1,
+  market: { locations: [{ id: 'wuling', name: '武陵城' }], inCity: true,
+    remainingCash: 450, affordableCount: 3, nextMonthBudget: 1200, reason: '' },
+};
+const saleChannelHtml = renderCraftPricing(saleChannelQuote);
+verify(saleChannelHtml.includes('武陵城') && saleChannelHtml.includes('当前可收 3 枚')
+  && saleChannelHtml.includes('450 灵石'), '工坊报价显示后端收购地点、真实剩余资金和有限可售数量');
+const noCashSaleHtml = renderCraftPricing({ ...saleChannelQuote,
+  market: { ...saleChannelQuote.market, remainingCash: 0, affordableCount: 0, reason: '本月资金不足，请等待新月' } });
+verify(noCashSaleHtml.includes('当前可收 0 枚') && noCashSaleHtml.includes('请等待新月'), '零收购预算不虚构可售能力，并显示失败原因');
+verify(renderCraftPricing({ ...saleChannelQuote, market: { ...saleChannelQuote.market, inCity: false } })
+  .includes('请携成品前往城中'), '非城中报价明确收购渠道，不表示能原地出售');
+verify(!renderCraftPricing({ ...saleChannelQuote, market: undefined }).includes('data-craft-sale-availability'),
+  '旧响应缺渠道数据时不臆算可售数量');
+verify(!renderCraftPricing({ ...saleChannelQuote, market: { ...saleChannelQuote.market,
+  locations: [{ name: '<img src=x onerror=alert(1)>' }], reason: '<script>bad</script>' } }).includes('<script>bad'),
+  '收购渠道及拒绝原因展示转义外部文案');
 verify(['sword','seal','armor','bell','pearl'].every(shape=>marketGrade({gears:[]},{kind:'gear',id:shape+'-1'})===1), '旧接口未拥有的五种商城法器按稳定模型ID补齐一阶');
 verify(marketGrade({gears:[]},{kind:'gear',id:'forge-4143-1'})===0&&marketGrade({gears:[]},{kind:'gear',id:'unknown-1'})===0, '商城品阶回退不误判自炼ID或未知器型');
 verify(marketGrade({pillCatalog:[{id:'5001',grade:1}]},{kind:'potion',id:'5001'})===1&&marketGrade({gears:[]},{kind:'gear',id:'sword-1',grade:2})===2, '旧丹药接口使用权威目录，新grade字段优先于模型回退');
@@ -277,6 +351,22 @@ context.api.getState().battle = null;
 const actionButton = { disabled: false, dataset: { action: 'advance-step', days: '1' } };
 await handlers.click({ target: { closest(sel) { return sel === '[data-action]' ? actionButton : null; } } });
 verify(requests.length === 1 && requests[0].path === '/api/advance' && requests[0].body.days === 1, '过一天按钮发送一天推进请求');
+const fetchBeforePlanCheck = context.fetch;
+context.api.getState().plan = 'cultivate';
+context.fetch = async (path, options) => {
+  const body = JSON.parse(options.body);
+  requests.push({ path, body });
+  return { ok: true, json: async () => ({ ok: true, state: { ...context.api.getState(), plan: body.plan || context.api.getState().plan } }) };
+};
+const planSelect = { value: 'explore', matches: selector => selector === '[data-plan-select]', closest: () => null };
+await handlers.change({ target: planSelect });
+verify(requests.at(-1).path === '/api/plan' && requests.at(-1).body.plan === 'explore'
+  && context.api.getState().plan === 'explore', '日常安排下拉提交plan字段并以服务端状态确认切换');
+context.fetch = async () => ({ ok: false, json: async () => ({ ok: false, error: '请先完成当前工作' }) });
+planSelect.value = 'gather';
+await handlers.change({ target: planSelect });
+verify(planSelect.value === 'explore' && context.api.getState().plan === 'explore', '日常安排失败后恢复服务端确认的选择');
+context.fetch = fetchBeforePlanCheck;
 actionButton.dataset = { action: 'bond', id: 'lesson' };
 await handlers.click({ target: { closest(sel) { return sel === '[data-action]' ? actionButton : null; } } });
 verify(requests.at(-1).path === '/api/bond' && requests.at(-1).body.kind === 'lesson', '师尊授业发送规范 bond 动作');
@@ -382,7 +472,7 @@ const sectLibraryState = {...state,player:{...state.player,sect:'jinhong'},libra
 const sectLibraryHTML=renderSectSpellLibrary(sectLibraryState);
 verify(sectLibraryHTML.includes('金光连斩') && sectLibraryHTML.includes('金系连击消耗锐意') && sectLibraryHTML.includes('筑基初期 · 18 贡献')
   && !sectLibraryHTML.includes('烈焰'), '藏经阁仅显示本宗神通与实际规则、所需境界、贡献价格');
-verify(/data-id="sword" disabled/.test(sectLibraryHTML) && sectLibraryHTML.includes('洞府道法 → 神通搭配'), '已学神通不可重复购买，学习和装备流程明确');
+verify(/data-id="sword" disabled/.test(sectLibraryHTML) && sectLibraryHTML.includes('功法与悟道 → 神通搭配'), '已学神通不可重复购买，学习和装备流程明确');
 const dungeonState = { ...state, player: {...state.player,cave:'wuling'}, cave: {
   tier:0,tierName:'寻常洞府',maxSupply:1,
   upgrade:{tier:1,name:'灵脉洞府',cost:120,minRenown:20,enabled:false,reason:'声望不足 20。',desc:'支持二档灵气配给。'},
@@ -520,6 +610,137 @@ context.fetch = async () => ({ ok: false, json: async () => ({ ok: false, error:
 actionButton.dataset = { action: 'save' };
 await handlers.click({ target: { closest(sel) { return sel === '[data-action]' ? actionButton : null; } } });
 verify(element('#toast').textContent === '存档失败', '保存失败时保留失败原因，不显示已保存');
+
+// 真实桌面经济编排：制作目录只在需要它的子页请求，动作结果不等待无关目录。
+const beforeEconomyState = context.api.getState();
+beforeEconomyState.battle = null;
+const economyRequests = [];
+const economyDefinitions = {materials:[{id:'iron',name:'锻剑铁',owned:10},{id:'jade',name:'岩玉',owned:10},{id:'wood',name:'桃木',owned:10}],shapes:[{id:'sword',name:'剑',slot:'weapon'}]};
+context.fetch = async (path, options = {}) => {
+  economyRequests.push(path);
+  const data = path === '/api/forge-options' ? economyDefinitions : path === '/api/eco-options'
+    ? {options:[{id:'city-task',name:'城中差事'}]} : path === '/api/forge-preview'
+      ? {info:{valid:true,enabled:true,cost:33,quoteVersion:economyRequests.length}}
+      : {ok:true,state:{...context.api.getState()}};
+  return {ok:true,json:async()=>data};
+};
+context.loadEcoOptions = async () => (await (await context.fetch('/api/eco-options', {body:'{}'})).json()).options;
+context.loadForgeOptions = async () => (await (await context.fetch('/api/forge-options', {body:'{}'})).json());
+context.api.setTab('workshop');
+context.api.setSub('workshop','brew');
+await context.api.call('advance',{days:1});
+verify(economyRequests.length === 1 && economyRequests[0] === '/api/advance', '炼丹子页推进只等待一次动作响应，不额外读取任务或炼器目录');
+await context.api.refreshEconomy();
+verify(economyRequests.length === 1, '炼丹使用state丹方报价，主动刷新也不取无关炼器目录');
+for (const [nextTab,nextSub] of [['workshop','kit'],['inventory','items'],['inventory','character'],['economy','wild'],['economy','story'],['society','library']]) {
+  context.api.setTab(nextTab); context.api.setSub(nextTab,nextSub);
+  const count = economyRequests.length;
+  await context.api.refreshEconomy();
+  verify(economyRequests.length === count, `${nextTab}/${nextSub}由state展示，不读取无关经济目录`);
+}
+context.api.setTab('economy'); context.api.setSub('economy','city');
+await context.api.refreshEconomy();
+verify(economyRequests.at(-1) === '/api/eco-options' && economyRequests.filter(path=>path==='/api/forge-options').length===0, '城中任务只加载任务目录，不推演炼器');
+context.api.setTab('workshop'); context.api.setSub('workshop','forge');
+const forgeRequestStart = economyRequests.length;
+await Promise.all([context.api.refreshEconomy(),context.api.refreshEconomy()]);
+verify(JSON.stringify(economyRequests.slice(forgeRequestStart)) === JSON.stringify(['/api/forge-options','/api/forge-preview']), '炼器并发重绘只读取一次材料目录和一次当前配方预览');
+verify(context.api.getEconomy().preview?.info?.enabled === true, '炼器初次预览使用真实接口返回的可开炉状态');
+const beforeForgeMutation = economyRequests.length;
+await context.api.call('advance',{days:1});
+verify(economyRequests.length === beforeForgeMutation+1 && context.api.getEconomy().preview===null, '炼器动作显示state即解锁，并立即清除失效配方报价');
+await context.api.refreshEconomy();
+verify(JSON.stringify(economyRequests.slice(beforeForgeMutation)) === JSON.stringify(['/api/advance','/api/forge-options','/api/forge-preview']), '新状态再次打开炼器时重新读取权威材料和预览，不复用旧报价');
+context.api.setTab('chronicle');
+await context.api.call('advance',{days:1});
+let resolveOldDefinitions;
+context.loadForgeOptions = () => new Promise(resolve => { resolveOldDefinitions = resolve; });
+context.api.setTab('workshop'); context.api.setSub('workshop','forge');
+const oldDefinitions = context.api.refreshEconomy();
+context.api.setTab('chronicle');
+await context.api.call('advance',{days:1});
+resolveOldDefinitions(economyDefinitions);
+await oldDefinitions;
+verify(context.api.getEconomy().forge.materials.length===0 && context.api.getEconomy().preview===null, '动作改变状态后，旧材料目录响应不能覆盖新状态或发起旧配方预览');
+context.api.setTab('workshop'); context.api.setSub('workshop','forge');
+context.loadForgeOptions = async () => { throw new Error('隔离目录失败'); };
+await assert.rejects(context.api.refreshEconomy(),/隔离目录失败/);
+context.loadForgeOptions = async () => economyDefinitions;
+await context.api.refreshEconomy();
+verify(context.api.getEconomy().forge.materials.length===3 && context.api.getEconomy().preview.info.enabled, '目录失败不锁死加载状态，重新打开可读取有效目录与报价');
+const previewReads = [];
+context.fetch = (path, options) => new Promise(resolve => { previewReads.push({path,resolve}); });
+const sharedPreview = context.api.refreshForgePreview();
+const duplicatePreview = context.api.refreshForgePreview();
+verify(previewReads.length===1 && context.api.getEconomy().preview===null, '同状态同配方预览请求去重，待推演时立即清除可开炉状态');
+previewReads[0].resolve({ok:true,json:async()=>({info:{valid:true,enabled:true,quoteVersion:'same'}})});
+await Promise.all([sharedPreview,duplicatePreview]);
+const oldPreview = context.api.refreshForgePreview();
+context.api.setTab('chronicle');
+context.fetch = async () => ({ok:true,json:async()=>({ok:true,state:{...context.api.getState()}})});
+await context.api.call('advance',{days:1});
+previewReads[1].resolve({ok:true,json:async()=>({info:{valid:true,enabled:true,quoteVersion:'outdated'}})});
+await oldPreview;
+verify(context.api.getEconomy().preview===null, '新state到达后拒绝旧配方推演，不恢复过期可开炉状态');
+context.fetch = async () => ({ok:false,json:async()=>({error:'推演服务不可用'})});
+await context.api.refreshForgePreview();
+verify(context.api.getEconomy().preview.info.enabled===false && context.api.getEconomy().preview.info.reason.includes('推演服务不可用'), '预览失败显示原因并禁开炉，不恢复旧报价');
+context.fetch = async () => ({ok:true,json:async()=>({info:{valid:true,enabled:true,quoteVersion:'retry'}})});
+await context.api.refreshForgePreview();
+verify(context.api.getEconomy().preview.info.quoteVersion==='retry', '预览失败后再次选配可重试并显示新报价');
+context.fetch = async (path) => ({ok:true,json:async()=>path==='/api/forge-preview'
+  ? {info:{valid:true,enabled:true}} : {ok:true,state:{...context.api.getState()}}});
+await context.api.call('advance',{days:1});
+context.api.setTab('workshop'); context.api.setSub('workshop','forge');
+let rejectOutdatedEconomy;
+context.loadForgeOptions = () => new Promise((resolve,reject)=>{rejectOutdatedEconomy=reject;});
+const outdatedEconomyView=context.api.refreshEconomyView();
+context.api.setTab('chronicle');
+await context.api.call('advance',{days:1});
+context.api.setTab('workshop'); context.api.setSub('workshop','forge');
+context.loadForgeOptions=async()=>economyDefinitions;
+await context.api.refreshEconomyView();
+element('#toast').textContent='当前状态目录已刷新';
+rejectOutdatedEconomy(new Error('旧状态目录失败'));
+await outdatedEconomyView;
+verify(element('#toast').textContent==='当前状态目录已刷新', '过期目录请求失败不覆盖新状态成功后的提示');
+context.api.setTab('chronicle');
+await context.api.call('advance',{days:1});
+context.api.setTab('workshop'); context.api.setSub('workshop','forge');
+context.loadForgeOptions=async()=>{throw new Error('当前状态目录失败');};
+await context.api.refreshEconomyView();
+verify(element('#toast').textContent==='当前状态目录失败', '当前页面有效目录请求失败仍显示明确原因');
+context.loadForgeOptions=async()=>economyDefinitions;
+await context.api.refreshEconomyView();
+verify(context.api.getEconomy().preview.info.enabled, '当前目录失败后重新打开恢复有效报价');
+context.api.setTab('chronicle');
+
+// 验证真实目录缓存模块的网络边界，不用测试用缓存代替其失效行为。
+const originalGlobalFetch = globalThis.fetch;
+try {
+  invalidateEco();
+  const cacheRequests=[];
+  globalThis.fetch = (path) => new Promise(resolve => { cacheRequests.push({path,resolve}); });
+  const firstOptions=loadEcoOptions(), secondOptions=loadEcoOptions();
+  verify(cacheRequests.length===1, '实际任务目录模块合并并发网络请求');
+  cacheRequests[0].resolve({ok:true,json:async()=>({options:[{id:'live-task'}]})});
+  await Promise.all([firstOptions,secondOptions]);
+  verify((await loadEcoOptions())[0].id==='live-task' && cacheRequests.length===1, '同状态重绘任务使用有效目录缓存');
+  invalidateEco();
+  const olderForge=loadForgeOptions();
+  invalidateEco();
+  const newerForge=loadForgeOptions();
+  cacheRequests[2].resolve({ok:true,json:async()=>({...economyDefinitions,quoteVersion:'new-state'})});
+  await newerForge;
+  cacheRequests[1].resolve({ok:true,json:async()=>({...economyDefinitions,quoteVersion:'old-state'})});
+  await olderForge;
+  verify((await loadForgeOptions()).quoteVersion==='new-state' && cacheRequests.length===3, '实际材料缓存失效后忽略过期响应，保留最新状态目录');
+  invalidateEco();
+  globalThis.fetch=async()=>({ok:false,json:async()=>({error:'材料目录不可用'})});
+  await assert.rejects(loadForgeOptions(),/材料目录不可用/);
+  globalThis.fetch=async()=>({ok:true,json:async()=>economyDefinitions});
+  verify((await loadForgeOptions()).materials.length===3, '实际材料目录失败不缓存空目录，后续重试可恢复');
+} finally { globalThis.fetch=originalGlobalFetch; invalidateEco(); }
 
 let resolveFetch;
 let fetchCount = 0;

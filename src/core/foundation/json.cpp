@@ -2,6 +2,7 @@
 #include "core/json.h"
 
 #include <cmath>
+#include <charconv>
 #include <cstdio>
 #include <sstream>
 #include <iomanip>
@@ -36,13 +37,23 @@ static void escapeTo(std::string& out, const std::string& s) {
     out += '"';
 }
 
-static void numberTo(std::string& out, double n) {
-    if (!std::isfinite(n)) { out += "null"; return; }
+// 用途：输出JSON数字并保持旧格式；流程：响应、存档与检查点编码；用法：传拥有的输出缓冲和双精度值；返回：无，只追加文本。精确32位整数使用无locale快路，-0及其余浮点仍保留原17位格式。
+static void mfNumberTo(std::string& Output, double Number) {
+    if (!std::isfinite(Number)) { Output += "null"; return; }
+    if (Number >= std::numeric_limits<int>::min() && Number <= std::numeric_limits<int>::max() &&
+        std::trunc(Number) == Number && !(Number == 0.0 && std::signbit(Number))) {
+        char Buffer[32];
+        const auto Result = std::to_chars(Buffer, Buffer + sizeof(Buffer), static_cast<int>(Number));
+        if (Result.ec == std::errc{}) {
+            Output.append(Buffer, Result.ptr);
+            return;
+        }
+    }
     // carry 等小数必须保留双精度，六位截断会让读档改变日收益。
-    std::ostringstream stream;
-    stream.imbue(std::locale::classic());
-    stream << std::setprecision(std::numeric_limits<double>::max_digits10) << n;
-    out += stream.str();
+    std::ostringstream NumberStream;
+    NumberStream.imbue(std::locale::classic());
+    NumberStream << std::setprecision(std::numeric_limits<double>::max_digits10) << Number;
+    Output += NumberStream.str();
 }
 
 static void dumpTo(std::string& out, const Value& v, int indent, int depth) {
@@ -56,7 +67,7 @@ static void dumpTo(std::string& out, const Value& v, int indent, int depth) {
     switch (v.type()) {
         case Type::Null: out += "null"; break;
         case Type::Bool: out += v.asBool() ? "true" : "false"; break;
-        case Type::Number: numberTo(out, v.asNumber()); break;
+        case Type::Number: mfNumberTo(out, v.asNumber()); break;
         case Type::String: escapeTo(out, v.asString()); break;
         case Type::Array: {
             const auto& a = v.asArray();

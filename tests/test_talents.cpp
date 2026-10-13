@@ -175,9 +175,9 @@ void runTalentTests() {
         const int stones = game.player.stones;
         const auto result = calendarRun(game, 1);
         check(result.ok && game.clock.days == 30 && !game.job, "绿瓶通过真实月历跨月并完成工作");
-        checkEq(game.player.arts.herbs["银月花"], 2, "真实月历催熟一份已拥有低品草药");
-        checkEq(game.player.herbs, 2, "绿瓶同步药材总量而不被分类同步删除");
-        checkEq(game.player.stones, stones - 5, "真实月历只扣五灵石催熟费用");
+        checkEq(game.player.arts.herbs["银月花"], 1, "新版绿瓶不再按月复制背包草药");
+        checkEq(game.player.herbs, 1, "没有播种的绿瓶不产生药材");
+        checkEq(game.player.stones, stones, "新版绿瓶不再默默扣主背包灵石");
         const string once = saveToJson(game); const auto rng = game.rng;
         talentMonthTick(game); talentMonthTick(game);
         check(saveToJson(game) == once && game.rng == rng, "同月反复触发不刷材料、扣钱或消耗随机数");
@@ -188,7 +188,7 @@ void runTalentTests() {
         game.clock.days = 60; game.job = talentRest(game, 1);
         const auto beforeRng = game.rng;
         talentMonthTick(game);
-        checkEq(game.player.arts.herbs["银月花"], 3, "下个月绿瓶可再次催熟已有药材");
+        checkEq(game.player.arts.herbs["银月花"], 1, "下个月旧兼容入口仍不复制药材");
         checkEq(game.rng, beforeRng, "绿瓶挑选已有药材本身不掷随机数");
     }
     {
@@ -212,7 +212,7 @@ void runTalentTests() {
             if (unavailable == "dungeon") {
                 game.dungeons.run.reset(); const auto rng = game.rng;
                 talentMonthTick(game);
-                checkEq(game.player.arts.herbs["银月花"], 2, "离开副本后同月在安全时刻才催熟");
+                checkEq(game.player.arts.herbs["银月花"], 1, "离开副本后旧接口不恢复背包复制效果");
                 checkEq(game.rng, rng, "副本外补催熟不消耗随机数");
             }
         }

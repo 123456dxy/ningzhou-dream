@@ -11,6 +11,8 @@
 #include "core/interface/view_helpers.h"
 #include "core/interface/view_policy.h"
 #include "core/interface/routes.h"
+#include "core/interface/craft_price_views.h"
+#include "core/crafting/cave_garden.h"
 #include "core/api_exploration.h"
 #include "core/dungeon.h"
 #include "core/checkpoint.h"
@@ -393,12 +395,17 @@ AdvanceReport advanceEx(Game& gameState, int days, bool autoStop) {
             gameState.job = j;
         }
 
+        const string previousTideEvent=gameState.tide.eventId;
         const CalRunResult r = calendarRun(gameState, days - (gameState.clock.days - startDays));
         if (!r.ok) { rep.stopReason = "error"; break; }
         if (r.restored) { rep.stopReason = "restored"; break; }
         if (r.ended) { rep.stopReason = "ended"; break; }
         if (r.pending) { rep.stopReason = "event"; break; }
         if (gameState.player.arts.battle.has_value()) { rep.stopReason = "battle"; break; }
+        // 新兽潮窗口只有60天；遇事暂停不能在一次长推进里直接跳过整场活动。
+        if (autoStop && gameState.tide.active && gameState.tide.eventId!=previousTideEvent) {
+            rep.stopReason = "event"; break;
+        }
         if (!autoStop) break;   // 单步模式：跑完当前这段就返回
     }
 
@@ -482,7 +489,7 @@ http::Response handle(const http::Request& req) {
     if (req.method != "POST" && !(req.method == "GET" && readOnly))
         return jsonError("此操作需要 POST 请求。", 405);
     // 数值先验范围，避免浮点转整数溢出或非法参数悄悄执行默认操作。
-    for (const char* key : {"days", "slot", "count", "choice", "level", "roll", "batch", "expectedCost"}) {
+    for (const char* key : {"days", "slot", "count", "amount", "choice", "level", "roll", "batch", "expectedCost", "battlefield", "expectedUnitPrice"}) {
         const Value& argumentValue = in[key];
         if (!argumentValue.isNull() && (!argumentValue.isNumber() || !std::isfinite(argumentValue.asNumber()) ||
             std::floor(argumentValue.asNumber()) != argumentValue.asNumber() ||
@@ -872,6 +879,8 @@ http::Response handle(const http::Request& req) {
     // 灵石配给到处都算；灵气配给只在洞府闭关时生效。
     // 两者都按月扣灵石，境界越高越贵。
     if (route == RouteId::Supply) {
+        const string AccessError = crafting::mfGardenAccessError(gameState);
+        if (!AccessError.empty()) return jsonError(AccessError);
         const auto r = shop::caveSupplySet(gameState,strOf(in,"kind"),intOf(in,"level",0));
         if (!r.ok) return jsonError(r.error);
         return jsonOk(okWithState(gameState));
@@ -884,8 +893,29 @@ http::Response handle(const http::Request& req) {
         return jsonOk(okWithState(gameState));
     }
     if (route == RouteId::CaveUpgrade) {
+        const string AccessError = crafting::mfGardenAccessError(gameState);
+        if (!AccessError.empty()) return jsonError(AccessError);
         const auto r = shop::caveUpgrade(gameState);
         if (!r.ok) return jsonError(r.error);
+        return jsonOk(okWithState(gameState));
+    }
+
+    // 灵田命令统一由领域层重新报价；错误时不转账、不推进时间，成功日志由命令生成。
+    if (route == RouteId::CaveGardenPlant || route == RouteId::CaveGardenHarvest ||
+        route == RouteId::CaveGardenDeposit || route == RouteId::CaveGardenWithdraw ||
+        route == RouteId::CaveGardenClear) {
+        const string PlotId = strOf(in, "plotId");
+        string Error;
+        if (route == RouteId::CaveGardenPlant)
+            Error = crafting::mfPlantGardenHerbs(gameState, PlotId, strOf(in, "herbId"), intOf(in, "count", 0));
+        else if (route == RouteId::CaveGardenHarvest)
+            Error = crafting::mfHarvestGardenHerbs(gameState, PlotId);
+        else if (route == RouteId::CaveGardenDeposit)
+            Error = crafting::mfDepositGardenReserve(gameState, PlotId, intOf(in, "amount", 0));
+        else if (route == RouteId::CaveGardenWithdraw)
+            Error = crafting::mfWithdrawGardenReserve(gameState, PlotId, intOf(in, "amount", 0));
+        else Error = crafting::mfClearGardenPlot(gameState, PlotId);
+        if (!Error.empty()) return jsonError(Error);
         return jsonOk(okWithState(gameState));
     }
 
@@ -1300,29 +1330,9 @@ http::Response handle(const http::Request& req) {
         return jsonOk(o);
     }
 
-    // ---- 成就（14 项）----
-    // artAchievements() 早就写好了，但从来没有调用点，
-    // 所以 achievementTexts 一直是空的，14 个成就完全不可得。
+    // ---- 成就（14 项）：只读展示，传承奖励由人生结算或实际重开领取。----
     if (route == RouteId::Achievements) {
-        Value o(json::Object{});
-        o.set("ok", Value(true));
-        json::Array arr;
-        for (const auto& achievement : data::AchievementDef_TABLE()) {
-            const int prog = artProgress(gameState.player, achievement.key);
-            const bool got = prog >= achievement.target;
-            Value ao(json::Object{});
-            ao.set("id", str(achievement.id));
-            ao.set("name", str(achievement.name));
-            ao.set("key", str(achievement.key));   // AchievementDef 没有 desc，用 key 代替展示
-            ao.set("key", str(achievement.key));
-            ao.set("target", num(achievement.target));
-            ao.set("progress", num(prog));
-            ao.set("points", num(achievement.points));
-            ao.set("done", Value(got));
-            arr.push_back(std::move(ao));
-        }
-        o.set("achievements", Value(std::move(arr)));
-        return jsonOk(o);
+        return jsonOk(view::mfAchievementsView(gameState, legacyLoad()));
     }
 
     // ---- 拜入宗门（自选五宗）占位结束 ----
@@ -1472,6 +1482,7 @@ http::Response handle(const http::Request& req) {
         const EcoActionInfo info = forge.valid ? ecoActionInfo(gameState, "forge", id) : EcoActionInfo{};
         Value result(json::Object{}), o(json::Object{});
         o.set("valid", Value(forge.valid)); o.set("grade", num(forge.grade)); o.set("cost", num(forge.cost));
+        o.set("pricing", view::mfCraftPriceView(crafting::mfQuoteForgePrice(gameState, main, aux, core), gameState, "gear", ""));
         o.set("days", num(info.days)); o.set("bonus", num(forge.bonus)); o.set("chance", num(forge.chance));
         o.set("shapeId", str(forge.shapeId)); o.set("shapeName", str(forge.shapeName)); o.set("shapeSlot", str(forge.shapeSlot));
         o.set("mainName", str(forge.mainName)); o.set("mainElement", str(forge.mainElement)); o.set("mainPolarity", str(forge.mainPolarity));
@@ -1844,30 +1855,32 @@ http::Response handle(const http::Request& req) {
 
     // ---- 兽潮 ----
     if (route == RouteId::Tide) {
-        Value o = okWithState(gameState);
-        Value t(json::Object{});
-        t.set("active", Value(gameState.tide.active));
-        t.set("severity", num(gameState.tide.severity));
-        t.set("monthsLeft", num(gameState.tide.monthsLeft));
-        t.set("wavesFought", num(gameState.tide.wavesFought));
-        t.set("wavesWon", num(gameState.tide.wavesWon));
-        t.set("npcDeaths", num(gameState.tide.npcDeaths));
-        t.set("dangerBonus", num(tide::dangerBonus(gameState)));
-        t.set("status", str(tide::statusText(gameState)));
-        json::Array fa;
-        for (const auto& nm : gameState.tide.fallen) fa.push_back(str(nm));
-        t.set("fallen", Value(std::move(fa)));
-        o.set("tide", std::move(t));
+        Value o(json::Object{});
+        o.set("ok",Value(true));
+        o.set("state",buildState(gameState));
+        o.set("tide", view::tideState(gameState));
         return jsonOk(o);
     }
 
     if (route == RouteId::TideFight) {
-        const tide::FightResult r = tide::fight(gameState);
+        if (!in["battlefield"].isNull() && (intOf(in,"battlefield") < 0 || intOf(in,"battlefield") > 3))
+            return jsonError("请选择炼气至元婴的有效战场。");
+        const tide::FightResult r = tide::fight(gameState, intOf(in, "battlefield", -1));
         if (!r.ok) return jsonError(r.error);
         Value o = okWithState(gameState);
         o.set("text", str(r.text));
         o.set("lethal", Value(r.lethal));
         return jsonOk(o);
+    }
+
+    if (route == RouteId::TideMarketBuy) {
+        if (!in["expectedUnitPrice"].isNull() && intOf(in,"expectedUnitPrice") < 0)
+            return jsonError("预计单价必须为非负整数。");
+        const auto result=tide::buyMarket(gameState, strOf(in,"eventId"), strOf(in,"kind"),
+            strOf(in,"id"), intOf(in,"count",1), intOf(in,"expectedUnitPrice",-1));
+        if (!result.ok) return jsonError(result.error);
+        Value out=okWithState(gameState); out.set("text",str(result.text)); out.set("cost",num(result.cost));
+        return jsonOk(out);
     }
 
     if (route == RouteId::TideHunker) {

@@ -8,8 +8,10 @@
 #include "core/crafting/material_supply.h"
 #include "core/talents.h"
 #include "core/interface/view_policy.h"
+#include "core/interface/craft_price_views.h"
 #include "data/reference_tables.h"
 #include <algorithm>
+#include <string_view>
 
 namespace nz::api::view {
 // 用途：复制角色并替换指定装备供效果比较。
@@ -84,12 +86,17 @@ Value artifactView(const Player& player, const ArtifactAbility& ability) {
 // 使用方式：传入const Game& game, Value& state，按本模块入口调用。
 // 返回值：无；完成说明所述写入或展示操作。
 void appendEquipmentState(const Game& game, Value& state) {
+    mfAppendEquipmentState(game, state, shop::mfMarketSaleContext(game));
+}
+
+void mfAppendEquipmentState(const Game& GameState, Value& State, const shop::MarketSaleContext& MarketContext) {
 
     // ---- 拥有的法器 ----
     {
         json::Array arr;
-        for (const auto& gr : game.player.arts.gear) {
+        for (const auto& gr : GameState.player.arts.gear) {
             Value entry(json::Object{});
+            entry.set("pricing", mfCraftPriceView(crafting::mfQuoteGearPrice(GameState, gr), GameState, "gear", gr.id, MarketContext));
             entry.set("id", str(gr.id));
             entry.set("name", str(gr.name));
             entry.set("slot", str(gr.slot));
@@ -105,20 +112,22 @@ void appendEquipmentState(const Game& game, Value& state) {
                     {"inscribe", RouteId::GearInscribe}, {"salvage", RouteId::GearSalvage}, {"sell", RouteId::Sell}
                 };
                 for (const auto& [action, route] : actionRoutes) {
-                    actions.set(action, actionQuote(game, routePath(route), shop::gearActionQuote(game, action, gr.id)));
+                    const auto Quote = std::string_view(action) == "sell" ? shop::saleQuote(GameState, "gear", gr.id, MarketContext)
+                        : shop::gearActionQuote(GameState, action, gr.id);
+                    actions.set(action, actionQuote(GameState, routePath(route), Quote));
                 }
                 entry.set("actions", std::move(actions));
-                entry.set("salvage", crafting::salvageQuoteJson(crafting::salvageQuote(game, gr.id)));
+                entry.set("salvage", crafting::salvageQuoteJson(crafting::salvageQuote(GameState, gr.id)));
             }
-            entry.set("inscribed", Value(gr.inscribed)); entry.set("passive", artifactPassiveView(game.player, gr));
+            entry.set("inscribed", Value(gr.inscribed)); entry.set("passive", artifactPassiveView(GameState.player, gr));
             const ArtifactAbility ability = artifactAbility(gr);
-            entry.set("shapeName", str(ability.shapeName)); entry.set("ability", artifactView(game.player, ability));
-            auto it = game.player.arts.equipped.find(gr.slot);
+            entry.set("shapeName", str(ability.shapeName)); entry.set("ability", artifactView(GameState.player, ability));
+            auto it = GameState.player.arts.equipped.find(gr.slot);
             entry.set("equipped",
-                  Value(it != game.player.arts.equipped.end() && it->second == gr.id));
+                  Value(it != GameState.player.arts.equipped.end() && it->second == gr.id));
             arr.push_back(std::move(entry));
         }
-        state.set("gears", Value(std::move(arr)));
+        State.set("gears", Value(std::move(arr)));
     }
 }
 

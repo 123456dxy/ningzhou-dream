@@ -183,7 +183,7 @@ inline const std::vector<TalentDef>& TALENTS() {
         {"blessing", "天道福泽", "悟道", 4, "获得的大道经验 +20%", "", 0},
         {"dragonBlood", "龙族血脉", "体魄", 5, "体魄 +1 · 每回合结束恢复3%气血", "body", 1},
         {"oddMeridian", "先天异脉", "磨砺", -3, "丹药与妖丹无法提升修为", "", 0},
-        {"greenBottle", "神秘绿瓶", "丹道", 3, "每月耗费5灵石催熟一份已有的一、二品草药；不催生妖丹，秘境中暂停", "", 0},
+        {"greenBottle", "神秘绿瓶", "丹道", 3, "灵田储备充足时自动催熟：每日每份种苗耗品阶数量灵石，额外增加200成长点；外出照常生效，不催生妖丹", "", 0},
         {"lightStep", "轻功高手", "遁速", 2, "遁速 +6 · 影响先手、步行御器耗时与逃遁", "", 0},
         {"artisan", "百炼匠心", "器道", 3, "炼器时间 −15% · 自炼法器售值 +15%，遵守生活加成上限", "", 0},
         {"family", "修真家族", "传承", 3, "开局修得一层蛮牛护体功并领悟聚气", "", 0},
@@ -309,6 +309,9 @@ struct Battle {
     string npcId;                  // 对手 NPC id，可能为空
     string quest;                  // 关联机缘 id
     string kind = "spar";          // spar / hunt / wild / rob / kill ...
+    string tideEventId;             // 兽潮场次标识，避免把旧战果计入下一场兽潮
+    int tideBattlefield = -1;        // 0/1/2/3 对应炼气/筑基/金丹/元婴战场
+    int tideDaysCharged = 0;         // 本场已计入日历的回合天数
     bool lethal = false;           // 是否生死斗
     int turn = 0;
     int hp = 1;
@@ -555,6 +558,7 @@ struct Npc : Person {
     // 「力大砖飞」那种纯平A留给妖兽。
     string dao = "剑";              // 主修大道（剑/火/水/木/金/土/神/体/气/阵/丹/器）
     vector<string> spells;          // 会用的神通 id
+    string combatProfileId;         // 可选稳定构筑 ID；特殊修士的实际战斗与兽潮积分共用
     bool beast = false;             // 是否妖兽（妖兽走「力大砖飞」那一套）
 };
 
@@ -748,6 +752,15 @@ struct Ending {
 // 兽潮：全图起效的大灾。妖潮自险地涌出，波及所有地点，
 // 低境界修士首当其冲 —— NPC 会真的死。
 // 对玩家是成长动力：迎战有厚赏，躲着则错过机缘。
+struct TideParticipant {
+    string actorId, name, sect, combatProfileId;
+    int entryStage = 0, score = 0, rank = 0;
+    bool elite = false;
+};
+struct TideMarketStock {
+    string kind, id;
+    int stock = 0;
+};
 struct BeastTide {
     bool active = false;
     int startYear = -1;
@@ -758,6 +771,14 @@ struct BeastTide {
     int npcDeaths = 0;        // 本次兽潮死了多少修士
     vector<string> fallen;    // 陨落者的名字（给玩家看）
     bool warned = false;      // 是否已播报「妖潮将起」
+    int rulesVersion = 0;     // 0 表示旧版月度兽潮；迁移时只初始化一次
+    string eventId;
+    int startDay = -1, endDay = -1, durationDays = 60, lastProcessedDay = -1;
+    int playerScore = 0, playerEntryStage = 0, playerRank = 0;
+    bool playerJoined = false, settled = false, rewardPaid = false;
+    int rewardStones = 0, totalScore = 0, marketExpiresDay = -1;
+    vector<TideParticipant> participants;
+    vector<TideMarketStock> marketStock;
 };
 
 struct DungeonReward {
@@ -808,6 +829,30 @@ struct AutoCheckpoint {
     string source = "auto", snapshot, lastReason;
 };
 
+// 所属制作模块；拥有一批同日播种的种苗，Count为1~99，ProgressUnits为0~品阶成熟阈值。
+// 无外部资源、可复制，状态仅由灵田命令/真实世界日tick修改；补种新批次不能继承旧成长。
+struct GardenCohort {
+    int Count = 0;
+    int ProgressUnits = 0;
+};
+
+// 所属制作模块；一个地块只容纳同一HerbId，总未收种苗最多99份。
+// 拥有格内储备和批次；储备仅由明确存取/日加速费用变化，不隐式扣玩家背包灵石。
+struct GardenPlot {
+    string HerbId;
+    int ReserveStones = 0;
+    vector<GardenCohort> Cohorts;
+};
+
+// 所属制作模块；拥有全洞府固定8格快照，实际解锁3/5/8格由洞府档位决定。
+// 默认未初始化是合法旧档状态：空Plots、LastGrowthDay=-1；初始化命令建立8格并从当前日期开始。
+// Initialized后禁止读查询补生长，LastGrowthDay确保每个真实世界日最多处理一次；由所属Game串行修改。
+struct CaveGardenState {
+    bool Initialized = false;
+    int LastGrowthDay = -1;
+    vector<GardenPlot> Plots;
+};
+
 struct Game {
     int version = VERSION;
     uint32_t rng = 20261004;
@@ -829,6 +874,7 @@ struct Game {
     Adventure adventure;
     BeastTide tide;
     DungeonWorld dungeons;
+    CaveGardenState Garden;
     AutoCheckpoint checkpoint;
     optional<Job> job;
     optional<Pending> pending;

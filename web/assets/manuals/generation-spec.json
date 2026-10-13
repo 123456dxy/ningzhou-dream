@@ -1,0 +1,327 @@
+{
+  "generatedOn": "2026-10-13",
+  "tool": "built-in image_gen",
+  "mode": "8 independent generation calls plus 32 independent edit calls",
+  "assets": {
+    "tuna": {
+      "name": "吐纳功",
+      "dao": "气",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: one original square cultivation manual card illustration for a Chinese xianxia browser RPG. ONE illustration only, not a contact sheet. Style: painterly Chinese fantasy concept art with ink wash silhouettes and detailed gouache highlights, muted jade and aged parchment visual world. Composition: central clear symbolic object fills 70% of square canvas, atmospheric distant mountains at bottom. Strong silhouette readable at 96 pixels. Opaque deep ink-green vignette background, restrained elemental glow. No lettering, no Chinese characters, no text, no numbers, no logo, no watermark, no UI border, no recognizable copyrighted icon. Match a unified set of elemental scroll and qi-emblem illustrations. Subject: QI / breath cultivation path: an ancient ivory parchment scroll floating in a swirling circular flow of pale jade-white breath, a small bright pearl-like dantian sphere beneath it, white cloud ribbons weave into a balanced flowing loop, airy and serene, ivory and muted celadon glow.",
+      "referenceBase": null,
+      "generatedSource": "exec-928a47d5-ae89-4c92-afcb-9dd42cb7bbfa.png"
+    },
+    "bull": {
+      "name": "蛮牛护体功",
+      "dao": "体",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A dark bronze codex bound by heavy leather straps with a radiant stylized bull-head protective crest, two broad horn silhouettes curve above it, earthy shield aura and stone ridges, no old scroll mountain emblem. Front-facing grounded symmetrical silhouette.",
+      "referenceBase": "earth",
+      "generatedSource": "exec-d196bb32-c213-466d-91c8-28c2288a2041.png"
+    },
+    "wood": {
+      "name": "青木诀",
+      "dao": "木",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: one original square cultivation manual card illustration for a Chinese xianxia browser RPG. ONE illustration only, not a contact sheet. Style: painterly Chinese fantasy concept art with ink wash silhouettes and detailed gouache highlights, muted jade and aged parchment visual world. Composition: central clear symbolic object fills 70% of square canvas, atmospheric distant mountains at bottom. Strong silhouette readable at 96 pixels. Opaque deep ink-green vignette background, restrained elemental glow. No lettering, no Chinese characters, no text, no numbers, no logo, no watermark, no UI border, no recognizable copyrighted icon. Match a unified set of elemental scroll and qi-emblem illustrations. Subject: WOOD cultivation path: an ancient ivory parchment scroll opening in the heart of a ring formed by twisting living jade-green branches, luminous small fresh leaves growing from the rolled ends, emerald motes, dew and gentle mist. Emphasis on life and regeneration, green glow.",
+      "referenceBase": null,
+      "generatedSource": "exec-bb0db6ac-d72e-48f6-9b50-32e4252b5085.png"
+    },
+    "sword": {
+      "name": "剑典·人道篇",
+      "dao": "剑",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: one original square cultivation manual card illustration for a Chinese xianxia browser RPG. ONE illustration only, not a contact sheet. Style: painterly Chinese fantasy concept art with ink wash silhouettes and detailed gouache highlights, muted jade and aged parchment visual world. Composition: central clear symbolic object fills 70% of square canvas, atmospheric distant mountains at bottom. Strong silhouette readable at 96 pixels. Opaque deep ink-green vignette background, restrained elemental glow. No lettering, no Chinese characters, no text, no numbers, no logo, no watermark, no UI border, no recognizable copyrighted icon. Match a unified set of elemental scroll and qi-emblem illustrations. Subject: SWORD cultivation path: one elegant upright silver-blue Chinese straight sword floating before an unfurled ivory scroll, a circular arc of thin ethereal sword trails around it, white wind clouds, sharp streamlined silhouette, silver and desaturated blue glow, no gold ritual knives.",
+      "referenceBase": null,
+      "generatedSource": "exec-d11a16b3-0627-40ea-bab1-f693a7dba140.png"
+    },
+    "water": {
+      "name": "星河真法",
+      "dao": "水",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: one original square cultivation manual card illustration for a Chinese xianxia browser RPG. ONE illustration only, not a contact sheet. Style: painterly Chinese fantasy concept art with ink wash silhouettes and detailed gouache highlights, muted jade and aged parchment visual world. Composition: central clear symbolic object fills 70% of square canvas, atmospheric distant mountains at bottom. Strong silhouette readable at 96 pixels. Opaque deep ink-green vignette background, restrained elemental glow. No lettering, no Chinese characters, no text, no numbers, no logo, no watermark, no UI border, no recognizable copyrighted icon. Match a unified set of elemental scroll and qi-emblem illustrations. Subject: WATER cultivation path: an ancient ivory parchment scroll hovering above a small deep blue pool, an elegant circular turquoise wave and two layered ribbons of water frame it, tiny droplets suspended in the air, cold moonlight, deep blue and silver glow.",
+      "referenceBase": null,
+      "generatedSource": "exec-4f758163-122f-470a-8475-94de65272e5d.png"
+    },
+    "fire": {
+      "name": "焚心诀",
+      "dao": "火",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: one original square cultivation manual card illustration for a Chinese xianxia browser RPG. ONE illustration only, not a contact sheet. Style: painterly Chinese fantasy concept art with ink wash silhouettes and detailed gouache highlights, muted jade and aged parchment visual world. Composition: central clear symbolic object fills 70% of square canvas, atmospheric distant mountains at bottom. Strong silhouette readable at 96 pixels. Opaque deep ink-green vignette background, restrained elemental glow. No lettering, no Chinese characters, no text, no numbers, no logo, no watermark, no UI border, no recognizable copyrighted icon. Match a unified set of elemental scroll and qi-emblem illustrations. Subject: FIRE cultivation path: an ancient ivory parchment scroll suspended in a circular ring of orange and vermilion flame, glowing ember petals ascending, black volcanic rocks at bottom and thin rising smoke, energetic contained heat, amber and crimson glow, scroll stays intact.",
+      "referenceBase": null,
+      "generatedSource": "exec-d24e2b4b-4efc-439f-8e13-6dff5ccc7162.png"
+    },
+    "earth": {
+      "name": "厚土诀",
+      "dao": "土",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: one original square cultivation manual card illustration for a Chinese xianxia browser RPG. ONE illustration only, not a contact sheet. Style: painterly Chinese fantasy concept art with ink wash silhouettes and detailed gouache highlights, muted jade and aged parchment visual world. Composition: central clear symbolic object fills 70% of square canvas, atmospheric distant mountains at bottom. Strong silhouette readable at 96 pixels. Opaque deep ink-green vignette background, restrained elemental glow. No lettering, no Chinese characters, no text, no numbers, no logo, no watermark, no UI border, no recognizable copyrighted icon. Match a unified set of elemental scroll and qi-emblem illustrations. Subject: EARTH cultivation path: an ancient ivory parchment scroll floating in front of three stacked sandstone peaks, a circular ring of suspended stone fragments and dusty bronze qi, subtle stone seal at center behind scroll, grounded and protective composition, bronze and muted ochre glow.",
+      "referenceBase": null,
+      "generatedSource": "exec-5a4562fb-66dc-4fcc-96bf-f95f17852bd6.png"
+    },
+    "gold": {
+      "name": "金虹诀",
+      "dao": "金",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: original square cultivation manual card illustration for a Chinese xianxia browser RPG. Create ONE illustration, not a contact sheet. Subject: GOLD / metal cultivation path: an ancient folded ivory scroll hovering between two finely shaped golden ritual blades, a luminous circular golden qi ring behind the scroll, fine airborne gold particles, mountain-cloud silhouette at bottom. Style: painterly Chinese fantasy concept art, ink wash silhouettes mixed with detailed gouache highlights, tasteful muted jade and aged parchment aesthetic. Composition: square, central clear emblem fills 70% of canvas, no human face, no lettering, no text, no numbers, no logo, no watermark, no UI border. Background: deep ink-green vignette with restrained warm gold lighting, opaque. Strong silhouette readable at 96 pixels. Original design only, do not reproduce any existing game icon. This is the first of a unified set of eight icons, use a consistent dramatic centered composition.",
+      "referenceBase": null,
+      "generatedSource": "exec-0905d11c-bbfc-40a3-bdce-5f813cf693fb.png"
+    },
+    "longlife": {
+      "name": "长生诀",
+      "dao": "木",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A tall narrow rolled bamboo-and-jade scroll with one ancient luminous evergreen tree growing through its center, thick exposed roots curling into a life circle and pale flowers, distinct single tree shape replaces the previous leaf-ring framing. Bright healing jade.",
+      "referenceBase": "wood",
+      "generatedSource": "exec-ffb27c02-4e00-46a1-bee0-8ddf43d9fff7.png"
+    },
+    "zhou": {
+      "name": "大周天吐纳",
+      "dao": "气",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: An unfolded wide horizontal three-panel ivory scroll with nine small luminous qi pearls distributed in an orbit and two pale ribbons completing a large meridian circulation loop. Pearl circuit is the central emblem, more ceremonial and spacious than a simple breath swirl.",
+      "referenceBase": "qi",
+      "generatedSource": "exec-16a299a7-8c76-4134-b393-030cdce31015.png"
+    },
+    "mind": {
+      "name": "养魂诀",
+      "dao": "神",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: one original square cultivation manual card illustration for a Chinese xianxia browser RPG. ONE illustration only, not a contact sheet. Style: painterly Chinese fantasy concept art with ink wash silhouettes and detailed gouache highlights, muted jade and aged parchment visual world. Composition: central clear symbolic object fills 70% of square canvas, atmospheric distant mountains at bottom. Strong silhouette readable at 96 pixels. Opaque deep ink-green vignette background, restrained elemental glow. No lettering, no Chinese characters, no text, no numbers, no logo, no watermark, no UI border, no recognizable copyrighted icon. Match a unified set of elemental scroll and qi-emblem illustrations. Subject: MIND / spirit cultivation path: an ancient ivory parchment scroll hovering above a translucent indigo lotus, a soft luminous violet orb centered behind it with rippling concentric spiritual qi rings, distant stars and dark mist, calm perception and concentration, indigo and pearl-violet glow.",
+      "referenceBase": null,
+      "generatedSource": "exec-839641ae-f96e-4de4-b438-909e5d804056.png"
+    },
+    "array": {
+      "name": "两仪阵经",
+      "dao": "阵",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: Two overlapping circular black-and-white jade array disks placed on a square unfolded diagram parchment, delicate geometric crossing lines and four suspended green array stones. No writing or recognizable characters. Strong square-plus-twin-circle silhouette, unmistakable formation magic.",
+      "referenceBase": "qi",
+      "generatedSource": "exec-dfbee9f1-0aa7-4876-b738-98f98e5f24a4.png"
+    },
+    "pill": {
+      "name": "丹火诀",
+      "dao": "丹",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A small antique three-legged bronze alchemy furnace sits in front of a short red-bound parchment roll; a contained golden alchemy flame forms a teardrop above the furnace, three round medicinal pills visible beside it. Warm refined orange light, distinct furnace silhouette.",
+      "referenceBase": "fire",
+      "generatedSource": "exec-6f6f1f09-17a1-4622-a917-61ef1e445ae3.png"
+    },
+    "forge": {
+      "name": "百炼真解",
+      "dao": "器",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A battered iron hammer crossing a small black anvil in front of an opened thick ivory manual with brass hinges, sparks form a compact metallic arc. Remove twin ritual blades and do not use a sword. Strong forging tools silhouette, controlled gold and iron highlights.",
+      "referenceBase": "gold",
+      "generatedSource": "exec-c7ac7101-3fb0-460a-b5ed-0ae00973eda3.png"
+    },
+    "wheel": {
+      "name": "重元转轮诀",
+      "dao": "气",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A large ancient bronze wheel with four thick spokes floats above a circular curled parchment scroll, heavy pale-jade qi winds between spokes, central dark sphere suggests stored force. Distinct tangible wheel, no cloud scene on the scroll face.",
+      "referenceBase": "qi",
+      "generatedSource": "exec-6c8b84cb-7864-4435-9eeb-e3596f5c6e4d.png"
+    },
+    "heavy": {
+      "name": "重剑诀",
+      "dao": "金",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: One massive broad blunt dark-gold greatsword, low-tip and thick spine, rests diagonally over a black-bound folded manual with gold corner fittings. A compressed halo of amber force around the blade. Remove twin thin ritual knives, strong single greatsword silhouette.",
+      "referenceBase": "gold",
+      "generatedSource": "exec-d72912e5-9cac-4cec-a2cc-40e65749a7cb.png"
+    },
+    "hidden": {
+      "name": "藏剑诀",
+      "dao": "剑",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A closed tall indigo cloth-bound manual with one slim silver sword mostly concealed inside an ivory scabbard behind it, only its hilt and a thin blue edge visible; pale fog curls into a crescent rather than a ring. Quiet secretive composition, distinct scabbard silhouette, remove broad open scroll.",
+      "referenceBase": "sword",
+      "generatedSource": "exec-b01ac65d-1c79-4953-9b69-43547ce6e43e.png"
+    },
+    "bladecare": {
+      "name": "养刀术",
+      "dao": "金",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A curved golden single-edged sabre laid horizontally across a small closed red-and-black manual, one hanging jade blade-maintenance charm below it, tiny golden polishing sparks; sword aura restrained to a thin ribbon. Distinct curved blade, no pair of ritual knives and no straight greatsword.",
+      "referenceBase": "gold",
+      "generatedSource": "exec-68bc88fc-0ced-46d1-9ba6-179811d6e54f.png"
+    },
+    "rainform": {
+      "name": "化雨诀",
+      "dao": "水",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A fan-shaped folded pale-blue parchment scroll opens below a small silver-blue raincloud, a visible curtain of bright rain drops falls into its pages and forms a narrow healing stream. Clearly distinct umbrella-fan scroll silhouette, fine cool rain aura, remove giant circular wave.",
+      "referenceBase": "water",
+      "generatedSource": "exec-5d75834b-f756-4a16-8f56-ebed2ee5a127.png"
+    },
+    "wave": {
+      "name": "浪击诀",
+      "dao": "水",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A thick cobalt-bound scroll held horizontally while one single great breaking wave rises diagonally behind it, white spray resembles a clenched curved crest, a small round water bead at the roll's end. Forceful diagonal wave shape, no tall vertical parchment and no full wave circle.",
+      "referenceBase": "water",
+      "generatedSource": "exec-544e7192-1f2e-4915-955b-b59afca70d7d.png"
+    },
+    "ocean": {
+      "name": "沧海诀",
+      "dao": "水",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: An opened deep-blue jade-inlaid codex floats above a vast calm sea horizon with a luminous turquoise ocean pearl on its center pages, subtle concentric tides receding into distance; large moon dimmed to a distant silver disc. Strong book-and-pearl silhouette, no vertical rolled scroll or surrounding wave ring.",
+      "referenceBase": "water",
+      "generatedSource": "exec-4c2801bb-6495-431d-b116-7f42c5da25d3.png"
+    },
+    "turtle": {
+      "name": "龟息术",
+      "dao": "木",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: An aged green scroll curled around a prominent luminous jade turtle shell viewed from above, hexagonal shell plates and a small turtle head visible, soft still breath mist and a few moss leaves. Protective quiet life-green palette, replace leaf ring with turtle emblem.",
+      "referenceBase": "wood",
+      "generatedSource": "exec-1a98c945-3aa6-4240-bcf3-4f7bf596b1fb.png"
+    },
+    "venom": {
+      "name": "鸩羽诀",
+      "dao": "木",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A narrow black-green manual with a fan of three iridescent emerald poisonous bird feathers behind it, a single amethyst droplet suspended below, thorny dark vines and restrained green-purple toxic smoke. Strong feather-fan silhouette, no life-tree and no wide bright leaf circle.",
+      "referenceBase": "wood",
+      "generatedSource": "exec-a1d69bd3-56dd-448d-b714-d2949c1ce031.png"
+    },
+    "flame": {
+      "name": "烈焰诀",
+      "dao": "火",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A wide red lacquer-backed parchment scroll with three sharp rising flame tongues forming a crown above it, a small orange brazier ember glowing at the middle seam. Flame crown is the main silhouette, contained bright amber plume replaces the full flame ring and dragon swirl on parchment.",
+      "referenceBase": "fire",
+      "generatedSource": "exec-149a0f24-f340-4c07-a2be-aef6eeff10c4.png"
+    },
+    "cloud": {
+      "name": "凌云诀",
+      "dao": "气",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A light closed ivory-and-celadon pocket manual floats diagonally on one prominent white crane-shaped cloud, featherlike wind ribbons extend upward, a tiny hanging jade feather charm beneath. Distinct flying cloud silhouette, no pearls and no circular swirl around an open scroll.",
+      "referenceBase": "qi",
+      "generatedSource": "exec-8786b7c6-650e-4db8-9872-cf4473113d40.png"
+    },
+    "kindle": {
+      "name": "引火诀",
+      "dao": "火",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: An upright red lacquer ritual lantern rests beside a narrow half-rolled parchment, its single candle-like fire seed ignites three small floating ember beads above the top rim. Precise small fire activation theme, distinct lantern silhouette, remove the full flame circle.",
+      "referenceBase": "fire",
+      "generatedSource": "exec-f1a5e327-6c78-441f-9278-53e6f49aaedb.png"
+    },
+    "playfire": {
+      "name": "弄焰诀",
+      "dao": "火",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A small opened red-cloth codex with one suspended orange fire sphere above its pages, two separate smaller swirling flame wisps curl around the sphere like controlled orbiting ribbons. Manipulation and precise control, book-and-orb silhouette, no flame crown and no furnace.",
+      "referenceBase": "fire",
+      "generatedSource": "exec-a78483fe-ab0f-4ad2-a341-b5f3fb8239c2.png"
+    },
+    "mountain": {
+      "name": "撼山诀",
+      "dao": "土",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A stout curled ochre parchment lies under a colossal stone fist-shaped crag breaking through two mountain ridges, a single deep crack radiates bronze qi and small stone shards upward. Forceful asymmetrical upward silhouette, replace calm stack of sandstone pillars.",
+      "referenceBase": "earth",
+      "generatedSource": "exec-c2634a50-6346-4d97-b357-5d23e19c765c.png"
+    },
+    "fetal": {
+      "name": "胎息经",
+      "dao": "体",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A small round ivory silk manual opens like a protective cradle around a smooth pale-jade glowing seed core, an abstract seated breathing silhouette etched in thin bronze light within the seed, two soft breath ribbons wrap close around it. Gentle body-cultivation renewal, remove sharp stone fragments and mountain seal, no literal baby.",
+      "referenceBase": "earth",
+      "generatedSource": "exec-bb07c409-5ad4-413d-a111-fdd68ad8ff1c.png"
+    },
+    "human": {
+      "name": "剑典·人剑篇",
+      "dao": "剑",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A human-scale plain silver straight sword stands beside a half-open ivory cloth-bound book, an abstract small seated cultivator silhouette of white light rests on its lower page, a quiet protective blue arc surrounds sword and meditator. Humble restrained human-sword unity, no ornate oversized sword and no broad horizontal landscape scroll.",
+      "referenceBase": "sword",
+      "generatedSource": "exec-18aba39b-ad24-4201-b035-d0ed8d4f9c3f.png"
+    },
+    "swordcraft": {
+      "name": "剑术要诀",
+      "dao": "剑",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: Three modest narrow silver swords form a clear triangular fan above a compact opened practice booklet; three short pale blue motion strokes suggest basic sword practice. Strong three-blade silhouette with restrained mist, replace the single ornate central sword and broad scroll.",
+      "referenceBase": "sword",
+      "generatedSource": "exec-7b46ec41-9d26-4610-90f8-59dffea7b885.png"
+    },
+    "soulfire": {
+      "name": "燃魂诀",
+      "dao": "神",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A closed violet-black codex stands upright above one large intense pale-purple spiritual flame shaped like a rising lotus bud, a small bright spirit core within the flame, fine indigo sparks rise vertically. Soul-burning focus, remove large moon and multi-ring celestial orb, distinct flame-and-book silhouette.",
+      "referenceBase": "mind",
+      "generatedSource": "exec-3f8f153d-2a95-4655-82dc-935c151ecaa5.png"
+    },
+    "visual": {
+      "name": "五内观想法",
+      "dao": "神",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: An unfolded square violet-edged parchment diagram shows one luminous abstract seated human outline; five differently sized small indigo and pearl spiritual spheres trace a vertical internal circulation pattern through the outline, a quiet pale halo and one small closed scroll below. Contemplation and inner clarity, no giant moon or lotus flame, distinct diagram silhouette.",
+      "referenceBase": "mind",
+      "generatedSource": "exec-ed28be87-8d34-4092-8f21-aa2770c691f0.png"
+    },
+    "steal": {
+      "name": "夺灵诀",
+      "dao": "气",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A dark-green opened compact codex beneath an ethereal translucent jade hand gently drawing a bright white qi pearl into the pages; two thin streams flow inward from left and right toward the pearl. Distinct hand-and-pearl silhouette, darker controlled energy, no physical violence, no orbit of many pearls and no large breath circle.",
+      "referenceBase": "qi",
+      "generatedSource": "exec-a3124043-b76d-4d80-a30e-0bf545cb15c9.png"
+    },
+    "jadecloud": {
+      "name": "玉云功",
+      "dao": "土",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A pale white-jade shield shaped like a rounded upright cloud stands in front of a wide ochre scroll with celadon end caps; three soft jade cloud layers form a protective canopy above it, calm bronze particles below. Protective shield-and-cloud silhouette, no crag fist and no suspended jagged mountains.",
+      "referenceBase": "earth",
+      "generatedSource": "exec-404b5001-fa53-4fc6-8983-c669e09dd841.png"
+    },
+    "sunwheel": {
+      "name": "离火归元经",
+      "dao": "火",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A thick opened vermilion-and-gold codex with three brilliant small suns arranged as a triangular solar wheel above it; seven controlled red fire rays return inward toward the book's center. Noble high-level fire return and unity, distinct three-sun crest, no furnace, no lantern, no flame crown.",
+      "referenceBase": "fire",
+      "generatedSource": "exec-fa7db4df-6a28-404a-b686-04826d000d5d.png"
+    },
+    "deepwater": {
+      "name": "沧溟水剑经",
+      "dao": "水",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A long dark-blue water-forged straight sword lies diagonally before a closed deep-indigo manual; a translucent serpentine ribbon of midnight sea water wraps the blade, one small icy cyan gemstone at the guard, distant deep ocean mist. Dark high-level sea-sword theme, no bright moon or open landscape scroll or giant wave ring.",
+      "referenceBase": "water",
+      "generatedSource": "exec-e16726ea-a529-438b-8e3a-4b3dc7b01720.png"
+    },
+    "evergreen": {
+      "name": "万木同春经",
+      "dao": "木",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A broad opened deep-green stitched codex supports a miniature forest of five different spring saplings rising from its pages, tiny pale blossoms and several emerald leaf streams unify into a curved canopy. Multiple tree life-cycle theme, distinct forest-on-book silhouette, not a single large tree wrapped around a vertical roll.",
+      "referenceBase": "wood",
+      "generatedSource": "exec-1eb27b29-66dc-40f9-961e-22fa51a3b286.png"
+    },
+    "gravity": {
+      "name": "玄山镇岳经",
+      "dao": "土",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A thick closed black-ochre stone-bound tome sits beneath one massive dark suspended mountain sealed by three bronze chains; two narrow concentric compressed gravity halos hold the mountain tightly, dust falls straight downward. High-level gravity and suppressive weight, distinct chained mountain over tome, no broad peaceful scroll or stone fist.",
+      "referenceBase": "earth",
+      "generatedSource": "exec-3c9712aa-60ca-4bfa-b8cc-a1adf689d608.png"
+    },
+    "goldenrain": {
+      "name": "金虹剑阵经",
+      "dao": "金",
+      "mode": "edit",
+      "prompt": "Use case: precise-object-edit. Edit the referenced original game illustration into ONE distinct cultivation manual illustration, square, same painterly ink-wash mountains and dark-jade parchment visual family. Replace the central scroll and thematic objects as described, significantly distinguish its silhouette and emblem from the reference. Keep a coherent illustrated background and small-size readable centered composition. Original fantasy design, no copied game assets. No text, no lettering, no names, no numbers, no watermark, no logo, no UI. Maintain opaque background. Specific manual visual: A wide unfolded ivory-and-gold formation scroll below a fan of seven slim golden flying swords descending in alternating heights like a luminous sword rain; a clear triangle of thin amber array lines connects the outer blades. High-level metal sword formation, distinct many-sword fan, remove the original twin ritual knives, no broad heavy sword.",
+      "referenceBase": "gold",
+      "generatedSource": "exec-98eb6415-20fb-4a2c-89a8-5fbcbb2e23bb.png"
+    }
+  }
+}

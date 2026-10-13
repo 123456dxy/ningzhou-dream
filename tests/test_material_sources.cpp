@@ -6,6 +6,7 @@
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/cultivate.h"
+#include "core/crafting/herb_acquisition.h"
 #include "core/economy.h"
 #include "core/json.h"
 #include "core/location_services.h"
@@ -110,20 +111,27 @@ void runMaterialSourceTests() {
     {
         Game g = sourceGame(12);
         g.player.arts.herbs.clear(); g.player.herbs = 0;
+        bool SourcesAllowed = true, NoMonsterCore = true;
         for (const auto& location : LOCATIONS()) {
             if (string(location.type) != "wild") continue;
+            const auto PreviousHerbs = g.player.arts.herbs;
+            const auto AllowedHerbs = crafting::mfGatherableHerbs(g.player, location.id);
             Job job; job.actionType = "locationService"; job.kind = "gather";
             job.origin = location.id; job.name = "采集边界检查";
             locationServiceComplete(g, job);
+            for (const auto& [Name, Count] : g.player.arts.herbs) {
+                const auto Previous = PreviousHerbs.find(Name);
+                const int BeforeCount = Previous == PreviousHerbs.end() ? 0 : Previous->second;
+                if (Count <= BeforeCount) continue;
+                const auto* Herb = findHerbByName(Name);
+                SourcesAllowed = SourcesAllowed && Herb &&
+                    crafting::mfHerbAcquisitionStage(Herb->id) <= g.player.stage &&
+                    std::any_of(AllowedHerbs.begin(), AllowedHerbs.end(), [&](const auto* Entry) { return Herb && Entry->id == Herb->id; });
+                NoMonsterCore = NoMonsterCore && Herb && crafting::mfIsPlantHerb(Herb->id);
+            }
         }
-        bool lowOnly = true, noCore = true;
-        for (const auto& [name, count] : g.player.arts.herbs) {
-            const auto* herb = findHerbByName(name);
-            if (count > 0 && (!herb || herb->grade > 2)) lowOnly = false;
-            if (count > 0 && name.find("妖丹") != string::npos) noCore = false;
-        }
-        check(lowOnly && g.player.herbs > 0, "所有普通野外采药至多二品且仍有产出");
-        check(noCore, "普通采药不凭空采出妖丹");
+        check(SourcesAllowed && g.player.herbs > 0, "真实野外采药符合当前用途境界与对应地点权威生境且仍有产出");
+        check(NoMonsterCore, "普通采药按稳定分类排除妖丹");
         g.player.arts.materials.clear();
         for (const string origin : {"wojiao", "lianshi", "guangling", "dongshi", "tianji"}) {
             Job job; job.kind = origin == "dongshi" || origin == "tianji" ? "auction" : "mineral";

@@ -1,8 +1,8 @@
 # HTTP API 参考与统计
 
-核对日期：2026-10-12。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
+核对日期：2026-10-13。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
 
-2026-10-13 补充核对：以下建角协议、学习报价、炼丹经济与 NPC 服丹字段按当前实现更新；本次没有新增端点，保留原有端点计数口径。
+2026-10-13 补充核对：以下建角协议、学习报价、炼丹经济与 NPC 服丹字段按当前实现更新；本轮新增五个洞府灵田写端点，并保留兽潮端点；下方总数按当前RouteInfo重新统计。
 
 责任边界：我们维护核心规则与桌面 UI；账号、联机传输、天机大比由另一位成员维护。服务层增加可选本地启动模式与只读模式探测；默认公网模式和 Tianji Store 业务实现保持原样。
 
@@ -10,16 +10,16 @@
 
 | 分派归属 | 精确端点 | 查询 | 写操作 | ReplaceGame | Persistence |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 核心 RouteInfo 表 | 85 | 20 ReadOnly | 59 Mutation | 3 | 3 |
+| 核心 RouteInfo 表 | 91 | 20 ReadOnly | 65 Mutation | 3 | 3 |
 | 服务层模式/账号/社区（排除转发Tianji） | 8 | 4 | 4 | 0 | 0 |
 | Tianji Store | 5 | 2 | 3 | 0 | 0 |
-| 总计（路径去重） | **98** | **26** | **66** | **3** | **3** |
+| 总计（路径去重） | **104** | **26** | **72** | **3** | **3** |
 
 核心四类取自真实 `RouteEffect`。服务层/Tianji 的查询与写操作按用途列示，它们没有使用该 enum；查询可维护会话、缓存或天机窗口记录，不能据此推断服务器完全没有 I/O。`/api/tianji/board` 在 web_main 与 Store 均出现，但最终归 Tianji，仅计一次。web_main 的精确分派共9条，其中8条为服务专属。
 
 ## 请求、登录与通用返回
 
-- 多人 Web 服务中，全部85个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
+- 多人 Web 服务中，全部91个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
 - 显式 `--local` 启动时强制监听 `127.0.0.1`，使用内置本地会话，空档按默认配置开局。账号、反馈、排行榜、导出及全部 `/api/tianji/` 返回404；不初始化或读取 Tianji Store。默认不加此参数，继续使用上述公网鉴权。
 - 核心输入从 JSON **请求正文**读取，不从URL查询串读取；需要参数的查询建议使用POST JSON。表中未列默认值的字符串参数缺省为`""`，随后由对应规则校验；“无”表示没有业务输入。非空正文必须是JSON对象。
 - 所有20条核心 ReadOnly 端点均支持 **GET和POST**；其余核心端点只支持POST。成功的核心动作通常返回 `{ok:true,state:{...}}`，某些动作附加text/report；可能出现checkpointWarning。state包括玩家、功法、世界、经济、社交、秘境与恢复点视图。
@@ -40,7 +40,7 @@
 | 500 | 核心存档/传承、密码、反馈写入失败，或传输层捕获异常 |
 | 503 | Tianji存储不可用、容量/写入或窗口记录保存失败 |
 
-核心整数参数days/slot/count/choice/level/roll/batch/expectedCost必须为有限、整数、int范围内数值；seed为0–4294967295整数；allocation各值为0–MAX_POINTS整数。解析校验先于核心方法检查；登录、服务写锁或Tianji存储健康检查也可能先于后续业务检查，因此不要仅依靠URL预测错误码。
+核心整数参数days/slot/count/amount/choice/level/roll/batch/expectedCost必须为有限、整数、int范围内数值；seed为0–4294967295整数；allocation各值为0–MAX_POINTS整数。解析校验先于核心方法检查；登录、服务写锁或Tianji存储健康检查也可能先于后续业务检查，因此不要仅依靠URL预测错误码。
 
 ## 核心动作阻塞顺序
 
@@ -83,7 +83,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 
 报名/挑战需已有角色、处于本人入道50–59、100–109等十年窗口、人生未结束且无普通斗法/抉择/安排/秘境或当前留影挑战；已关闭窗口不能用回档重开。报名构筑按服务器当前存档冻结，移除临时丹药准备，双方满气血开局。每个同届同组对手一次，胜3分、24回合平1分、败/认输0分。Store健康失败可先返回503。
 
-## 核心领域清单（85条）
+## 核心领域清单（86条）
 
 下表“只读/动作/换世/存档”分别对应ReadOnly/Mutation/ReplaceGame/Persistence。所有行在多人Web服务中都需要登录；“状态”指上述标准ok+state响应。实际领域校验仍由规则层负责，字段表不会替代可用性预览。
 
@@ -104,7 +104,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 | `/api/legacy` | GET/POST | 只读 | 是 | 无 | 传承 earned/runs/budget/milestones，结算资格与当前人生说明 |
 | `/api/legacy/draft` | GET/POST | 只读 | 是 | `seed=20261004,roll=0`，roll范围0–2 | `talents[],budget`；建号天赋候选 |
 | `/api/legacy/settle` | POST | 存档 | 是 | 无；需有可结算结局 | 写传承档，防重复结算；返回状态及earned/budget |
-| `/api/achievements` | GET/POST | 只读 | 是 | 无 | `achievements[]` 的progress/target/done/points；展示查询 |
+| `/api/achievements` | GET/POST | 只读 | 是 | 无 | `achievements[]` 保留progress/target/done/points，并提供condition/reward/rewardClaimed及顶层rewardNote；奖励在结算或实际重开时领取 |
 
 ### 建角方案与真实开局预览（2026-10-13）
 
@@ -214,8 +214,9 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 | `/api/expedition` | POST | 动作 | 是 | 无 | 后山7天游历；状态 |
 | `/api/travel` | POST | 动作 | 是 | `to`, `mode="boat"`, `begin=false` | 扣旅费并启程；begin=true只开始，默认推进；状态、text、arrived、report |
 | `/api/location-service` | POST | 动作 | 是 | `id`, `begin=false` | 当前地点服务；begin=true只开始安排，默认推进；状态、targetTab |
-| `/api/tide` | GET/POST | 只读 | 是 | 无 | 兽潮完整展示：active/severity/monthsLeft等统计与fallen |
-| `/api/tide/fight` | POST | 动作 | 是 | 无 | 参与抵御兽潮，可能斗法；状态、text、lethal |
+| `/api/tide` | GET/POST | 只读 | 是 | 无 | 统一只读兽潮state视图，含daysLeft、battlefields、leaderboard、market；不更新检查点 |
+| `/api/tide/fight` | POST | 动作 | 是 | battlefield=本人最高战场，显式值仅整数0–3 | 对应大境界妖兽；四战场每杀1/3/9/27分；状态、text、lethal |
+| `/api/tide/market/buy` | POST | 动作 | 是 | eventId,kind=herb/material,id,count=1,expectedUnitPrice可选 | 当前城市且开放期可购有限高阶库存；全部预检成功后一次性扣钱/发货；状态、text、cost |
 | `/api/tide/hunker` | POST | 动作 | 是 | 无 | 避险度过兽潮；状态、text |
 
 ## 展示预览的权威边界
@@ -225,7 +226,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 - `state.player.combatReference`给出hp/hpMax、开局mana、manaRegen/manaCap、shield、swordQi、reduction、speed、damageBuff；日常health另为0–100百分制。
 - `arts/spells[].preview`与携带spellList/mandatorySpells含damage/shield/heal/healPotential、cost、energy/manaGain、qi/draw/drawNext、hpMaxChange/manaRegenDelta、storedMana、damageBonusPct/reductionPct/guardPct、statuses、conditions。known/learned/equipped/canEquip/canUnequip等用于学习与携带资格。
 - `state.gears[].ability.preview`、passive.delta与canEquip来自局部装备投影；actions包含enabled/reason/costStones/returnStones。forge-preview补充材料角色与缺口、灵石缺口、blockers以及inscribedAbility/inscribedPassive。
-- `state.pillCatalog[]`覆盖全部丹药，包括effect/effectValue/baseEffect/catalogEffect/usage、owned/used/tolerance、poisonAfter/poisonDelta、requiredStage/requiredRealm和enabled/reason；breakthrough给出真实chance/cost/days/failureLoss及消耗说明。`catalogEffect` 为当前境界下不受现有属性、耐药与库存截断的完整能力；`effect` 仍为当前真实服用结果，不能互换。`market[].grade` 来自物品定义，未知为0；丹药市场与 `brewOptions[]` 也提供 `catalogEffect`，后者增加真实配方品阶。
+- `state.pillCatalog[]`覆盖全部丹药，包括effect/effectValue/baseEffect/catalogEffect/usage、owned/used/tolerance、poisonAfter/poisonDelta、requiredStage/requiredRealm和enabled/reason；breakthrough给出真实chance/cost/days/failureLoss及消耗说明。`catalogEffect` 为角色无关的本地标称能力，不受当前境界、属性、天赋、耐药与库存截断；修为丹另提供 `catalogEffectValue`（本地标称修为点）。`effect` / `effectValue` 仍为当前真实服用结果，不能互换；修为丹 `usage` 列出标称值、小境25%上限及距圆满余量。`market[].grade` 来自物品定义，未知为0；丹药市场与 `brewOptions[]` 也提供 `catalogEffect`，后者增加真实配方品阶。
 - battle视图的hand/artifacts使用实时battlePreview，enemyMana/enemyMaxMana与intentDescription/intentDamage/intentShield/intentHeal/intentSpells反映当前战斗；Tianji encounter复用公开battleView。
 
 业务标识采用服务端实际id；界面展示名称、中文兼容值与HTTP字段不应被用于推导或复制数值公式。JSON中直接使用上述已存在字段，前端别名如isLearned不构成额外HTTP端点。
@@ -255,7 +256,7 @@ NPC新增记录保存在导出/导入JSON中的 `npcs[].pillState`，**不作为
 
 ## 精确路径核对规则
 
-本表98条路径全部在实际分派中存在，逐行路径无重复，核心表85条全覆盖。服务层的前缀转发、HTML页面、assets文件与JSON字段不是API端点；不同请求方法和同一路径在多层出现也不重复计数。新增端点需同时更新RouteInfo（核心）、真实handler与本表，再复核方法/登录/阻塞和错误契约。
+本表99条路径全部在实际分派中存在，逐行路径无重复，核心表86条全覆盖。服务层的前缀转发、HTML页面、assets文件与JSON字段不是API端点；不同请求方法和同一路径在多层出现也不重复计数。新增端点需同时更新RouteInfo（核心）、真实handler与本表，再复核方法/登录/阻塞和错误契约。
 
 ## 工坊整单补料（本版新增）
 
@@ -266,3 +267,17 @@ NPC新增记录保存在导出/导入JSON中的 `npcs[].pillState`，**不作为
 
 炼丹支持1/3/5/10炉；炼器支持1至100份备料，保持实际每次开炉1件。报价叠加本地货源、总库存容量、当前灵石和工作阻塞。客户端建议传expectedCost，金额变化时拒绝确认。
 state新增herbCatalog/materialCatalog供野外行囊识别名称与品阶；每件gears.salvage含materials、costStones、estimated、sourceNote，与实际gear/salvage共用回收规则。
+
+## 洞府灵田（本轮新增5个核心Mutation端点）
+
+所有动作必须POST，并要求回到自己的洞府且无进行中的斗法、抉择、工作或秘境。数量及转账金额为严格整数，拒绝不改变材料、余额、日期或RNG。
+
+| 路径 | 正文 | 成功行为 |
+| --- | --- | --- |
+| `/api/cave/garden/plant` | `plotId,herbId,count` | 扣已有药材，按独立批次播种，同格同种最多99份 |
+| `/api/cave/garden/harvest` | `plotId` | 只收成熟批次，每份种苗产3份草药 |
+| `/api/cave/garden/reserve/deposit` | `plotId,amount` | 必须持有小绿瓶；从背包转入指定格的灵石储备，无瓶拒绝且不改状态 |
+| `/api/cave/garden/reserve/withdraw` | `plotId,amount` | 取回本格储备，不推进世界日 |
+| `/api/cave/garden/clear` | `plotId` | 放弃所有种苗，保留储备；界面须确认 |
+
+`state.cave.access/training/garden`为纯只读快照；`state.workshopAvailable`仅表示所在城市或自己的洞府有工坊条件，不改变野外坊市资格。`state.*.pricing`给出完整材料价值、1.5/3倍基价和法器逐项额外出售乘数；操作时重新按权威价格检查。`/api/mode.features.resourcePoints`给出requested/available/mutationsAllowed/status。骨架即使请求开启也不可变更游戏。

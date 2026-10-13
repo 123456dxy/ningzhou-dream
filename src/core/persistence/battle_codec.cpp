@@ -136,6 +136,9 @@ Value battleToJson(const Battle& battle) {
     battleObject.set("npcId", str(battle.npcId));
     battleObject.set("quest", str(battle.quest));
     battleObject.set("kind", str(battle.kind));
+    battleObject.set("tideEventId",str(battle.tideEventId));
+    battleObject.set("tideBattlefield",num(battle.tideBattlefield));
+    battleObject.set("tideDaysCharged",num(battle.tideDaysCharged));
     battleObject.set("huntFee", num(battle.huntFee));
     battleObject.set("wildTask", str(battle.wildTask));
     battleObject.set("dungeonSite", str(battle.dungeonSite));
@@ -252,6 +255,9 @@ void battleFromJson(const Value& battleObject, Battle& battle) {
     battle.npcId = battleObject["npcId"].asString();
     battle.quest = battleObject["quest"].asString();
     battle.kind = battleObject["kind"].asString("spar");
+    battle.tideEventId=battleObject["tideEventId"].asString();
+    battle.tideBattlefield=battleObject["tideBattlefield"].asInt(-1);
+    battle.tideDaysCharged=battleObject["tideDaysCharged"].asInt();
     battle.huntFee = battleObject["huntFee"].asInt();
     battle.wildTask = battleObject["wildTask"].asString();
     battle.dungeonSite = battleObject["dungeonSite"].asString();

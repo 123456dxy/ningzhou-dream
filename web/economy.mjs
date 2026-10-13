@@ -9,6 +9,8 @@
 
 'use strict';
 
+import { renderCraftPricing } from './craft-pricing.mjs';
+
 // 用途：转义插入HTML的文字。
 // 流程：将空值转为空串，再替换五种HTML特殊字符。
 // 调用方式：各渲染函数传入文本。
@@ -19,42 +21,63 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g,
 // 行动清单缓存
 let optCache = null;
 let forgeCache = null;
+let optionsLoading = null;
+let forgeLoading = null;
+let cacheRevision = 0;
 
 // 用途：读取营生活动目录。
-// 流程：优先使用缓存，必要时POST eco-options并缓存options。
+// 流程：优先使用当前状态缓存，合并在途POST；状态失效后不提交旧响应，失败不缓存空清单。
 // 调用方式：任务与宗门页面可传force。
 // 返回值：Promise，行动数组。
 export async function loadEcoOptions(force) {
   if (optCache && !force) return optCache;
-  const r = await fetch('/api/eco-options', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  }).then(x => x.json()).catch(() => null);
-  optCache = r?.options || [];
-  return optCache;
+  if (optionsLoading) return optionsLoading;
+  const revision = cacheRevision;
+  const loading = (async () => {
+    const response = await fetch('/api/eco-options', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const result = await response.json();
+    if (!response.ok || result?.ok === false || result?.error || !Array.isArray(result?.options))
+      throw new Error(result?.error || '任务目录暂未读取成功，请重新打开任务页重试。');
+    if (revision === cacheRevision) optCache = result.options;
+    return result.options;
+  })().finally(() => { if (optionsLoading === loading) optionsLoading = null; });
+  optionsLoading = loading;
+  return loading;
 }
 
 // 用途：读取炼器材料与器型目录。
-// 流程：优先使用缓存，必要时POST forge-options并缓存结果。
+// 流程：合并当前状态的在途读取；失效后拒绝旧响应，网络失败留出下次重试机会。
 // 调用方式：工坊和行囊可传force。
 // 返回值：Promise，材料与器型对象。
 export async function loadForgeOptions(force) {
   if (forgeCache && !force) return forgeCache;
-  const r = await fetch('/api/forge-options', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  }).then(x => x.json()).catch(() => null);
-  forgeCache = r || { materials: [], shapes: [] };
-  return forgeCache;
+  if (forgeLoading) return forgeLoading;
+  const revision = cacheRevision;
+  const loading = (async () => {
+    const response = await fetch('/api/forge-options', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const result = await response.json();
+    if (!response.ok || result?.ok === false || result?.error || !Array.isArray(result?.materials) || !Array.isArray(result?.shapes))
+      throw new Error(result?.error || '炼器材料目录暂未读取成功，请重新打开炼器页重试。');
+    if (revision === cacheRevision) forgeCache = result;
+    return result;
+  })().finally(() => { if (forgeLoading === loading) forgeLoading = null; });
+  forgeLoading = loading;
+  return loading;
 }
 
 // 用途：清除营生和炼器目录缓存。
 // 流程：同时置空optCache与forgeCache。
 // 调用方式：游戏动作改变状态后调用。
 // 返回值：无返回值。
-export function invalidateEco() { optCache = null; forgeCache = null; }
+export function invalidateEco() {
+  cacheRevision++;
+  optCache = null; forgeCache = null;
+  optionsLoading = null; forgeLoading = null;
+}
 
 export function marketGrade(state, item) {
   const direct = Number(item.grade);
@@ -98,8 +121,9 @@ export function brewRequirements(state, recipe, batch = 1) {
 // 用途：显示后端单炉成功产量、收购价和期望毛收入，不推算利润或整批保底收益。
 export function renderBrewIncome(recipe = {}) {
   const quoted = value => Number.isFinite(value) ? esc(Number(value.toFixed(2))) : '待报价';
-  return `<div class="craft-cost">成功每炉 ${quoted(recipe.output)} 枚 · 收购 ${quoted(recipe.sellPrice)} 灵石/枚 · 每炉期望毛收入 ${quoted(recipe.expectedSaleIncome)} 灵石</div>`
-    + '<p class="panel-note">期望不是保底；未扣材料与炉费，出售受本月剩余收购资金限制。</p>';
+  return `<div class="craft-cost">成功每炉 ${quoted(recipe.output)} 枚 · 收购 ${quoted(recipe.sellPrice)} 灵石/枚 · 全部售出时每炉期望毛收入 ${quoted(recipe.expectedSaleIncome)} 灵石</div>`
+    + '<p class="panel-note">期望不是保底；未扣材料与炉费，也不代表本月能全部售出。实际可收数量见下方渠道报价。</p>'
+    + renderCraftPricing(recipe.pricing, { kind: 'potion', compact: true });
 }
 // 用途：展示炼成丹药在当前角色身上的真实服用效果。
 // 流程：按丹方编号读取服务端 pillCatalog，依次显示实际效果、使用限制和丹毒变化。

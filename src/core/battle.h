@@ -133,6 +133,8 @@ struct EnemySpec {
     string id;
     string quest;
     string kind = "spar";
+    string tideEventId;             // 在先手结算前冻结兽潮场次
+    int tideBattlefield = -1;        // 战场0..3；其他遭遇保留-1
     bool lethal = false;
     int stage = 0;
     int health = 100;

@@ -5,12 +5,14 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <limits>
 
 #include "core/arts.h"
 #include "core/economy.h"
 #include "core/friendship.h"
 #include "core/battle.h"
 #include "core/shop.h"
+#include "core/crafting/craft_prices.h"
 #include "core/source_limits.h"
 #include "core/sim.h"
 #include "core/talents.h"
@@ -34,20 +36,6 @@ double marketMul(const Game& g) {
     return 1.0 + (g.world.market - 1.0) * 0.5;
 }
 
-// 用途：计入声望与天赋折扣后的买价。
-// 参与流程：人生推进、成长与世界模拟。
-// 使用方式：传入const Game& g, int base，按本模块入口调用。
-// 返回值：说明所述数值结果；不额外消耗资源。
-int buyPrice(const Game& g, int base) {
-    // 名声大的人在坊市有议价权：每点声望便宜 0.25%，上限 15%
-    const double disc = 1.0 - renown::buyDiscount(g.player.renown);
-    // 「商贾世家」天赋：购入价格 −10%。
-    // 这条写在天赋说明里，但之前只有「营生收入 +18%」实现了，
-    // 减价那一半从没接到任何计算里。
-    const double merchant = hasTalent(g.player, "merchant") ? 0.9 : 1.0;
-    return std::max(1, jsRound(base * marketMul(g) * disc * merchant));
-}
-
 // 用途：计入行情与声望加成后的卖价。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, int base，按本模块入口调用。
@@ -58,17 +46,24 @@ int sellPriceOf(const Game& g, int base) {
     return std::max(1, jsRound(base * 0.55 * marketMul(g) * bonus));
 }
 
-// 用途：按丹药效果与制作成本确定既有买价。
+// 用途：按完整配方材料市场价确定成品买价。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, const data::RecipeDef& recipe，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
 int potionBuyPrice(const Game& g, const data::RecipeDef& recipe) {
-    // RecipeDef.value 是疗效数值。市场买价必须覆盖材料定价，防止 1 灵石买丹再高价倒卖。
-    return std::max(buyPrice(g, recipe.value), jsRound(shop::salePrice(g, "potion", recipe.id) * 1.25));
+    const auto Quote = crafting::mfQuotePotionPrice(g, recipe.id);
+    return Quote.Valid ? Quote.BuyPrice : 0;
 }
 
 
 } // namespace
+
+// 用途：复用既有买价公式；流程：普通坊市、兽潮报价与成交；用法：传药材/器材稳定 ID；返回：正常单价，未知为零。
+int normalMaterialBuyPrice(const Game& g, const string& kind, const string& id) {
+    if (kind == "herb") return crafting::mfNormalMaterialBuyPrice(g, crafting::MaterialPriceKind::Herb, id);
+    if (kind == "material") return crafting::mfNormalMaterialBuyPrice(g, crafting::MaterialPriceKind::ForgeMaterial, id);
+    return 0;
+}
 
 // ============================================================
 // 坊市
@@ -94,6 +89,7 @@ vector<MarketItem> marketList(const Game& g) {
         m.desc = artPillUseInfo(g.player, r).effect;
         m.dao = r.dao;
         m.price = potionBuyPrice(g, r);
+        if (m.price <= 0) continue;
         m.sellPrice = shop::salePrice(g, "potion", r.id);
         auto it = a.potions.find(r.id);
         m.owned = (it == a.potions.end()) ? 0 : it->second;
@@ -109,9 +105,9 @@ vector<MarketItem> marketList(const Game& g) {
         m.name = h.name;
         m.desc = std::to_string(h.grade) + "品药材" + (h.main.empty() ? "" : (" · 主" + h.main));
         // 本地药材打折
-        const int base = h.sourcePrice > 0 ? h.sourcePrice : 20 + h.grade * 15;
-        const bool local = (h.sourceLocation == g.player.location);
-        m.price = buyPrice(g, local ? jsRound(base * 0.8) : base);
+        const int base = h.price;
+        m.price = normalMaterialBuyPrice(g, "herb", h.id);
+        if (m.price <= 0) continue;
         m.sellPrice = sellPriceOf(g, base);
         auto it = a.herbs.find(h.name);
         m.owned = (it == a.herbs.end()) ? 0 : it->second;
@@ -126,7 +122,8 @@ vector<MarketItem> marketList(const Game& g) {
         m.name = material.name;
         m.dao = material.element;
         m.desc = std::to_string(material.grade) + "阶材料 · " + material.element + " · " + material.polarity;
-        m.price = buyPrice(g, material.price);
+        m.price = normalMaterialBuyPrice(g, "material", material.id);
+        if (m.price <= 0) continue;
         m.sellPrice = sellPriceOf(g, material.price);
         const auto owned = a.materials.find(material.id);
         m.owned = owned == a.materials.end() ? 0 : owned->second;
@@ -139,28 +136,9 @@ vector<MarketItem> marketList(const Game& g) {
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g，按本模块入口调用。
 // 返回值：对应目录或计算结果列表。
-vector<MarketItem> gearList(const Game& g) {
-    vector<MarketItem> out;
-    if (!ecoIsCity(g.player.location)) return out;
-
-    // 法器随境界解锁：炼气期只能买到低阶
-    const int maxGrade = ordinaryMaterialGradeLimit(g.player);
-    for (const auto& sh : data::ShapeDef_TABLE()) {
-        for (int grade = 1; grade <= maxGrade; ++grade) {
-            MarketItem m;
-            m.kind = "gear";
-            m.id = sh.id + "-" + std::to_string(grade);
-            m.name = std::string(sh.name) + "·" +
-                     std::to_string(grade) + "阶";
-            m.desc = (sh.slot == "weapon")   ? "兵器"
-                     : (sh.slot == "armor")  ? "护甲"
-                                             : "饰物";
-            m.price = buyPrice(g, 60 * grade * grade);
-            m.sellPrice = sellPriceOf(g, 60 * grade * grade);
-            out.push_back(m);
-        }
-    }
-    return out;
+vector<MarketItem> gearList(const Game&) {
+    // 普通坊市不出售没有真实能力定义的批量标准法器；兼容目录入口保留为空。
+    return {};
 }
 
 // 用途：验证地点品阶库存与灵石后购入指定数量。
@@ -172,6 +150,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
     if (g.pending.has_value()) return "请先处理当前事件。";
     if (g.player.arts.battle.has_value()) return "斗法中无法交易。";
     if (count < 1 || count > 1000) return "购买数量须为 1 至 1000。";
+    if (kind == "gear") return "成品法器未上架，可在工坊自行炼制。";
     if (!ecoIsCity(g.player.location))
         return "此处不是城池，没有坊市。可以在「舆图」前往城池。";
 
@@ -183,7 +162,10 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (!r) return "坊市里没有这味丹药。";
         if (r->grade > 3) return "高阶丹药坊市不管卖，需自行炼制。";
         const int unit = potionBuyPrice(g, *r);
-        const int total = unit * count;
+        if (unit <= 0) return "丹药材料报价无效，请刷新后重试。";
+        const long long TotalCost = static_cast<long long>(unit) * count;
+        if (TotalCost > std::numeric_limits<int>::max()) return "丹药购买金额超过支持范围。";
+        const int total = static_cast<int>(TotalCost);
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) +
                    "，你只有 " + std::to_string(p.stones) + "。";
@@ -205,9 +187,8 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (!h) return "坊市里没有这味药材。";
         const string sourceError = ordinaryHerbError(p, h->grade);
         if (!sourceError.empty()) return sourceError;
-        const int base = h->sourcePrice > 0 ? h->sourcePrice : 20 + h->grade * 15;
-        const bool local = (h->sourceLocation == p.location);
-        const int unit = buyPrice(g, local ? jsRound(base * 0.8) : base);
+        const int unit = normalMaterialBuyPrice(g, "herb", h->id);
+        if (unit <= 0) return "药材市场报价无效，请刷新后重试。";
         const int total = unit * count;
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) +
@@ -232,7 +213,8 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         if (!material) return "坊市里没有这份炼器材料。";
         const string sourceError = ordinaryMaterialError(p, material->grade);
         if (!sourceError.empty()) return sourceError;
-        const int unit = buyPrice(g, material->price);
+        const int unit = normalMaterialBuyPrice(g, "material", material->id);
+        if (unit <= 0) return "材料市场报价无效，请刷新后重试。";
         const int total = unit * count;
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) + "，你只有 " + std::to_string(p.stones) + "。";
@@ -246,45 +228,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         return "";
     }
 
-    if (kind == "gear") {
-        if (count != 1) return "法器请每次购买一件。";
-        // id 形如 "sword-2"
-        const size_t dash = id.find_last_of('-');
-        if (dash == string::npos) return "没有这件法器。";
-        const string shapeId = id.substr(0, dash);
-        const string gradeText = id.substr(dash + 1);
-        if (gradeText.size() != 1 || gradeText.front() < '1' || gradeText.front() > '5')
-            return "法器品阶无效。";
-        const int grade = gradeText.front() - '0';
-        const data::ShapeDef* sh = nullptr;
-        for (const auto& s : data::ShapeDef_TABLE())
-            if (s.id == shapeId) sh = &s;
-        if (!sh) return "没有这件法器。";
-        if (grade > 2) return "三阶及以上法器不在普通坊市出售，请以秘境材料自行炼制或向道友寻求真实藏品。";
-        if (grade > ordinaryMaterialGradeLimit(p)) return "二阶法器需达到筑基期。";
 
-        const int unit = buyPrice(g, 60 * grade * grade);
-        if (p.stones < unit)
-            return "灵石不足：需要 " + std::to_string(unit) +
-                   "，你只有 " + std::to_string(p.stones) + "。";
-
-        p.stones -= unit;
-        
-        Gear gear;
-        do {
-            gear.id = "buy-" + std::to_string(g.clock.days) + "-" + std::to_string(g.economy.seq++);
-        } while (std::any_of(a.gear.begin(), a.gear.end(), [&](const Gear& item) { return item.id == gear.id; }));
-        gear.name = std::string(sh->name) + "·" + std::to_string(grade) + "阶";
-        gear.slot = sh->slot;
-        gear.grade = grade;
-        gear.price = unit;
-        gear.craftCost = unit;
-        gear.bonus = 0.04 * grade;
-        a.gear.push_back(gear);
-        logEvent(g, "self", "购入法器「" + gear.name + "」。", true, "",
-                 "灵石 −" + std::to_string(unit));
-        return "";
-    }
 
     return "不认识的货品。";
 }

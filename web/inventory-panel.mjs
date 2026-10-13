@@ -2,6 +2,7 @@ import { esc, heading, panel, layout, asideBlock } from './shell.mjs';
 import { renderArtifactAbility, renderEquippedArtifacts } from './artifacts.mjs';
 import { renderPillEffect } from './economy.mjs';
 import { renderRenownPanel } from './renown.mjs';
+import { renderCraftPricing } from './craft-pricing.mjs';
 
 // 用途：从真实库存汇总拥有的物品，排除功法与神通。
 // 流程：合并法宝、丹药、材料、草药与突破物品，用权威目录补充名称和品阶。
@@ -80,8 +81,10 @@ export function renderInventoryPanel(state, { kind = 'all', grade = 'all', sub =
     }
     return `<article class="inventory-item" data-inventory-item="${esc(item.id)}"><div class="inventory-item-head"><h4>${esc(item.name)}</h4><span>${esc(label)}</span></div>`
       + (item.kind === 'potion'
-        ? `<details class="inventory-pill-details" data-inventory-pill-details="${esc(item.id)}"><summary>查看效果与服用</summary><p>持有 ${item.count} 枚</p>${renderPillEffect(state, item.id)}<div class="arts-actions">${actions}</div></details>`
-        : (item.ability ? renderArtifactAbility(item.ability, { compact: true }) : `<p>${esc(item.desc || '')}</p>`) + `<div class="arts-actions">${actions}</div>`)
+        ? `<details class="inventory-pill-details" data-inventory-pill-details="${esc(item.id)}"><summary>查看效果与服用</summary><p>持有 ${item.count} 枚</p>${renderPillEffect(state, item.id)}${renderCraftPricing(item.pricing, { kind: 'potion', compact: true })}<div class="arts-actions">${actions}</div></details>`
+        : (item.ability ? renderArtifactAbility(item.ability, { compact: true }) : `<p>${esc(item.desc || '')}</p>`)
+          + (item.kind === 'gear' ? renderCraftPricing(item.pricing, { kind: 'gear', compact: true }) : '')
+          + `<div class="arts-actions">${actions}</div>`)
       + `</article>`;
   }).join('') || '<div class="empty">该分类没有拥有的物品。</div>';
   return head + layout(panel('随身行囊', `${visible.length} 种`, filters + `<div class="inventory-grid">${cards}</div>`), aside);

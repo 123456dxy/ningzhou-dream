@@ -15,12 +15,16 @@
 <None Include="..\web\app.mjs"/>
 <None Include="..\web\artifacts.mjs"/>
 <None Include="..\web\arts.mjs"/>
+<None Include="..\web\assets\manuals\manifest.mjs"/>
 <None Include="..\web\build-panel.mjs"/>
 <None Include="..\web\build-preview.css"/>
 <None Include="..\web\build-preview.mjs"/>
 <None Include="..\web\build.css"/>
 <None Include="..\web\cards.mjs"/>
+<None Include="..\web\cave-panel.css"/>
+<None Include="..\web\cave-panel.mjs"/>
 <None Include="..\web\cave-ui.mjs"/>
+<None Include="..\web\craft-pricing.mjs"/>
 <None Include="..\web\dungeons.mjs"/>
 <None Include="..\web\economy.mjs"/>
 <None Include="..\web\enhance.css"/>
@@ -32,6 +36,7 @@
 <None Include="..\web\legacy.mjs"/>
 <None Include="..\web\location-art.mjs"/>
 <None Include="..\web\login.mjs"/>
+<None Include="..\web\manuals-art.css"/>
 <None Include="..\web\map.mjs"/>
 <None Include="..\web\mobile.css"/>
 <None Include="..\web\mobile.mjs"/>
@@ -46,6 +51,7 @@
 <None Include="..\web\task-panel.mjs"/>
 <None Include="..\web\tianji.css"/>
 <None Include="..\web\tianji.mjs"/>
+<None Include="..\web\tide-panel.mjs"/>
 <None Include="..\web\v2\api.mjs"/>
 <None Include="..\web\v2\app.mjs"/>
 <None Include="..\web\v2\battle-mobile.css"/>

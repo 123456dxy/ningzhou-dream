@@ -146,7 +146,7 @@ export function renderSectSpellLibrary(state) {
   const list = (state.librarySpells || []).filter(sp => !sp.sect || sp.sect === state.player.sect);
   if (!list.length) return '<div class="empty">本门暂未提供可请领的神通。</div>';
   const realms = ['炼气初期', '炼气中期', '炼气后期', '筑基初期', '筑基中期', '筑基后期', '金丹初期', '金丹中期', '金丹后期', '元婴初期', '元婴中期', '元婴后期', '化神初期', '化神中期', '化神后期'];
-  return `<p class="panel-note">用贡献请领本门神通。学会后在「洞府道法 → 神通搭配」选择携带，可与主修功法和悟道搭配。</p>
+  return `<p class="panel-note">用贡献请领本门神通。学会后在「功法与悟道 → 神通搭配」选择携带，可与主修功法和悟道搭配。</p>
     <div class="sect-spell-library">${list.map(sp => {
       const reason = sp.known ? '已学会' : sp.reason || (sp.enabled ? '' : '暂不可请领');
       return `<article class="sect-library-card${sp.known ? ' known' : ''}">
@@ -173,6 +173,7 @@ export function renderAchievements(data) {
   const done = list.filter(a => a.done).length;
 
   return `<div class="ach-head">已达成 <b>${done}</b> / ${list.length}</div>`
+    + (data?.rewardNote ? `<p class="ach-reward-note">${esc(data.rewardNote)}</p>` : '')
     + list.map(a => {
         const pct = a.target > 0
           ? Math.max(0, Math.min(100, Math.round(a.progress / a.target * 100))) : 0;
@@ -180,6 +181,8 @@ export function renderAchievements(data) {
           <div class="ach-top"><strong>${esc(a.name)}</strong>
             <span>${a.done ? '已达成' : `${a.progress} / ${a.target}`}</span></div>
           <div class="ach-bar"><i style="width:${pct}%"></i></div>
+          <p class="ach-condition">达成条件：${esc(a.condition || '正在读取条件。')}</p>
+          <p class="ach-reward">奖励：${esc(a.reward || '正在读取奖励。')}</p>
         </div>`;
       }).join('');
 }

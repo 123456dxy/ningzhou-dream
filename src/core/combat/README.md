@@ -9,6 +9,7 @@
 | 实现 | 职责 | 公共头（相对 `src/core`） |
 | --- | --- | --- |
 | `battle.cpp` | 神通目录、开战、回合、预览、胜负及来源结算 | `battle.h` |
+| `battle_scaling.cpp` | 攻击、毒伤、灼烧统一战力伤害基数 | `combat/battle_scaling.h` |
 | `artifact.cpp` | 法器形制、主动能力与装备能力查询 | `artifact.h` |
 | `sword.cpp` | 剑道境界、剑修判定、剑斗加成 | `sword.h` |
 | `conflict.cpp` | NPC 冲突资格、后果、战利品与恶名 | `conflict.h` |
@@ -33,3 +34,5 @@ API 或领域事件生成 `EnemySpec`，开战后牌堆、灵力、冷却和状�
 `tests/test_battle.cpp`、`test_battle_state.cpp`、`test_battle_mechanisms.cpp`、`test_combat_design.cpp`、`test_shadow_combat.cpp`、`test_artifact.cpp`、`test_npc_cards.cpp`、`test_numeric_previews.cpp`；来源结算另见 `test_dungeon.cpp`、`test_sect_trial.cpp`、`test_mechanics_regression.cpp`。这些文件纳入统一 `ningzhou_tests`，这里列出的是已有覆盖入口，不代表本次文档操作重新执行了测试。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。
+
+2026-10-13：伤害基数统一为 `战力 × 0.3 + 18`，技能倍率和原有分步取整不变。护盾、治疗、气血、灵力规则未随之缩放。旧档已冻结的敌方意图和状态伤害保留原值，避免重复缩放；新施术使用新基数。`test_battle_scaling.cpp` 覆盖双方直伤和持续伤害，`test_combat_health.cpp` 覆盖真实 API 即时扣血、护盾吸收、治疗与结算换算。桌面侧栏在斗法中读取 Battle 的当前/最大气血，结束后恢复显示场外健康度。

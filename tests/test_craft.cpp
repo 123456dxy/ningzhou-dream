@@ -126,7 +126,10 @@ void runCraftTests() {
             const Player p = makeCrafter(3);
             const PillEffect e = artPillEffect(p, *r);
             checkStr(r->kind, "combat", "凝神丹属于战斗类");
-            checkStr(e.text, "下一场初始与上限灵力 +2", "凝神丹效果文案正确");
+            check(e.text.find("开局灵力 +1") != string::npos &&
+                  e.text.find("仅开局生效") != string::npos &&
+                  e.text.find("容量及每轮恢复量不变") != string::npos,
+                  "凝神丹文案符合真实首轮灵力收益，不虚报容量或每轮恢复量");
         }
     }
 

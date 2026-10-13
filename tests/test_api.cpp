@@ -400,7 +400,7 @@ void runApiTests() {
         api::game() = storyGame;
         check(request("story", letter).status == 200, "月末家书可跨月完成");
         checkEq(g.clock.days, 32, "月末支线跨月仍消耗完整三天");
-        checkEq(g.tide.monthsLeft, 1, "支线跨月同步推进兽潮月份");
+        checkEq(g.tide.monthsLeft, 2, "支线跨月只推进三天，不扣去整月战期");
 
         Game unfinished = storyGame;
         unfinished.clock.days = 1; unfinished.tide.active = false;

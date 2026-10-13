@@ -26,3 +26,6 @@ tools/society-dump.json
 # 临时文件
 _*.txt
 *.log
+
+# 本机完整服务版：复制程序、账号、存档、意见箱、日志与PID均为个人运行数据。
+local-server/

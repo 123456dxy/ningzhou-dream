@@ -36,6 +36,7 @@
 #include "core/calendar.h"
 #include "core/model.h"
 #include "core/tianji.h"
+#include "core/resource_points.h"
 
 namespace {
 
@@ -163,6 +164,8 @@ constexpr size_t kMaxSessions = 20000;
 // 用途：--local 启动时关闭创建角色/登录/注册与全部联网模块，
 //       固定使用内置道号，并在没有存档时用默认天赋与属性直接开局。
 bool g_localMode = false;
+// 应用拥有资源点部署配置；启动参数解析结束后只读，不能由角色存档或HTTP请求启用。
+nz::ResourcePoints::Config ResourcePointConfig;
 const std::string kLocalNick = "本地道友";
 const std::string kLocalSid = "local-test-session";
 
@@ -501,6 +504,15 @@ Response handle(const Request& req) {
         o.set("ok", true);
         o.set("local", g_localMode);
         o.set("nickname", g_localMode ? kLocalNick : std::string());
+        const auto ResourcePointCapability = nz::ResourcePoints::mfCapability(ResourcePointConfig);
+        nz::json::Value ResourcePointState(nz::json::Object{});
+        ResourcePointState.set("requested", ResourcePointCapability.Requested);
+        ResourcePointState.set("available", ResourcePointCapability.Available);
+        ResourcePointState.set("mutationsAllowed", ResourcePointCapability.MutationsAllowed);
+        ResourcePointState.set("status", std::string(nz::ResourcePoints::mfStatusId(ResourcePointCapability.Status)));
+        nz::json::Value Features(nz::json::Object{});
+        Features.set("resourcePoints", std::move(ResourcePointState));
+        o.set("features", std::move(Features));
         return jsonResp(200, o);
     }
     if (g_localMode && localDisabledPath(path))
@@ -782,6 +794,7 @@ static int runServer(int argc, const char* const* argv) {
         else if (a == "--feedback" && i + 1 < argc) g_feedbackDir = argv[++i];
         else if (a == "--idle-minutes" && i + 1 < argc) g_idleSeconds = std::max(1, std::atoi(argv[++i])) * 60LL;
         else if (a == "--local") g_localMode = true;
+        else if (a == "--enable-resource-points") ResourcePointConfig.Enabled = true;
         else if (a == "--no-open") openBrowser = false;
         else if (a == "--help" || a == "-h") {
             std::printf(
@@ -794,6 +807,7 @@ static int runServer(int argc, const char* const* argv) {
                 "  --feedback DIR     反馈箱目录（默认 ./feedback）\n"
                 "  --idle-minutes N   玩家多久不操作后保存并释放内存（默认 30）\n"
                 "  --local            本地测试版：仅监听 127.0.0.1，关闭登录与联网模块，内置道号直接开局\n"
+                "  --enable-resource-points  请求启用资源点模块；当前骨架未就绪，仍不开放玩法\n"
                 "  --no-open          启动后不自动打开浏览器\n");
             return 0;
         }

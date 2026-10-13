@@ -12,6 +12,10 @@ extern const char* const ECO_CITIES[5];
 int ecoMarketTier(const Player& player);
 // 当前条件下下一次换月的收购预算；当前月剩余现金仍读取 economy.marketCash。
 int ecoMarketBudget(const Game& game);
+// 用途：查询月预算大境界乘区；流程：预算/换月；用法：传只读角色；返回：1/2/4/8/16，非法边界饱和，不修改本月已花资金。
+[[nodiscard]] int mfMarketRealmMultiplier(const Player& PlayerState);
+// 用途：提供统一月预算规则解释；流程：只读视图；用法：无参数；返回：中文规则文本，无状态修改。
+[[nodiscard]] string mfMarketBudgetRule();
 
 // 每月的资源与任务刷新（对应 ecoRefresh）
 // 用途：刷新当月城市需求与任务上限。

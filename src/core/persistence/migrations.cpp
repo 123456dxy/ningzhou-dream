@@ -1,5 +1,6 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/crafting/cave_garden.h"
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/economy.h"
@@ -7,6 +8,8 @@
 #include "core/adventure.h"
 #include "core/dungeon.h"
 #include "core/sim.h"
+#include "core/tide.h"
+#include "core/content/npc_combat_profiles.h"
 #include <set>
 #include <algorithm>
 
@@ -100,6 +103,7 @@ void completeLoadedSave(const Value& root, Game& game, bool detached) {
         ensureSociety(game);
         ensureAdventure(game);
         ensureDungeons(game);
+        if (root["garden"].isNull()) crafting::mfInitializeGarden(game);
     }
 
     // 老版在途斗法没有保存任务来源，将能够确定的上下文迁移回来。
@@ -116,6 +120,16 @@ void completeLoadedSave(const Value& root, Game& game, bool detached) {
             for (const auto& task : data::WildTaskDef_TABLE())
                 if (task.name == battle.enemy) { battle.wildTask = task.id; break; }
         }
+    }
+
+    if (!detached) {
+        // 仅缺失构筑字段的旧NPC名册需要补模板；现代载入保持原样，包括在途对局。
+        const auto& roster=root["npcs"].asArray();
+        const bool legacyProfiles=std::any_of(roster.begin(),roster.end(),[](const Value& npc) {
+            return npc.asObject().find("combatProfileId")==npc.asObject().end();
+        });
+        if (legacyProfiles) content::ensureChampionNpcs(game);
+        tide::ensureTide(game);
     }
 
 }

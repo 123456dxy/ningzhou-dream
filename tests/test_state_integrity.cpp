@@ -138,11 +138,11 @@ void runStateIntegrityTests() {
         g.tide.active = true; g.tide.monthsLeft = 12;
         g.job = planJob(g, "rest", 60);
         calendarRun(g, 5);
-        checkEq(g.tide.monthsLeft, 12, "五天行动不会消耗一整月兽潮");
+        checkEq(g.tide.monthsLeft, 2, "五天行动后固定兽潮仍有两月以内");
         calendarRun(g, 25);
-        checkEq(g.tide.monthsLeft, 11, "跨月界兽潮恰好推进一月");
+        checkEq(g.tide.monthsLeft, 1, "三十天后固定兽潮剩一月");
         calendarRun(g, 30);
-        checkEq(g.tide.monthsLeft, 10, "六十天长工作结算两月兽潮");
+        checkEq(g.tide.monthsLeft, 0, "六十天后固定兽潮结束");
     }
     {
         Game g = smallGame();

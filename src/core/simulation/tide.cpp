@@ -1,275 +1,285 @@
-// 宁州一梦 · C++ 版 — 兽潮（实现）
 #include "core/tide.h"
-
-#include <algorithm>
-#include <cmath>
-
-#include "core/adventure.h"
-#include "core/arts.h"
-#include "core/base.h"
+#include "core/calendar.h"
+#include "core/simulation/tide_rules.h"
+#include "core/content/game_ids.h"
+#include "core/content/npc_combat_profiles.h"
 #include "core/battle.h"
-#include "core/renown.h"
+#include "core/economy.h"
 #include "core/sim.h"
-#include "data/reference_tables.h"
+#include <algorithm>
+#include <limits>
+#include <unordered_map>
 
 namespace nz::tide {
-
-using std::string;
-
 namespace {
-
-// 险地：兽潮的源头。这些地方越多、越危险，兽潮越凶。
-// 用途：筛选可受妖潮影响的野外地点。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：无参数，读取或初始化当前模块状态。
-// 返回值：匹配定义或实体指针；未找到时为空。
-vector<const LocationDef*> wilds() {
-    vector<const LocationDef*> out;
-    for (const auto& l : LOCATIONS())
-        if (string(l.type) == "wild") out.push_back(&l);
-    return out;
+// 用途：安全创建截止日期；流程：开潮与迁移；用法：传起始日和长度；返回：不溢出的日期。
+int deadline(int day, int duration) {
+    return static_cast<int>(std::min(static_cast<long long>(std::max(0, day)) + duration,
+                                    static_cast<long long>(std::numeric_limits<int>::max())));
 }
-
-// 兽潮会优先扑向人多的地方，也会扫过险地
-// 用途：判断妖潮是否覆盖指定NPC。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入const Npc& n, const Game& g，按本模块入口调用。
-// 返回值：操作或条件是否成立；失败条件在调用前校验。
-bool tideHits(const Npc& n, const Game& g) {
-    // 宗门与城池里的相对安全，但挡不住高severity
-    const bool remote = (n.location == g.player.location) ? false : true;
-    return remote || g.tide.severity >= 2;
+// 用途：冻结本期参战身份；流程：开启和迁移；用法：新活动初始化时调用；返回：无，不消耗随机数。
+void registerNpcs(Game& game) {
+    content::ensureChampionNpcs(game);
+    game.tide.participants.clear();
+    for (const auto& npc : game.npcs) {
+        if (!npc.alive || npc.beast || npc.id.empty()) continue;
+        TideParticipant participant;
+        participant.actorId = npc.id; participant.name = npc.name; participant.sect = npc.sect;
+        participant.combatProfileId = npc.combatProfileId;
+        participant.entryStage = clampInt(npc.stage, 0, 12);
+        participant.elite = content::isChampion(npc);
+        game.tide.participants.push_back(std::move(participant));
+    }
+    std::sort(game.tide.participants.begin(), game.tide.participants.end(),
+              [](const TideParticipant& left, const TideParticipant& right) { return left.actorId < right.actorId; });
 }
-
+// 用途：初始化固定战期事实；流程：开潮和旧档迁移；用法：调用前决定是否保留旧记录；返回：无，设置期限与名单。
+void initializeEvent(Game& game) {
+    BeastTide& tide = game.tide;
+    tide.rulesVersion = rules::Version; tide.durationDays = rules::BattleDays;
+    tide.startDay = std::max(0, game.clock.days);
+    tide.endDay = deadline(tide.startDay, rules::BattleDays);
+    tide.lastProcessedDay = tide.startDay;
+    tide.eventId = "tide-" + std::to_string(game.seed) + "-" + std::to_string(tide.startDay) + "-" + std::to_string(game.eventSeq);
+    tide.monthsLeft = (tide.durationDays+29)/30;
+    tide.playerEntryStage = clampInt(game.player.stage, 0, 12);
+    tide.playerJoined = false;
+    tide.playerScore = tide.playerRank = tide.totalScore = tide.rewardStones = 0;
+    tide.settled = tide.rewardPaid = false; tide.marketExpiresDay = -1; tide.marketStock.clear();
+    registerNpcs(game);
+}
+// 用途：检查末日是否仍有本期战斗；流程：延迟结榜；用法：传只读游戏；返回：本期活跃斗法存在时为真。
+bool hasUnfinishedBattle(const Game& game) {
+    const auto& battle = game.player.arts.battle;
+    return battle && battle->shadowOutcome.empty() &&
+        content::parseBattleKind(battle->kind) == content::BattleKind::Tide &&
+        battle->tideEventId == game.tide.eventId;
+}
+// 用途：按集中出战概率及本期上限模拟NPC积分；流程：dayTick；返回：无，冻结入场战场倍率，死人/未参战/已封顶不投骰。
+void simulateNpcDay(Game& game) {
+    std::unordered_map<string, const Npc*> LivingNpcs;
+    for (const auto& Npc : game.npcs) if (Npc.alive && !Npc.beast) LivingNpcs.emplace(Npc.id, &Npc);
+    for (auto& Participant : game.tide.participants) {
+        const auto Found = LivingNpcs.find(Participant.actorId);
+        if (Found == LivingNpcs.end()) continue;
+        const bool IsElite = content::isChampion(*Found->second);
+        Participant.elite = IsElite;
+        Participant.combatProfileId = Found->second->combatProfileId;
+        const auto& Pace = IsElite ? rules::EliteNpcBattlePace : rules::NormalNpcBattlePace;
+        const auto* Battlefield = rules::battlefield(rules::battlefieldForStage(Participant.entryStage));
+        const int KillsSoFar = std::max(0, Participant.score) / Battlefield->pointsPerKill;
+        // 保留已发生的大积分；只停止继续累加，不用新上限反向削减旧事实。
+        if (KillsSoFar >= Pace.MaximumEventKills) continue;
+        if (randIntOf(game, 1, Pace.BattleChanceDenominator) != 1) continue;
+        const int RemainingKills = Pace.MaximumEventKills - KillsSoFar;
+        const int KillCount = std::min(randIntOf(game, 0, Pace.MaximumDailyKills), RemainingKills);
+        Participant.score = rules::addScore(Participant.score, KillCount * Battlefield->pointsPerKill);
+    }
+}
+// 用途：保留既有月度伤亡；流程：实际月界；用法：战期内每月一次；返回：无，npcDies保持履历和关系一致。
+void resolveMonthlyCasualties(Game& game) {
+    for (int roll = 0; roll < clampInt(game.tide.severity, 1, 3) * 2; ++roll) {
+        vector<Npc*> candidates; vector<int> weights; int totalWeight = 0;
+        for (auto& npc : game.npcs) {
+            if (!npc.alive || npc.beast || npc.stage > 6) continue;
+            if (npc.location == game.player.location && game.tide.severity < 2) continue;
+            const int lowRealm = 7 - clampInt(npc.stage, 0, 6), weight = lowRealm * lowRealm;
+            candidates.push_back(&npc); weights.push_back(weight); totalWeight += weight;
+        }
+        if (candidates.empty()) return;
+        int choice = randIntOf(game, 1, totalWeight); size_t index = 0;
+        while (index + 1 < candidates.size() && choice > weights[index]) choice -= weights[index++];
+        Npc& victim = *candidates[index];
+        const double survive = clamp(0.08 + victim.stage * 0.10 + (content::isChampion(victim) ? 0.15 : 0.0), 0.0, 0.85);
+        if (randomOf(game) < survive) continue;
+        ++game.tide.npcDeaths;
+        if (game.tide.fallen.size() < 40) game.tide.fallen.push_back(victim.name);
+        npcDies(game, victim, "殁于兽潮");
+    }
+}
 } // namespace
 
-// 用途：读取当前妖潮的野外风险加成。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入const Game& g，按本模块入口调用。
-// 返回值：说明所述数值结果；不额外消耗资源。
-int dangerBonus(const Game& g) {
-    if (!g.tide.active) return 0;
-    return 8 * g.tide.severity;
+// 用途：读取战期危险增量；流程：游历赶路；用法：传只读游戏；返回：仅有效战期内的风险。
+int dangerBonus(const Game& game) {
+    return game.tide.active && daysLeft(game) > 0 ? 8 * clampInt(game.tide.severity, 1, 3) : 0;
 }
-
-// 用途：生成当前妖潮状态中文说明。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入const Game& g，按本模块入口调用。
-// 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
-string statusText(const Game& g) {
-    if (!g.tide.active) return "宁州暂安，各处险地未见异动。";
-    const char* sev = g.tide.severity >= 3 ? "滔天"
-                      : g.tide.severity == 2 ? "猖獗"
-                                             : "初起";
-    return "兽潮" + string(sev) + "：妖物自险地涌出，波及全州。" +
-           "已历 " + std::to_string(g.tide.wavesFought) + " 战，" +
-           "陨落修士 " + std::to_string(g.tide.npcDeaths) + " 人。" +
-           "预计还有 " + std::to_string(g.tide.monthsLeft) + " 个月。";
+// 用途：读取固定战期余日；流程：视图与门槛；用法：传只读游戏；返回：不小于零的天数。
+int daysLeft(const Game& game) {
+    if (!game.tide.active) return 0;
+    if (game.tide.rulesVersion == 0) return rules::BattleDays;
+    return std::max(0, game.tide.endDay - game.clock.days);
 }
-
-// ============================================================
-// 起潮
-// ============================================================
-// 用途：推进妖潮年度开启与结束。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入Game& g，按本模块入口调用。
-// 返回值：无；完成说明所述写入或展示操作。
-void yearTick(Game& g) {
-    if (g.tide.active) return;
-    if (g.year < 3) return;      // 头三年让玩家先站稳
-
-    // 基础概率随年份与世道衰败上升；灵石行情差时也更容易出事
-    const double base = 0.10 + std::min(0.22, g.year * 0.004);
-    const double poor = (g.world.market < 0.95) ? 0.08 : 0.0;
-    if (randomOf(g) >= base + poor) return;
-
-    BeastTide& t = g.tide;
-    t.active = true;
-    t.startYear = g.year;
-    t.monthsLeft = 12 + randIntOf(g, 0, 12);
-    // 世道越差、年份越久，兽潮越凶
-    t.severity = clampInt(1 + static_cast<int>(randomOf(g) * 3.0), 1, 3);
-    t.wavesFought = 0;
-    t.wavesWon = 0;
-    t.npcDeaths = 0;
-    t.fallen.clear();
-    t.warned = true;
-
-    // 兽潮自某处险地涌出 —— 说清楚源头，玩家才有「去哪儿打」的概念
-    string origin = "险地";
-    {
-        const auto w = wilds();
-        if (!w.empty()) {
-            const LocationDef* src = pickOf(g, w);
-            origin = src->name;
-            // 险地越危险，兽潮越凶
-            if (src->danger >= 50 && t.severity < 3) t.severity += 1;
-        }
+// 用途：生成活动状态说明；流程：纪事和详情；用法：传只读游戏；返回：战期、金榜或平安文字。
+string statusText(const Game& game) {
+    const BeastTide& tide = game.tide;
+    if (tide.active) return "兽潮固定持续" + std::to_string(tide.durationDays) + "天，尚余" + std::to_string(daysLeft(game)) +
+        "天。每回合推进一天，炼气、筑基、金丹、元婴战场每杀得1、3、9、27分；当前讨伐积分" + std::to_string(tide.playerScore) + "。";
+    if (tide.settled) return "兽潮已退，金榜已结算。你的讨伐积分" + std::to_string(tide.playerScore) +
+        (tide.playerRank > 0 ? "，排名第" + std::to_string(tide.playerRank) + "。" : "，本期未获得有效讨伐积分。") +
+        (marketOpen(game) ? "战后坊市尚余" + std::to_string(std::max(0, tide.marketExpiresDay - game.clock.days)) + "天。" : "战后坊市已结束。");
+    if (tide.rulesVersion > 0 && tide.endDay >= 0 && game.clock.days >= tide.endDay)
+        return "兽潮战期已结束，请完成当前战局收尾，随后公布金榜。";
+    return "宁州暂安，各处险地未见异动。";
+}
+// 用途：按年度概率开启固定战期；流程：世界年度演化；用法：传游戏；返回：无，不覆盖本期或等待收尾的活动。
+void yearTick(Game& game) {
+    ensureTide(game);
+    if (game.tide.active || marketOpen(game) || hasUnfinishedBattle(game) || game.year < 3) return;
+    if (!game.tide.settled && game.tide.rulesVersion > 0 && game.tide.endDay >= 0) {
+        settleIfDue(game);
+        if (!game.tide.settled) return;
     }
-
-    const char* sev = t.severity >= 3 ? "滔天" : t.severity == 2 ? "猖獗" : "初起";
-    logEvent(g, "world",
-             "【兽潮】妖物自" + origin + "涌出，声势" + string(sev) +
-                 "，波及全州。各地宗门已发下悬赏。",
-             true);
+    const double probability = 0.10 + std::min(0.22, game.year * 0.004) + (game.world.market < 0.95 ? 0.08 : 0.0);
+    if (randomOf(game) >= probability) return;
+    game.tide = BeastTide{};
+    game.tide.active = true; game.tide.startYear = game.year;
+    game.tide.severity = randIntOf(game, 1, 3); game.tide.warned = true;
+    initializeEvent(game);
+    logEvent(game, "world", "【兽潮】妖潮涌入宁州，四境战场开放。本期持续" + std::to_string(rules::BattleDays) + "天，讨伐金榜将在潮退时结算，随后开放" + std::to_string(rules::MarketDays) + "天战后坊市。", true);
 }
-
-// ============================================================
-// 月度蔓延
-// ============================================================
-// 用途：结算妖潮月度影响与损失。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入Game& g，按本模块入口调用。
-// 返回值：无；完成说明所述写入或展示操作。
-void monthTick(Game& g) {
-    BeastTide& t = g.tide;
-    if (!t.active) return;
-
-    t.monthsLeft -= 1;
-
-    // 每月都有人死。死多少看severity，且**优先死低境界的** ——
-    // 高境界修士能扛过去，炼气期的散修顶不住。
-    const int rolls = t.severity * 2;
-    for (int i = 0; i < rolls; ++i) {
-        // 挑一个活着的、境界偏低的
-        vector<Npc*> pool;
-        for (auto& n : g.npcs) {
-            if (!n.alive) continue;
-            if (n.stage > 6) continue;           // 金丹以上基本无虞
-            if (!tideHits(n, g)) continue;
-            pool.push_back(&n);
-        }
-        if (pool.empty()) break;
-
-        // 低境界权重高：权重 = (7 - stage)^2
-        double total = 0.0;
-        vector<double> w(pool.size());
-        for (size_t k = 0; k < pool.size(); ++k) {
-            const int s = clampInt(pool[k]->stage, 0, 6);
-            w[k] = static_cast<double>((7 - s) * (7 - s));
-            total += w[k];
-        }
-        double r = randomOf(g) * total;
-        size_t pick = 0;
-        for (; pick < pool.size(); ++pick) {
-            r -= w[pick];
-            if (r <= 0) break;
-        }
-        if (pick >= pool.size()) pick = pool.size() - 1;
-
-        Npc* victim = pool[pick];
-        // 境界越低越容易死；高一点的有机会逃过
-        const double survive = clamp(0.08 + victim->stage * 0.10, 0.0, 0.72);
-        if (randomOf(g) < survive) continue;
-
-        // 先记账再动手 —— 否则统计永远是 0（这个坑踩过一次）
-        t.npcDeaths += 1;
-        if (t.fallen.size() < 40) t.fallen.push_back(victim->name);
-        npcDies(g, *victim, "殁于兽潮");
+// 用途：按实际月界结算伤亡；流程：日历月钩；用法：战期内调用；返回：无，日倒计时由dayTick统一负责。
+void monthTick(Game& game) {
+    ensureTide(game);
+    if (!game.tide.active || game.clock.days > game.tide.endDay) return;
+    resolveMonthlyCasualties(game);
+}
+// 用途：逐真实日模拟积分并关闭战期；流程：普通日历和兽潮战；用法：日历更新后调用；返回：无，同一天不重复投骰。
+void dayTick(Game& game) {
+    ensureTide(game);
+    BeastTide& tide = game.tide;
+    if (tide.rulesVersion == 0 || tide.settled || tide.endDay < tide.startDay) return;
+    const int target = std::min(game.clock.days, tide.endDay);
+    const int first = std::max(tide.startDay, tide.lastProcessedDay);
+    const int days = clampInt(target - first, 0, tide.durationDays);
+    for (int day = 0; day < days; ++day) simulateNpcDay(game);
+    tide.lastProcessedDay = std::max(tide.lastProcessedDay, target);
+    tide.monthsLeft = (std::max(0, tide.endDay - game.clock.days) + 29) / 30;
+    if (game.clock.days >= tide.endDay) tide.active = false;
+    settleIfDue(game);
+}
+// 用途：给出四战场权威门槛；流程：选择与入场；用法：传只读游戏；返回：对应积分及不可入场原因。
+vector<BattlefieldInfo> battlefields(const Game& game) {
+    vector<BattlefieldInfo> result;
+    for (const auto& field : rules::Battlefields) {
+        BattlefieldInfo item;
+        item.id = field.id; item.minStage = field.minStage; item.pointsPerKill = field.pointsPerKill; item.name = field.name;
+        if (game.ended) item.reason = "此世已结束。";
+        else if (!game.tide.active || daysLeft(game) <= 0) item.reason = "当前没有开放的兽潮战场。";
+        else if (game.pending) item.reason = "请先处理当前抉择。";
+        else if (game.player.arts.battleActive()) item.reason = "请先完成当前斗法。";
+        else if (game.job) item.reason = "请先完成或取消当前安排。";
+        else if (game.dungeons.run) item.reason = "请先结束秘境探索。";
+        else if (game.player.health <= 0) item.reason = "当前伤势无法迎战。";
+        else if (game.player.stage < field.minStage) item.reason = "境界不足，不能进入" + item.name + "。";
+        item.enabled = item.reason.empty(); result.push_back(std::move(item));
     }
-
-    if (t.monthsLeft <= 0) {
-        // 潮退
-        const int deaths = t.npcDeaths;
-        const int fought = t.wavesFought;
-        t.active = false;
-        logEvent(g, "world",
-                 "【兽潮】妖潮退去。此役宁州陨落修士 " +
-                     std::to_string(deaths) + " 人，你迎战 " +
-                     std::to_string(fought) + " 场。",
-                 true);
+    return result;
+}
+// 用途：创建对应境界妖兽并冻结参加身份；流程：迎战入口；用法：-1选最高战场，其他值须0..3；返回：开战成功或错误。
+FightResult fight(Game& game, int battlefieldId) {
+    FightResult result;
+    const int selected = battlefieldId == -1 ? rules::battlefieldForStage(game.player.stage) : battlefieldId;
+    const auto* field = rules::battlefield(selected);
+    if (!field) { result.error = "兽潮战场编号无效。"; return result; }
+    const auto entries = battlefields(game);
+    if (!entries[selected].enabled) { result.error = entries[selected].reason; return result; }
+    ensureTide(game);
+    BeastTide& tide = game.tide;
+    if (!tide.playerJoined) { tide.playerJoined = true; tide.playerEntryStage = clampInt(game.player.stage, 0, 12); }
+    EnemySpec enemy;
+    enemy.name = field->name + string("妖兽"); enemy.kind = "tide"; enemy.style = "体";
+    enemy.beast = true; enemy.lethal = true;
+    enemy.stage = field->minStage + randIntOf(game, 0, 2); enemy.health = 100;
+    enemy.tideEventId = tide.eventId; enemy.tideBattlefield = selected;
+    tide.wavesFought = rules::addScore(tide.wavesFought, 1);
+    const int openingDay=game.clock.days;
+    battleStart(game, enemy);
+    result.ok = true; result.lethal = true;
+    result.text = "你进入" + string(field->name) + "，本场击杀获得" + std::to_string(field->pointsPerKill) + "分。";
+    logEvent(game, "world", "【兽潮】" + result.text, true);
+    // 开局先手或反震也可能直接结束对局；没有后续出牌入口时在这里补记首日。
+    if (!game.player.arts.battle && game.clock.days==openingDay) {
+        calendarBattleDay(game);
+        settleIfDue(game);
     }
+    return result;
 }
-
-// ============================================================
-// 迎战
-// ============================================================
-// 用途：构造当前妖潮讨伐遭遇与门槛。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入Game& g，按本模块入口调用。
-// 返回值：FightResult结果，包含说明所述状态或计算数据。
-FightResult fight(Game& g) {
-    FightResult r;
-    if (!g.tide.active) { r.error = "眼下没有兽潮。"; return r; }
-
-    Player& p = g.player;
-    g.tide.wavesFought += 1;
-
-    // 对手强度：按玩家境界 + 兽潮severity，略高于同境界
-    const int stage = clampInt(p.stage + (g.tide.severity >= 3 ? 1 : 0), 0, 12);
-    const char* names[3] = {"兽潮先锋", "妖将", "妖王麾下"};
-    const string nm = names[clampInt(g.tide.severity - 1, 0, 2)];
-
-    // 迎战有陨落风险；战败后由结局入口选择接受死亡或恢复最近存档。
-    EnemySpec e;
-    e.name = nm;
-    e.kind = "tide";
-    e.lethal = false;
-    e.stage = stage;
-    e.health = 100;
-    e.style = "体";                 // 妖兽走「力大砖飞」
-    battleStart(g, e);
-
-    r.ok = true;
-    r.lethal = true;
-    r.text = nm + "扑至，你拔剑迎了上去。";
-    logEvent(g, "world", "【兽潮】你在" + (findLoc(p.location) ? findLoc(p.location)->name : p.location) + "迎战" + nm + "。", true);
-    return r;
+// 用途：登记本期有效击杀；流程：battleFinish唯一战果出口；用法：传战斗快照；返回：无，不提前推进世界时间。
+void tideReward(Game& game, bool won, const Battle* context) {
+    const Battle* source = context ? context : game.player.arts.battle ? &*game.player.arts.battle : nullptr;
+    if (!source || !won || source->retreat || source->shadowPlayer || game.tide.settled ||
+        source->tideEventId.empty() || source->tideEventId != game.tide.eventId ||
+        content::parseBattleKind(source->kind) != content::BattleKind::Tide || game.clock.days > game.tide.endDay) return;
+    const auto* field = rules::battlefield(source->tideBattlefield);
+    if (!field || source->enemyStage < field->minStage || source->enemyStage > field->minStage + 2) return;
+    game.tide.wavesWon = rules::addScore(game.tide.wavesWon, 1);
+    game.tide.playerScore = rules::addScore(game.tide.playerScore, field->pointsPerKill);
+    const int renown = 3 + clampInt(game.tide.severity, 1, 3) * 2;
+    game.player.renown = rules::addScore(game.player.renown, renown);
+    logEvent(game, "world", "【兽潮】击杀" + string(field->name) + "妖兽，讨伐积分 +" + std::to_string(field->pointsPerKill) +
+        "，声望 +" + std::to_string(renown) + "；本期累计" + std::to_string(game.tide.playerScore) + "分。灵石奖励在潮退后按金榜发放。", true);
 }
-
-// 战后的赏赐（由 battleFinish 的 hunt 分支调用）
-// 用途：结算妖潮战斗的胜负收益。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入Game& g, bool won，按本模块入口调用。
-// 返回值：无；完成说明所述写入或展示操作。
-void tideReward(Game& g, bool won) {
-    BeastTide& t = g.tide;
-    Player& p = g.player;
-    if (won) {
-        t.wavesWon += 1;
-        const int stones = 40 + t.severity * 45 + p.stage * 18;
-        const int renown = 3 + t.severity * 2;
-        p.stones += stones;
-        p.renown += renown;
-        // 掉一份材料
-        vector<const data::MaterialDef*> pool;
-        for (const auto& m : data::MaterialDef_TABLE())
-            if (m.grade <= clampInt(1 + p.stage / 3 + t.severity, 1, 5))
-                pool.push_back(&m);
-        string got;
-        if (!pool.empty()) {
-            const data::MaterialDef* m = pickOf(g, pool);
-            p.arts.materials[m->id] += 1;
-            got = m->name;
-        }
-        logEvent(g, "world",
-                 "【兽潮】击退" + string("来犯妖物") + "，得灵石 " +
-                     std::to_string(stones) + "、声望 " + std::to_string(renown) +
-                     (got.empty() ? "" : "、" + got + " 一份") + "。",
-                 true);
-    } else {
-        logEvent(g, "world", "【兽潮】你力有不逮，退回阵中。", false);
+// 用途：生成同分并列金榜；流程：预览与结算；用法：传只读游戏；返回：包含玩家的稳定排序副本。
+vector<TideParticipant> leaderboard(const Game& game) {
+    auto board = game.tide.participants;
+    TideParticipant player;
+    player.actorId = "player"; player.name = game.player.name; player.sect = game.player.sect;
+    player.entryStage = game.tide.playerJoined ? game.tide.playerEntryStage : clampInt(game.player.stage, 0, 12);
+    player.score = std::max(0, game.tide.playerScore); board.push_back(std::move(player));
+    std::sort(board.begin(), board.end(), [](const TideParticipant& left, const TideParticipant& right) {
+        return left.score == right.score ? left.actorId < right.actorId : left.score > right.score;
+    });
+    int previousScore = -1, rank = 0;
+    for (size_t index = 0; index < board.size(); ++index) {
+        if (board[index].score <= 0) { board[index].rank = 0; continue; }
+        if (board[index].score != previousScore) rank = static_cast<int>(index) + 1;
+        board[index].rank = rank; previousScore = board[index].score;
     }
+    return board;
 }
-
-// 用途：安排城池避潮并支付成本。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入Game& g，按本模块入口调用。
-// 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
-string hunkerDown(Game& g) {
-    if (!g.tide.active) return "眼下没有兽潮。";
-    logEvent(g, "world",
-             "【兽潮】你固守不出，静待妖潮退去。", false);
-    return "你闭门固守，妖潮在外肆虐。";
+// 用途：冻结排名奖励和有限库存；流程：期末日、战斗收尾；用法：可重复调用；返回：无，付款和库存只生成一次。
+void settleIfDue(Game& game) {
+    BeastTide& tide = game.tide;
+    if (tide.rulesVersion == 0 || tide.settled || tide.endDay < 0 || game.clock.days < tide.endDay) return;
+    tide.active = false;
+    if (hasUnfinishedBattle(game)) return;
+    tide.totalScore = 0;
+    for (const auto& participant : leaderboard(game)) {
+        tide.totalScore = rules::addScore(tide.totalScore, participant.score);
+        if (participant.actorId == "player") tide.playerRank = participant.rank;
+        else for (auto& stored : tide.participants) if (stored.actorId == participant.actorId) { stored.rank = participant.rank; break; }
+    }
+    tide.settled = true; tide.monthsLeft = 0;
+    tide.marketExpiresDay = deadline(tide.endDay, rules::MarketDays);
+    initializeMarketStock(game);
+    // 人生已结束时保留榜单，避免结束结算以后改变遗产和账户。
+    if (!tide.rewardPaid && tide.playerJoined && tide.playerScore > 0 && !game.ended &&
+        game.player.health > 0 && game.player.age < game.player.lifespan) {
+        const int intended = rules::rewardStones(tide.playerEntryStage, tide.playerRank);
+        const int room = std::max(0, rules::InventoryLimit - std::max(0, game.player.stones));
+        tide.rewardStones = std::min(intended, room);
+        game.player.stones += tide.rewardStones; tide.rewardPaid = true;
+    }
+    logEvent(game, "world", "【兽潮金榜】妖潮退去，全体修士累计" + std::to_string(tide.totalScore) + "分。" +
+        (tide.playerRank > 0 ? "你以" + std::to_string(tide.playerScore) + "分列第" + std::to_string(tide.playerRank) + "名，获得" +
+          std::to_string(tide.rewardStones) + "灵石。" : "你本期未获得有效讨伐积分。") + "战后坊市开放" + std::to_string(rules::MarketDays) + "天，供给随总积分增加，排名影响售价。", true);
 }
-
-// 用途：补齐旧存档的妖潮状态。
-// 参与流程：妖潮开启、讨伐与避潮。
-// 使用方式：传入Game& g，按本模块入口调用。
-// 返回值：无；完成说明所述写入或展示操作。
-void ensureTide(Game& g) {
-    // 旧档没有 tide 字段，默认就是「没有兽潮」，无需补
-    (void)g;
+// 用途：记录避战选择；流程：兽潮纪事按钮；用法：活动内调用；返回：文字，不推进时间或加分。
+string hunkerDown(Game& game) {
+    if (!game.tide.active || daysLeft(game) <= 0) return "眼下没有兽潮。";
+    logEvent(game, "world", "【兽潮】你固守不出，静待妖潮退去。", false);
+    return "你闭门固守；可继续安排修行，时间照常推进。";
 }
-
+// 用途：幂等迁移旧战期与在途兽潮对局；流程：建号、加载和旧入口；用法：传游戏；返回：无，保留迎战记录，不重分配NPC构筑或虚构积分。
+void ensureTide(Game& game) {
+    if (game.tide.rulesVersion != 0 || !game.tide.active) return;
+    initializeEvent(game);
+    if (game.player.arts.battle && content::parseBattleKind(game.player.arts.battle->kind) == content::BattleKind::Tide) {
+        Battle& battle = *game.player.arts.battle;
+        battle.tideEventId = game.tide.eventId;
+        battle.tideBattlefield = rules::battlefieldForStage(battle.enemyStage);
+        game.tide.playerJoined = true;
+    }
+    logEvent(game, "world", "【兽潮】旧战期已改为自今日起" + std::to_string(rules::BattleDays) + "天，既有迎战记录保留；讨伐积分从本次更新后开始记录。", true);
+}
 } // namespace nz::tide

@@ -5,6 +5,7 @@
 #include "core/cultivate.h"
 #include "core/dungeon.h"
 #include "core/shop.h"
+#include "core/interface/cave_views.h"
 
 namespace nz::api {
 using json::Value;
@@ -197,7 +198,9 @@ Value caveView(const Game& g) {
         s.set("reason",Value(locked?(g.player.cave.empty()?"请先安置洞府。":"需先升级至「"+need.name+"」。"):""));
         supplies.push_back(std::move(s));
     }
-    o.set("supplies",Value(std::move(supplies))); return o;
+    o.set("supplies",Value(std::move(supplies)));
+    view::mfAppendCaveDetails(g, o);
+    return o;
 }
 // 用途：汇总可恢复的手动和十年检查点。
 // 参与流程：HTTP请求分派、前端状态或动作预览。

@@ -4,6 +4,7 @@
 //   ctx.worldYear / ctx.hasDan / ctx.finish / ctx.refresh / ctx.complete / ctx.choice
 // C++ 里改成在 sim.h 中声明的自由函数，calendar 直接调用。
 #include "core/calendar.h"
+#include "core/crafting/cave_garden.h"
 
 #include "core/sim.h"
 #include "core/tide.h"
@@ -81,6 +82,45 @@ double calendarDetoxPerYear(const Player& player) {
     return hasDan(player) ? 5.0 : 1.0;
 }
 
+// 用途：推进一个真实世界日；工作和兽潮回合共用月年/化毒/寿尽流程。
+// 使用：不持有跨日的Battle/Npc引用；无返回值，恢复点或人生结束可替换当前状态。
+static void advanceWorldDay(Game& game, const string& endingCause = {}) {
+    const int restores = game.checkpoint.restores;
+    if (game.tide.active && game.tide.rulesVersion==0) tide::ensureTide(game);
+    ++game.clock.days;
+    const int year = game.clock.days / 360;
+    const bool crossedYear = year != game.year;
+    if (crossedYear) {
+        game.year = year;
+        game.player.age = game.clock.ageBase + year;
+    }
+    crafting::mfGardenDayTick(game);
+    tide::dayTick(game);
+    if (game.clock.days % 30 == 0) tide::monthTick(game);
+    if (crossedYear) {
+        if (!game.ended && game.player.health > 0) {
+            worldYear(game);
+            if (game.checkpoint.restores != restores) return;
+            dungeonYearTick(game);
+            game.player.arts.repel = std::max(0, game.player.arts.repel - 1);
+        }
+    }
+    const int detox = calendarTake(game, "detox", calendarDetoxPerYear(game.player) / 360.0);
+    game.player.arts.poison = std::max(0, game.player.arts.poison - detox);
+    if (!game.ended) refreshDaily(game);
+    if (!game.ended && (game.player.health <= 0 || game.player.age >= game.player.lifespan))
+        finish(game, game.player.health <= 0 ? (endingCause.empty() ? "伤势不治" : endingCause) : "寿终正寝");
+    if (game.ended && game.ending) {
+        game.ending->year = game.year;
+        game.ending->age = game.player.age;
+    }
+    if (!game.ended && game.clock.days % 30 == 0) talentMonthTick(game);
+    checkpointTick(game);
+}
+
+// 用途：结算兽潮已完成回合的日历成本；不执行工作、不创建假Job，无返回值。
+void calendarBattleDay(Game& game, const string& endingCause) { advanceWorldDay(game, endingCause); }
+
 // 用途：推进工作日历并处理月年边界与事件死亡。
 // 参与流程：日历推进与月年边界结算。
 // 使用方式：传入Game& g, int maxDays，按本模块入口调用。
@@ -118,42 +158,13 @@ CalRunResult calendarRun(Game& g, int maxDays) {
     const int duration = std::min({j.remaining, left, maxDays});
 
     for (int i = 0; i < duration; ++i) {
-        g.clock.days++;
         j.remaining--;
         ++out.days;
-
-        // 世界事件按实际月界推进，短行动与长工作都遵守同一月历。
-        if (g.clock.days % 30 == 0) tide::monthTick(g);
-
-        // 跨年结算：世界推进、驱邪符效力递减、年龄增长
-        const int year = jsFloor(static_cast<double>(g.clock.days) / 360.0);
-        if (year != g.year) {
-            g.year = year;
-            g.player.age = g.clock.ageBase + year;
-            worldYear(g);
-            if (g.checkpoint.restores != restores) {
-                out.ok = true; out.restored = true; return out;
-            }
-            dungeonYearTick(g);
-            g.player.arts.repel = std::max(0, g.player.arts.repel - 1);
+        advanceWorldDay(g);
+        if (g.checkpoint.restores != restores) {
+            out.ok = true; out.restored = true; return out;
         }
-
-        // 丹毒每天自然化解；丹道二层加快自然化毒
-        const double rate = calendarDetoxPerYear(g.player);
-        const int detox = calendarTake(g, "detox", rate / 360.0);
-        g.player.arts.poison = std::max(0, g.player.arts.poison - detox);
-
-        refreshDaily(g);
-
-        if (g.player.health <= 0 || g.player.age >= g.player.lifespan) {
-            finish(g, g.player.health <= 0 ? "伤势不治" : "寿终正寝");
-            out.ok = true;
-            out.ended = g.ended;
-            out.restored = g.checkpoint.restores != restores;
-            return out;
-        }
-        if (g.clock.days % 30 == 0) talentMonthTick(g);
-        checkpointTick(g);
+        if (g.ended) { out.ok = true; out.ended = true; return out; }
         if (g.job && g.job->actionType == "travel" && g.job->remaining > 0 && travelAmbushTick(g)) {
             out.ok = true;
             out.working = true;
