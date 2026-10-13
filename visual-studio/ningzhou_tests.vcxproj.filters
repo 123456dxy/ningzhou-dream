@@ -11,6 +11,7 @@
 <ClCompile Include="..\tests\test_arts.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_battle.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_battle_mechanisms.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_battle_scaling.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_battle_state.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_calendar.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_catalog_display.cpp"><Filter>Tests</Filter></ClCompile>
@@ -20,6 +21,7 @@
 <ClCompile Include="..\tests\test_checkpoint.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_combat_design.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_combat_fixes.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_combat_health.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_content_registry.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_core.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_craft.cpp"><Filter>Tests</Filter></ClCompile>
@@ -31,6 +33,8 @@
 <ClCompile Include="..\tests\test_equipment_task.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_event_rewards.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_friendship.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_herb_acquisition.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_intel_purchase.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_main.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_material_sources.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_mechanics_regression.cpp"><Filter>Tests</Filter></ClCompile>
@@ -40,6 +44,7 @@
 <ClCompile Include="..\tests\test_numeric_previews.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_passive_life_travel.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_persistence_refactor.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_pill_effects.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_play.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_player_fixes.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_renown_artifact_api.cpp"><Filter>Tests</Filter></ClCompile>

@@ -1,4 +1,5 @@
 #include "core/crafting/cave_garden.h"
+#include "core/crafting/herb_acquisition.h"
 #include "core/arts.h"
 #include "core/cultivate.h"
 #include "core/sim.h"
@@ -17,19 +18,9 @@ constexpr int HarvestYield = 3;
 constexpr int UnitsPerBaseDay = 100;
 constexpr std::array GrowthDurationDays{30, 60, 120, 240, 480, 960};
 constexpr std::array UnlockedPlotCounts{3, 5, 8};
-// 稳定内容ID表示妖丹分类，展示名称改动不影响能否种植；新妖丹加入目录时应同时补本分类。
-constexpr std::array<std::string_view, 35> MonsterCoreIds{
-    "8001","8002","8003","8004","8005","8006","8007","8008","8009","8010",
-    "8011","8012","8013","8014","8015","8016","8017","8018","8019","8020",
-    "8021","8022","8023","8024","8025","8590","8591","8592","8593","8594",
-    "8595","8596","8597","8598","8599"};
-
 // 用途：按稳定ID查可种草药；流程：播种/加载验证；返回：目录借用指针或空，不依赖展示名称。
 const data::HerbDef* mfPlantableHerb(const std::string& HerbId) {
-    const auto* Herb = findHerbById(HerbId);
-    if (!Herb || Herb->grade < 1 || Herb->grade > 6 ||
-        std::find(MonsterCoreIds.begin(), MonsterCoreIds.end(), HerbId) != MonsterCoreIds.end()) return nullptr;
-    return Herb;
+    return mfIsPlantHerb(HerbId) ? findHerbById(HerbId) : nullptr;
 }
 // 用途：解析稳定地块标识；流程：所有灵田入口；返回：0~7索引或空，未知ID明确拒绝。
 std::optional<std::size_t> mfPlotIndex(const std::string& PlotId) {

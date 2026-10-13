@@ -253,11 +253,24 @@ context.api.renderSidebar();
 verify(element('#player-card').innerHTML.includes('<strong>16</strong><span>岁</span>'), '年龄显示单位而不粘连月份');
 verify(element('#player-card').innerHTML.includes('player-female.webp') && element('#player-card').innerHTML.includes('遁速')
   && !element('#player-card').innerHTML.includes('<label>剑意</label>'), '角色侧栏使用性别立绘与遁速，移除旧永久剑意属性');
+const sidebarState = context.api.getState(), savedBattleForSidebar = sidebarState.battle;
+sidebarState.battle = { hp: 83, max: 144 };
+context.api.renderSidebar();
+verify(element('#player-card').innerHTML.includes('<label>斗法气血</label>')
+  && element('#player-card').innerHTML.includes('<strong>83</strong><span>/ 144</span>'), '斗法侧栏即时显示当前战斗气血，不停留在战前健康度');
+sidebarState.battle = savedBattleForSidebar;
+context.api.renderSidebar();
+verify(element('#player-card').innerHTML.includes('<label>气血</label>')
+  && element('#player-card').innerHTML.includes(`/ 100</span>`), '斗法结束侧栏恢复健康度口径');
 context.api.setTab('workshop');
 context.api.setSub('workshop', 'brew');
 const brew = context.api.viewMarket();
 verify(brew.includes('丹方14'), '完整可炼丹方可访问，不截断为前九条');
 verify(brew.includes('data-brew-batch'), '批量炼丹入口可访问');
+const sixthGradeRecipe = { ...sidebarState.brewOptions[0], id: 'grade-six', grade: 6 };
+sidebarState.brewOptions.push(sixthGradeRecipe);
+verify(context.api.viewMarket().includes('<option value="6"'), '炼丹品阶筛选从真实丹方目录生成，六阶丹方可单独选择');
+sidebarState.brewOptions.pop();
 context.api.setTab('market');
 verify(!context.api.viewMarket().includes('功法13') && !context.api.viewMarket().includes('data-action="trade-stock"'), '坊市普通分类不附加书坊或突破物品长列表');
 context.api.setShopKind('book');

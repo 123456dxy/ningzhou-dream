@@ -13,6 +13,7 @@
 | `source_limits.cpp` | 普通草药/材料品阶限制与错误信息 | `source_limits.h` |
 | `craft_timing.cpp` | 逐品阶时长、丹术/器道与生活减时；`ecoCraftDays` 为既有接口的薄适配 | `crafting/craft_timing.h` |
 | `cave_garden.cpp` | 同格批次种植、储备自动催熟、后台生长与纯报价 | `crafting/cave_garden.h` |
+| `herb_acquisition.cpp` | 以真实丹方最早用途推导药材取得阶段，草药分类与采集池 | `crafting/herb_acquisition.h` |
 
 公共头仍位于 core 根。任务路径主要为 `ecoActionInfo` / `ecoActionError` → `ecoBegin` → `ecoComplete`；即时路径主要为 `shop::saleQuote` / `gearActionQuote` → `sell` / `salvage` / `inscribe`。`ordinaryHerbGradeLimit` 与 `ordinaryMaterialGradeLimit` 为跨模块来源限制提供统一计算。
 
@@ -35,5 +36,6 @@
 `tests/test_craft.cpp`、`test_equipment_task.cpp`、`test_material_sources.cpp`、`test_passive_life_travel.cpp`、`test_numeric_previews.cpp`；API 与收益另见 `test_api.cpp`、`test_renown_artifact_api.cpp`、`test_event_rewards.cpp`。测试统一编入 `ningzhou_tests`；此处仅列出已有覆盖入口。
 新增时长与月预算回归见 `tests/test_craft_timing.cpp`，包含真实核心 API、旧工作合同和同月余额保持。
 洞府灵田规则见 [灵田说明](../../../docs/CAVE_GARDEN.md)，定向批次/储备/日历回归为 `tests/test_cave_garden.cpp`。
+丹方用途、稳定生境与丹炉资格闭环见 [药材取得说明](../../../docs/HERB_ACQUISITION.md)，全目录及真实动作回归为 `tests/test_herb_acquisition.cpp`。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。

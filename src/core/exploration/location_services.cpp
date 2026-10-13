@@ -2,6 +2,7 @@
 #include <algorithm>
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/crafting/herb_acquisition.h"
 #include "core/economy.h"
 #include "core/sim.h"
 #include "core/source_limits.h"
@@ -56,7 +57,7 @@ vector<LocationService> locationServices(const Game& g, const string& id) {
         add("insight", "天魔眼集结讲法", "研究魔物应对：神道经验+12；每月一次。", 3, 8, 3);
     } else if (type == "wild") {
         const int stage = loc->danger >= 60 ? 3 : 0;
-        add("gather", "本地采药", "采集本地一至二品药材3份、木道经验+4；高品药材需探索秘境。", 4, 2, stage);
+        add("gather", "本地采药", "采集当前境界可得的本地草药3份、木道经验+4；取得难度按最早丹方用途匹配，高品草药仍受原生境限制，妖丹需猎妖或秘境。", 4, 2, stage);
         add("insight", id == "lianshi" ? "剑壁感悟" : id == "fanghu" ? "碧幽潭感悟" : id == "xiuluo" ? "古迹调查" : "山川感悟",
             localDao(id) + "道经验+12；每月一次。", 4, 5, stage);
         if (id == "qingshi" || id == "tianmo")
@@ -108,14 +109,7 @@ void locationServiceComplete(Game& g, const Job& job) {
         if (job.origin == "tianxing") artGain(p, "器", 6);
         if (job.origin == "yongan") p.arts.heart += 1;
     } else if (job.kind == "gather") {
-        vector<const data::HerbDef*> pool;
-        const auto* location = findLoc(job.origin);
-        const int gradeLimit = ordinaryHerbGradeLimit(p);
-        for (const auto& h : data::HerbDef_TABLE())
-            if (h.grade <= gradeLimit && location && h.sourceLocation.find(location->name) != string::npos && h.name.find("妖丹") == string::npos)
-                pool.push_back(&h);
-        if (pool.empty()) for (const auto& h : data::HerbDef_TABLE())
-            if (h.grade <= gradeLimit && h.name.find("妖丹") == string::npos) pool.push_back(&h);
+        const auto pool = crafting::mfGatherableHerbs(p, job.origin);
         const int count = std::min(3, g.world.herbs);
         if (!pool.empty()) { p.arts.herbs[pickOf(g, pool)->name] += count; p.herbs += count; g.world.herbs -= count; }
         artSyncHerbs(p); artGain(p, "木", 4);

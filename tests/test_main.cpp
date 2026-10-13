@@ -64,6 +64,11 @@ int main() {
     nztest::mfRunResourcePointTests();
     nztest::mfRunCaveGardenTests();
     nztest::mfRunCaveApiTests();
+    nztest::mfRunBattleScalingTests();
+    nztest::mfRunCombatHealthTests();
+    nztest::mfRunIntelPurchaseTests();
+    nztest::mfRunPillEffectsTests();
+    nztest::mfRunHerbAcquisitionTests();
 
     const int f = nztest::failures();
     std::printf("\n===== 结果: %s（%d 项失败）=====\n",

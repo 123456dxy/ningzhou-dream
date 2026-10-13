@@ -5,6 +5,7 @@
 
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/crafting/herb_acquisition.h"
 #include "core/economy.h"
 #include "core/reward_receipt.h"
 #include "core/sim.h"
@@ -20,9 +21,7 @@ namespace nz {
 // 使用方式：传最大份数，受世界库存和背包上限限制，使用当前 RNG 值选药。
 // 返回值：实际数量；更新分类药材、总量和野外余量，不推进 RNG。
 int adventureHarvestHerbs(Game& game, int maximum) {
-    vector<const data::HerbDef*> candidates;
-    const int gradeLimit = std::min(3, 1 + std::max(0, game.player.stage) / 3);
-    for (const auto& herb : data::HerbDef_TABLE()) if (herb.grade <= gradeLimit) candidates.push_back(&herb);
+    const auto candidates = crafting::mfGatherableHerbs(game.player, game.player.location);
     if (candidates.empty()) return 0;
     long long typed = 0;
     for (const auto& [name, amount] : game.player.arts.herbs) typed += std::max(0, amount);

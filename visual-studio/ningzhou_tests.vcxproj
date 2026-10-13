@@ -20,6 +20,7 @@
 <ClCompile Include="..\tests\test_arts.cpp"/>
 <ClCompile Include="..\tests\test_battle.cpp"/>
 <ClCompile Include="..\tests\test_battle_mechanisms.cpp"/>
+<ClCompile Include="..\tests\test_battle_scaling.cpp"/>
 <ClCompile Include="..\tests\test_battle_state.cpp"/>
 <ClCompile Include="..\tests\test_calendar.cpp"/>
 <ClCompile Include="..\tests\test_catalog_display.cpp"/>
@@ -29,6 +30,7 @@
 <ClCompile Include="..\tests\test_checkpoint.cpp"/>
 <ClCompile Include="..\tests\test_combat_design.cpp"/>
 <ClCompile Include="..\tests\test_combat_fixes.cpp"/>
+<ClCompile Include="..\tests\test_combat_health.cpp"/>
 <ClCompile Include="..\tests\test_content_registry.cpp"/>
 <ClCompile Include="..\tests\test_core.cpp"/>
 <ClCompile Include="..\tests\test_craft.cpp"/>
@@ -40,6 +42,8 @@
 <ClCompile Include="..\tests\test_equipment_task.cpp"/>
 <ClCompile Include="..\tests\test_event_rewards.cpp"/>
 <ClCompile Include="..\tests\test_friendship.cpp"/>
+<ClCompile Include="..\tests\test_herb_acquisition.cpp"/>
+<ClCompile Include="..\tests\test_intel_purchase.cpp"/>
 <ClCompile Include="..\tests\test_main.cpp"/>
 <ClCompile Include="..\tests\test_material_sources.cpp"/>
 <ClCompile Include="..\tests\test_mechanics_regression.cpp"/>
@@ -49,6 +53,7 @@
 <ClCompile Include="..\tests\test_numeric_previews.cpp"/>
 <ClCompile Include="..\tests\test_passive_life_travel.cpp"/>
 <ClCompile Include="..\tests\test_persistence_refactor.cpp"/>
+<ClCompile Include="..\tests\test_pill_effects.cpp"/>
 <ClCompile Include="..\tests\test_play.cpp"/>
 <ClCompile Include="..\tests\test_player_fixes.cpp"/>
 <ClCompile Include="..\tests\test_renown_artifact_api.cpp"/>

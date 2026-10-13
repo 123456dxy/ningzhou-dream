@@ -89,9 +89,11 @@ void runCardTests() {
     checkStr(start.intentKind, "attack", "开局意图为普通攻击");
 
     struct Case { const char* id; int cost, dmg, shield, heal, energy, qi; };
+    // 炼气基底14×0.3+18=22.2；普攻round(22.2×0.48)=11，御剑round(22.2×0.85)=19。
+    // 本夹具未解锁剑道入门增伤；费用、护盾、治疗和剑气仍锁定各自原规则。
     const Case cases[] = {
         {"water", 1, 0, 29, 0, -1, 0}, {"wood", 2, 0, 0, 0, -2, 0},
-        {"strike", 1, 12, 0, 0, -1, 0}, {"sword", 2, 22, 0, 0, -2, 1},
+        {"strike", 1, 11, 0, 0, -1, 0}, {"sword", 2, 19, 0, 0, -2, 1},
         {"defend", 1, 0, 19, 0, -1, 0},
     };
     for (const auto& c : cases) {

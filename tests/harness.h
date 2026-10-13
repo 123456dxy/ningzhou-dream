@@ -105,5 +105,10 @@ void mfRunCraftTimingTests();
 void mfRunResourcePointTests();
 void mfRunCaveGardenTests();
 void mfRunCaveApiTests();
+void mfRunBattleScalingTests();
+void mfRunCombatHealthTests();
+void mfRunIntelPurchaseTests();
+void mfRunPillEffectsTests();
+void mfRunHerbAcquisitionTests();
 
 } // namespace nztest

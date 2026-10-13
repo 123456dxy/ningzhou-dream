@@ -3,6 +3,7 @@
 // Demo05 的「直接选招 + 立即反击」已被 Demo07 的卡牌循环取代，
 // 所以本文件是重写而非修补。旧的逐回合数值对照测试也随之更新。
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/social/npc_consumables.h"
 #include "core/content/game_ids.h"
 #include "core/content/text_table.h"
@@ -13,6 +14,7 @@
 #include "core/sect_trial.h"
 
 #include <algorithm>
+#include <sstream>
 
 #include "core/adventure.h"
 #include "core/arts.h"
@@ -513,7 +515,7 @@ static void battlePlan(Game& g) {
     b.intentName = it.name;
     b.intentScale = it.scale;
     b.intentSpell = it.spell;
-    b.intentRaw = jsRound((b.enemyPower + 12) * it.scale *
+    b.intentRaw = jsRound(mfBattleDamageBasisFromPower(b.enemyPower) * it.scale *
                           (0.94 + randomOf(g) * 0.12));
     // 用掉的神通进冷却，避免对方每回合都甩同一门。
     // 下限 2：很多神通表里 cooldown 是 0，直接照搬会变成狂甩同一招。
@@ -929,7 +931,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
     if (!content::parseSpellKind(spell.kind) || !content::parseDaoId(spell.dao)) return "";
     const Arts& arts = player.arts;
     const ArtMods modifiers = talentMods(player);
-    const int base = BATTLE_POWER[clampInt(player.stage, 0, 12)];
+    const double DamageBasis = mfBattleDamageBasis(player.stage);
     const string id = spell.id;
     const int cost = battleCost(player, spell);
     const int manaBefore = battle.mana;
@@ -959,7 +961,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
         const double elementMul = (ei >= 0) ? modifiers.elements[ei] : 1.0;
 
         double damage = jsRound(
-            (base + 12) * spell.scale * modifiers.attack * elementMul *
+            DamageBasis * spell.scale * modifiers.attack * elementMul *
             (1 + battle.buff) *
             (combo ? 1.15 + std::min(0.15, modifiers.combo) : 1.0) *
             (daoId == DaoId::Fire ? modifiers.fire : 1.0) *
@@ -1107,7 +1109,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                 battle.water = jsFloor(stacks * std::min(0.50, modifiers.waterKeep));
             }
             if (spellKind == SpellKind::PoisonBurst) {
-                damage += jsRound((base + 12) * battle.poison * 0.18);
+                damage += jsRound(DamageBasis * battle.poison * 0.18);
                 battle.poison = 0;
                 if (battle.poisonDamage >= 0) battle.poisonDamage = 0;
                 battle.poisonTurns = 0;
@@ -1168,7 +1170,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                 const int before = battle.poison;
                 battle.poison = std::min(BATTLE_POISON_CAP, battle.poison + jsRound((add + jsFloor(modifiers.poison)) * spell.statusScale));
                 battle.poisonTurns = 3;
-                if (battle.poisonDamage >= 0) battle.poisonDamage = jsRound((base + 12) * 0.035 * battle.poison);
+                if (battle.poisonDamage >= 0) battle.poisonDamage = jsRound(DamageBasis * 0.035 * battle.poison);
                 if (battle.hp > 0)
                     battle.hp = std::min(battle.max, battle.hp + jsRound(battle.max * (battle.poison - before) * modifiers.poisonHeal));
                 text += "毒+" + std::to_string(battle.poison - before) + "层（共" + std::to_string(battle.poison) +
@@ -1180,7 +1182,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                 text += "震荡+" + std::to_string(battle.soul - before) + "层（共" + std::to_string(battle.soul) + "/6层）。";
             }
             if (spellKind == SpellKind::Fire) {
-                const double added = (base + 12) * 0.1 * (1 + modifiers.burnBonus) *
+                const double added = DamageBasis * 0.1 * (1 + modifiers.burnBonus) *
                                      (combo ? 1.5 : 1.0) *
                                      (artHas(arts, "火", 2) ? 2.0 : 1.0) *
                                      (1 + std::max(0.0, modifiers.burnStack)) * spell.statusScale;
@@ -1266,9 +1268,9 @@ static ArtMods battleEnemyMods(const Battle& b) {
 // 返回值：无；修改双方气血、毒/灼烧状态和可选战报。
 static void battleTickStatuses(const Player& p, Battle& b, bool log) {
     const ArtMods m = talentMods(p);
-    const int base = BATTLE_POWER[clampInt(p.stage, 0, 12)];
+    const double DamageBasis = mfBattleDamageBasis(p.stage);
     const int dot =
-        (b.poisonTurns > 0 ? (b.poisonDamage >= 0 ? b.poisonDamage : jsRound((base + 12) * 0.035 * b.poison)) : 0) +
+        (b.poisonTurns > 0 ? (b.poisonDamage >= 0 ? b.poisonDamage : jsRound(DamageBasis * 0.035 * b.poison)) : 0) +
         (b.burnTurns > 0 ? b.burn : 0);
     b.enemyHp -= dot;
     if (log && dot) b.log.push_back("回合结束：持续伤害" + std::to_string(dot) + "。");
@@ -1280,7 +1282,7 @@ static void battleTickStatuses(const Player& p, Battle& b, bool log) {
         const int growth = jsFloor(m.poisonGrowth);
         b.poison = std::min(BATTLE_POISON_CAP, b.poison + growth);
         if (growth > 0 && b.poisonDamage >= 0)
-            b.poisonDamage = jsRound((base + 12) * 0.035 * b.poison);
+            b.poisonDamage = jsRound(DamageBasis * 0.035 * b.poison);
     }
     if (b.burnTurns > 0 && --b.burnTurns == 0) b.burn = 0;
     if (b.enemyHp <= 0 && !b.shadowPlayer) return;
@@ -1302,7 +1304,7 @@ static void battleTickStatuses(const Player& p, Battle& b, bool log) {
         const int growth = jsFloor(battleEnemyMods(b).poisonGrowth);
         if (growth > 0) {
             b.enemyCards.poison = std::min(BATTLE_POISON_CAP, b.enemyCards.poison + growth);
-            b.playerPoison = jsRound((b.enemyPower + 12) * 0.035 * b.enemyCards.poison);
+            b.playerPoison = jsRound(mfBattleDamageBasisFromPower(b.enemyPower) * 0.035 * b.enemyCards.poison);
             if (b.enemyCards.poisonDamage >= 0) b.enemyCards.poisonDamage = b.playerPoison;
         }
     }
@@ -1321,7 +1323,7 @@ static Battle battleEnemyView(const Battle& b, int playerStage) {
     v.enemyHp = b.hp; v.enemyMax = b.max; v.enemyShield = b.shield;
     v.playerPoison = b.poisonTurns > 0
         ? (b.poisonDamage >= 0 ? b.poisonDamage :
-           jsRound((BATTLE_POWER[clampInt(playerStage, 0, 12)] + 12) * 0.035 * b.poison)) : 0;
+           jsRound(mfBattleDamageBasis(playerStage) * 0.035 * b.poison)) : 0;
     v.playerPoisonTurns = b.poisonTurns;
     return v;
 }
@@ -1341,7 +1343,7 @@ static void battleSaveEnemyView(Battle& b, const Battle& v, int playerStage) {
     if (v.poison <= 0 || v.poisonTurns <= 0) b.playerPoison = 0;
     else if (v.poisonDamage >= 0) b.playerPoison = v.poisonDamage;
     else if (oldPoison != v.poison || oldPoisonTurns != v.poisonTurns)
-        b.playerPoison = jsRound((b.enemyPower + 12) * 0.035 * v.poison);
+        b.playerPoison = jsRound(mfBattleDamageBasisFromPower(b.enemyPower) * 0.035 * v.poison);
     b.playerPoisonTurns = v.poisonTurns;
     b.enemyCd = v.cooldowns;
     if (b.poisonDamage >= 0) {
@@ -1350,7 +1352,7 @@ static void battleSaveEnemyView(Battle& b, const Battle& v, int playerStage) {
             b.poisonDamage = 0; b.poison = 0; b.poisonTurns = 0;
         }
     } else if (b.poisonTurns > 0) {
-        const double quantum = (BATTLE_POWER[clampInt(playerStage, 0, 12)] + 12) * 0.035;
+        const double quantum = mfBattleDamageBasis(playerStage) * 0.035;
         if (v.playerPoison < jsRound(quantum * b.poison))
             b.poison = clampInt(jsFloor(v.playerPoison / quantum), 0, b.poison);
         if (b.poison == 0) b.poisonTurns = 0;
@@ -1530,7 +1532,7 @@ static void battleEnemyInit(Game& g, const EnemySpec& spec, bool opening) {
     if (!opening && b.playerPoisonTurns > 0) {
         v.poisonTurns = b.playerPoisonTurns;
         v.poison = clampInt(jsRound(b.playerPoison /
-                                   ((b.enemyPower + 12) * 0.035)), 1, BATTLE_POISON_CAP);
+                                   (mfBattleDamageBasisFromPower(b.enemyPower) * 0.035)), 1, BATTLE_POISON_CAP);
     }
     for (const auto& id : loadout.spells) {
         const SpellDef* sp = battleSpell(id);
@@ -1846,10 +1848,10 @@ static Preview battlePreviewSpell(const Player& player, const Battle& battle, co
     status("charge", "蓄势", "self", battle.charge, copy.charge, 0, 4);
     status("water", "水势", "self", battle.water, copy.water, 0, 6);
     status("soul", "震荡", "self", battle.soul, copy.soul, 0, 6);
-    const int base = BATTLE_POWER[clampInt(player.stage, 0, 12)];
+    const double DamageBasis = mfBattleDamageBasis(player.stage);
     status("poison", "毒", "enemy", battle.poison, copy.poison, copy.poisonTurns,
            BATTLE_POISON_CAP, copy.poisonTurns > 0 ? (copy.poisonDamage >= 0 ? copy.poisonDamage :
-               jsRound((base + 12) * 0.035 * copy.poison)) : 0);
+               jsRound(DamageBasis * 0.035 * copy.poison)) : 0);
     status("burn", "灼烧", "enemy", battle.burn, copy.burn, copy.burnTurns,
            BATTLE_BURN_CAP, copy.burnTurns > 0 ? copy.burn : 0);
     out.text = text;
@@ -1903,8 +1905,13 @@ string battlePreviewConditions(const Player& player, const SpellDef& spell) {
         text = "每层蓄势伤害+12%，消耗所有蓄势；额外伤害为当前护盾×" + std::to_string(jsRound(modifiers.shieldStrike * 100)) + "% 。";
     if (spellKind == SpellKind::Wave)
         text = "每层水势伤害+" + std::to_string(jsRound((0.15 + std::min(0.1, modifiers.water * 0.025)) * 100)) + "%；保留" + std::to_string(jsRound(std::min(0.50, modifiers.waterKeep) * 100)) + "%水势（向下取整），返灵取决于消耗水势。";
-    if (spellKind == SpellKind::PoisonBurst)
-        text = "毒爆追加伤害=(当前基础战力" + std::to_string(BATTLE_POWER[clampInt(player.stage, 0, 12)]) + "+12)×18%×毒层；所有毒层合计后四舍五入，消耗全部毒层。";
+    if (spellKind == SpellKind::PoisonBurst) {
+        std::ostringstream Formula;
+        Formula << "毒爆追加伤害=(当前基础战力" << BATTLE_POWER[clampInt(player.stage, 0, 12)]
+                << "×" << BattleDamagePowerMultiplier << "+" << BattleDamageFlatBasis
+                << ")×18%×毒层；所有毒层合计后四舍五入，消耗全部毒层。";
+        text = Formula.str();
+    }
     if (spellKind == SpellKind::FireBurst)
         text = "引爆追加伤害＝现有灼烧每回合伤害×剩余回合×" + std::to_string(jsRound((1 + modifiers.burnExplosion) * 100)) + "%；消耗全部灼烧。";
     if (spellKind == SpellKind::SoulBurst) text = "每层震荡伤害+15%，消耗全部震荡。";
@@ -2005,7 +2012,7 @@ static void battleEndTurn(Game& g) {
             b.enemyHp = std::min(b.enemyMax, b.enemyHp + back);
             b.log.push_back("对方汲取生机，回复 " + std::to_string(back) + "。");
         } else if (b.intentKind == "poison") {
-            const int tick = jsRound((b.enemyPower + 12) * 0.05);
+            const int tick = jsRound(mfBattleDamageBasisFromPower(b.enemyPower) * 0.05);
             b.playerPoison = std::max(b.playerPoison, tick);
             b.playerPoisonTurns = 3;
             b.log.push_back("你中了毒，每回合将损失 " + std::to_string(tick) +

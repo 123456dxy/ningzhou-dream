@@ -375,7 +375,9 @@ function renderSidebar() {
   + stat('年龄', p.age, '岁')
   + stat('余寿', Math.max(0, p.lifespan - p.age), '年')
   + stat('灵石', fmt(p.stones), '枚')
-  + stat('气血', p.health, '/ 100', 'health')
+  + (S.battle
+      ? stat('斗法气血', Math.max(0, S.battle.hp), `/ ${S.battle.max}`, 'health')
+      : stat('气血', p.health, '/ 100', 'health'))
   + stat('遁速', p.escapeSpeed ?? '—', '赶路 / 先手 / 脱身')
   + `</div><button class="wide-btn" data-action="goto-tab" data-tab="inventory">行囊与人物面板 →</button>`;
 
@@ -1350,6 +1352,7 @@ function viewMarket() {
 
   // ---- 炼丹 ----
   const recipeCatalog = (S.brewOptions || []).map(o => ({ ...o, grade: o.grade ?? (S.pillCatalog || []).find(pill => pill.id === o.id)?.grade }));
+  const recipeGrades = [...new Set(recipeCatalog.map(o => Number(o.grade)).filter(grade => Number.isInteger(grade) && grade > 0))].sort((a, b) => a - b);
   const recipes = recipeCatalog.filter(o => (brewGrade === 'all' || Number(o.grade) === Number(brewGrade))
     && (!brewSearch || `${o.name} ${o.desc} ${o.reason}`.includes(brewSearch.trim())));
   const quotedRecipes = recipes.map(o => ({ ...o, batchQuote: brewRequirements(S, o, brewBatch) }));
@@ -1435,7 +1438,7 @@ function viewMarket() {
   if (sub === 'brew') {
     return mHead + mTabs
       + layout(panel('开炉炼丹', `${brewGrade === 'all' ? '全部品阶' : brewGrade + ' 阶'} · ${recipes.length} 张丹方`, `<div style="padding:14px 22px 18px">
-          <div class="recipe-controls"><label>品阶 <select data-brew-grade><option value="all" ${brewGrade === 'all' ? 'selected' : ''}>全部品阶</option>${[1, 2, 3, 4, 5].map(grade => `<option value="${grade}" ${String(grade) === brewGrade ? 'selected' : ''}>${grade} 阶</option>`).join('')}</select></label><label>查丹方 <input data-brew-search type="search" placeholder="丹方名称、效果或药材" value="${escape(brewSearch)}"></label>
+          <div class="recipe-controls"><label>品阶 <select data-brew-grade><option value="all" ${brewGrade === 'all' ? 'selected' : ''}>全部品阶</option>${recipeGrades.map(grade => `<option value="${grade}" ${String(grade) === brewGrade ? 'selected' : ''}>${grade} 阶</option>`).join('')}</select></label><label>查丹方 <input data-brew-search type="search" placeholder="丹方名称、效果或药材" value="${escape(brewSearch)}"></label>
           <label>开炉次数 <select data-brew-batch>${[1, 3, 5, 10].map(n => `<option value="${n}" ${n === brewBatch ? 'selected' : ''}>${n} 炉</option>`).join('')}</select></label></div>
           <p class="panel-note">下方灵石、耗时为每炉投入；批量炼制会逐炉扣料，遇事暂停。</p>
           <div class="recipe-controls"><label>一键补料丹方 <select data-brew-supply-recipe>${recipes.map(recipe => `<option value="${escape(recipe.id)}" ${recipe.id === brewSupplyRecipeId ? 'selected' : ''}>${escape(recipe.name)}</option>`).join('')}</select></label></div>

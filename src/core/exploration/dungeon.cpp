@@ -5,6 +5,7 @@
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/calendar.h"
+#include "core/crafting/herb_acquisition.h"
 #include "core/sim.h"
 
 namespace nz {
@@ -36,6 +37,12 @@ int currentYear(const Game& g) { return calendarDate(g).year; }
 // 使用方式：传品阶，结果限制在合法境界范围。
 // 返回值：零至十二的小境界序号。
 int minimumStage(int grade) { return clampInt((grade - 1) * 3, 0, 12); }
+// 用途：统一目标材料探索难度；流程：情报预览/建入口/读档；返回：草药丹方用途阶段或原器材阶段，未知目标为-1。
+int mfTargetStage(const string& Kind, const string& TargetId, int Grade) {
+    if (Kind == "herb") return crafting::mfHerbAcquisitionStage(TargetId);
+    if (Kind == "material") return minimumStage(Grade);
+    return -1;
+}
 // 用途：按境界计算药材或矿材的匹配品阶。
 // 参与流程：秘境伴随材料和状态校验。
 // 使用方式：传境界和 herb/material 种类，分别受六/五阶限制。
@@ -347,7 +354,8 @@ void bankMaterial(const Game& g, DungeonRun& run, int count) {
     const int grade = std::min(2, matchedGrade(run.stage, herb ? "herb" : "material"));
     if (herb) {
         vector<const data::HerbDef*> pool;
-        for (const auto& item : data::HerbDef_TABLE()) if (item.grade == grade) pool.push_back(&item);
+        for (const auto& item : data::HerbDef_TABLE()) if (item.grade == grade &&
+            crafting::mfIsPlantHerb(item.id) && crafting::mfHerbAcquisitionStage(item.id) <= run.stage) pool.push_back(&item);
         if (!pool.empty()) run.herbs[pick(rng, pool)->name] += count;
     } else {
         vector<const data::MaterialDef*> pool;
@@ -708,7 +716,7 @@ string dungeonLeave(Game& g) {
 }
 // 用途：报价高阶定向材料秘境情报。
 // 参与流程：天机阁地点服务目录。
-// 使用方式：传只读游戏，检查位置、境界、月额和灵石。
+// 使用方式：传只读游戏，检查位置、月额和灵石；stage仅说明进入难度，不限制提前购买。
 // 返回值：情报选项与门槛列表，不生成入口或消费资源。
 vector<DungeonIntelOption> dungeonIntelOptions(const Game& g) {
     vector<DungeonIntelOption> result;
@@ -716,11 +724,10 @@ vector<DungeonIntelOption> dungeonIntelOptions(const Game& g) {
         if (grade <= 2) return;
         DungeonIntelOption option;
         option.kind = std::move(kind); option.id = std::move(id); option.name = std::move(name);
-        option.grade = grade; option.stage = minimumStage(grade); option.cost = 15 + grade * grade * 6;
-        option.desc = "购买一处定向材料秘境的位置，通关终点保底「" + option.name + "」×10，并可选择一项永久神通、抄本或灵石奖励；情报有效5年，每月最多购买1份。";
+        option.grade = grade; option.stage = mfTargetStage(option.kind, option.id, grade); option.cost = 15 + grade * grade * 6;
+        option.desc = "可提前购买定向材料秘境位置，实际探索至少需" + realmName(option.stage) + "；通关终点保底「" + option.name + "」×10，并可选择一项永久神通、抄本或灵石奖励；情报有效5年，每月最多购买1份。";
         option.reason = busyError(g);
         if (option.reason.empty() && g.player.location != "tianji") option.reason = "请先抵达天机阁。";
-        if (option.reason.empty() && g.player.stage < option.stage) option.reason = "需达到" + realmName(option.stage) + "才能探索这一品阶的材料秘境。";
         if (option.reason.empty() && g.dungeons.intelMonth == g.clock.days / 30 && g.dungeons.intelPurchases >= 1) option.reason = "本月已经购买过材料秘境情报。";
         if (option.reason.empty() && g.player.stones < option.cost) option.reason = "灵石不足。";
         option.enabled = option.reason.empty(); result.push_back(std::move(option));
@@ -738,22 +745,26 @@ string dungeonIntel(Game& g, const string& kind, const string& id) {
     const auto found = std::find_if(options.begin(), options.end(), [&](const auto& option) { return option.kind == kind && option.id == id; });
     if (found == options.end()) return "请先选择要获取的药材或炼器材料。";
     if (!found->enabled) return found->reason;
-    ensureDungeons(g);
+    // 先在候选快照建立位置/冻结奖励，再一次提交；未完成的技术异常不留下半次扣款或月额。
+    Game Candidate = g;
+    ensureDungeons(Candidate);
     DungeonSite site;
-    site.id = "intel-" + std::to_string(currentYear(g)) + "-" + std::to_string(++g.dungeons.seq);
-    Rng rng = localRng(g, site.id + ":site");
+    site.id = "intel-" + std::to_string(currentYear(Candidate)) + "-" + std::to_string(++Candidate.dungeons.seq);
+    Rng rng = localRng(Candidate, site.id + ":site");
     site.location = randomWildLocation(rng); site.type = "intel";
     site.name = found->name + "·定向秘境";
-    site.openedYear = currentYear(g); site.expiresYear = site.openedYear + 5;
-    site.stage = g.player.stage; site.revealed = true;
+    site.openedYear = currentYear(Candidate); site.expiresYear = site.openedYear + 5;
+    // 购买资格与探索资格分离：低阶预购仍生成材料对应的最低难度，不绕过进入与存档校验。
+    site.stage = std::max(Candidate.player.stage, found->stage); site.revealed = true;
     site.targetKind = found->kind; site.targetId = found->id; site.targetName = found->name; site.targetGrade = found->grade;
-    freezeBossRewards(g, site);
-    g.player.stones -= found->cost;
-    if (g.dungeons.intelMonth != g.clock.days / 30) { g.dungeons.intelMonth = g.clock.days / 30; g.dungeons.intelPurchases = 0; }
-    ++g.dungeons.intelPurchases;
-    logEvent(g, "self", "天机阁售出「" + site.targetName + "」材料秘境情报：入口位于" + string(findLoc(site.location)->name) +
-             "，终点固定掉落10份；情报并非直接购买材料。", true);
-    g.dungeons.sites.push_back(std::move(site)); pruneSites(g);
+    freezeBossRewards(Candidate, site);
+    Candidate.player.stones -= found->cost;
+    if (Candidate.dungeons.intelMonth != Candidate.clock.days / 30) { Candidate.dungeons.intelMonth = Candidate.clock.days / 30; Candidate.dungeons.intelPurchases = 0; }
+    ++Candidate.dungeons.intelPurchases;
+    logEvent(Candidate, "self", "天机阁售出「" + site.targetName + "」材料秘境情报：入口位于" + string(findLoc(site.location)->name) +
+             "，探索至少需" + realmName(site.stage) + "，终点固定掉落10份；情报并非直接购买材料。", true);
+    Candidate.dungeons.sites.push_back(std::move(site)); pruneSites(Candidate);
+    g = std::move(Candidate);
     return "";
 }
 // 用途：将节点战斗胜负接回秘境探索。
@@ -808,7 +819,9 @@ string dungeonStateError(const Game& g) {
             site.openedYear < 1 || site.expiresYear <= site.openedYear)
             return "秘境入口、境界或目标材料无效。";
         if (site.type == "intel") {
-            if (!validTarget(site.targetKind, site.targetId, site.targetName, site.targetGrade) || minimumStage(site.targetGrade) > site.stage) return "定向秘境材料目标无效或超过对应境界。";
+            if (!validTarget(site.targetKind, site.targetId, site.targetName, site.targetGrade) ||
+                mfTargetStage(site.targetKind, site.targetId, site.targetGrade) < 0 ||
+                mfTargetStage(site.targetKind, site.targetId, site.targetGrade) > site.stage) return "定向秘境材料目标无效或超过对应境界。";
         } else if (!site.targetKind.empty() || !site.targetId.empty() || !site.targetName.empty() || site.targetGrade != 1) return "普通秘境不能以材料十份作为主奖励。";
         if (const string error = bossRewardsError(site.bossRewards, site.stage, site.type); !error.empty()) return error;
         if (site.type != "wild" && site.type != "intel" && site.type != "sea" && site.type != "tianmo") return "秘境类型无效。";
@@ -903,7 +916,7 @@ string dungeonStateError(const Game& g) {
     }
     for (const auto& [id, count] : run.herbs) {
         const auto* item = findHerbByName(id);
-        if (!item || count < 0 || count > 100000 || (item->grade > matchedGrade(run.stage, "herb") &&
+        if (!item || count < 0 || count > 100000 || (crafting::mfHerbAcquisitionStage(item->id) > run.stage &&
             !(run.targetGranted && run.targetKind == "herb" && item->id == run.targetId))) return "秘境药材行囊无效。";
     }
     for (const auto& [id, count] : run.materials) {

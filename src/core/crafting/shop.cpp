@@ -761,8 +761,8 @@ SellResult repairFurnace(Game& g) {
 // 返回值：匹配定义或实体指针；未找到时为空。
 vector<const data::FurnaceDef*> buyableFurnaces(const Game& g) {
     vector<const data::FurnaceDef*> out;
-    // 按境界解锁：1 + stage/3 品以下可买
-    const int maxGrade = std::min(6, 1 + g.player.stage / 3);
+    // 与真实开炉资格同源，突破准备阶段可购对应丹炉，六品炉也可正常解锁。
+    const int maxGrade = artTier(g.player);
     for (const auto& f : data::FurnaceDef_TABLE())
         if (f.grade <= maxGrade) out.push_back(&f);
     return out;
@@ -778,7 +778,7 @@ SellResult buyFurnace(Game& g, const string& id) {
     if (a.furnace == id) return fail("这已经是当前丹炉。");
     for (const auto& f : data::FurnaceDef_TABLE()) {
         if (f.id != id) continue;
-        const int maxGrade = std::min(6, 1 + p.stage / 3);
+        const int maxGrade = artTier(p);
         if (f.grade > maxGrade)
             return fail("境界不足，暂时用不了这尊丹炉。");
         const int price = f.price > 0 ? f.price : 100 * f.grade * f.grade;

@@ -3,6 +3,7 @@
 // 宗门刷新、人口修剪、新游戏生成、结算。
 #include "core/sim.h"
 #include "core/crafting/cave_garden.h"
+#include "core/crafting/herb_acquisition.h"
 #include "core/social/npc_consumables.h"
 #include "core/character_build.h"
 #include "core/dungeon.h"
@@ -1370,13 +1371,8 @@ void monthComplete(Game& g, const Job& job) {
                 g.world.herbs);
             p.herbs += found;
             g.world.herbs -= found;
-            // 按品阶上限随机分类到具体药材
-            const int tier = ordinaryHerbGradeLimit(p);
-            vector<const data::HerbDef*> pool;
-            for (const auto& h : data::HerbDef_TABLE())
-                if (h.grade <= tier &&
-                    h.name.find("妖丹") == string::npos)
-                    pool.push_back(&h);
+            // 野外共用丹方用途阶段与原生境，城中仍只采低品草药；妖丹不会被当作草采到。
+            const auto pool = crafting::mfGatherableHerbs(p, p.location);
             for (int i = 0; i < found && !pool.empty(); ++i) {
                 const data::HerbDef* h = pickOf(g, pool);
                 a.herbs[h->name]++;
