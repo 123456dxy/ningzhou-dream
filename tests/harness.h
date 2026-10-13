@@ -110,5 +110,6 @@ void mfRunCombatHealthTests();
 void mfRunIntelPurchaseTests();
 void mfRunPillEffectsTests();
 void mfRunHerbAcquisitionTests();
+void mfRunTimePerformanceTests();
 
 } // namespace nztest

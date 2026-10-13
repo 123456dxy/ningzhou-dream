@@ -72,6 +72,7 @@
 <ClCompile Include="..\tests\test_tide_api.cpp"/>
 <ClCompile Include="..\tests\test_tide_integration.cpp"/>
 <ClCompile Include="..\tests\test_tide_rules.cpp"/>
+<ClCompile Include="..\tests\test_time_performance.cpp"/>
 <ClCompile Include="..\tests\test_travel.cpp"/>
 </ItemGroup>
 <ItemGroup><ProjectReference Include="nzcore.vcxproj"><Project>{2AE6D2AE-ED9A-5011-8713-BD16CCE15CE8}</Project></ProjectReference></ItemGroup>

@@ -91,8 +91,11 @@ try {
 let feed = [];           // 动作流（本会话的操作反馈）
 let lastReport = null;   // 上次推进的报告
 let requestBusy = false;
-let economyReady = false;
-let economyLoading = null;
+let economyRevision = 0;
+let ecoReady = false;
+let forgeReady = false;
+let ecoLoading = null;
+let forgeLoading = null;
 let nodesLoading = null;
 let spellsLoading = null;
 let brewSearch = '';
@@ -100,6 +103,7 @@ let brewBatch = 1;
 let forgeSelection = {};
 let forgePreview = null;
 let forgePreviewSerial = 0;
+let forgePreviewLoading = null;
 let artBuildFilter = 'all';
 let spellDaoFilter = 'all';
 let removalSelection = null;
@@ -121,6 +125,29 @@ let chronicleResizeObserver = null;
 let brewSupplyRecipeId = '';
 let craftSupplyQuote = null;
 const gardenSelections = {};
+const gardenFilters = { grade: '1', search: '' };
+try {
+  const savedFilters = JSON.parse(localStorage.getItem('nz-desktop-garden-filters') || '{}');
+  if (savedFilters.grade === 'all' || /^[1-6]$/.test(savedFilters.grade || '')) gardenFilters.grade = savedFilters.grade;
+} catch { /* 灵田偏好不可读时使用一阶已有材料。 */ }
+
+// 用途：保存灵田品阶偏好；流程：本地筛选交互。
+// 用法：修改gardenFilters后调用；返回：无，只写浏览器偏好，不提交游戏动作。
+function saveGardenFilters() {
+  try { localStorage.setItem('nz-desktop-garden-filters', JSON.stringify({ grade: gardenFilters.grade })); }
+  catch { /* 偏好存储不可用不阻断本次筛选。 */ }
+}
+
+// 用途：应用灵田名称搜索并保留输入焦点与选区；流程：输入完成或中文组词完成。
+// 用法：传搜索控件，组词期间延后调用；返回：无，只更新本地筛选，不发请求。
+function applyGardenSearch(input) {
+  gardenFilters.search = input.value;
+  const start = input.selectionStart, end = input.selectionEnd;
+  render();
+  const restored = document.querySelector('[data-cave-plant-search]');
+  restored?.focus();
+  if (start !== null && end !== null) restored?.setSelectionRange(start, end);
+}
 
 // 用途：兼容旧页面链接，并解析新顶级页签的 hash。
 // 流程：读取 hash 主路径，将丹毒/装备/炼丹/炼器旧入口映射到新页面。
@@ -265,8 +292,11 @@ async function call(path, body) {
       }
       // 实际费用会随功法、道法与配装变化；重新取定义，拥有状态仍以 S 为准。
       invalidateSpells(); spellsReady = false; spellsRevision++;
-      invalidateEco(); economyReady = false;
-      forgePreview = null; forgePreviewSerial++;
+      invalidateEco(); economyRevision++;
+      ecoReady = false; forgeReady = false;
+      ecoLoading = null; forgeLoading = null;
+      ecoOpts = []; forgeOpts = { materials: [], shapes: [] };
+      forgePreview = null; forgePreviewSerial++; forgePreviewLoading = null;
       craftSupplyQuote = null;
       invalidateRoster(); rosterReady = false;
       invalidateSects(); sectData = null; achData = null;
@@ -279,7 +309,6 @@ async function call(path, body) {
         checkpointNotice = '';
         feed = []; lastReport = null;
       }
-      if (['economy', 'society', 'workshop', 'inventory'].includes(tab)) await refreshEconomy();
       render();
       animateBattleImpacts(battleImpacts(battleBefore, S.battle));
     }
@@ -598,7 +627,7 @@ function viewMap() {
   if (sub === 'friends') {
     // 左边名单（自己滚），右边交互面板（粘住不动）
     const right = selectedNpc
-      ? renderFriendPanel(S, selectedNpc, friendBag, { materials: forgeOpts?.materials })
+      ? renderFriendPanel(S, selectedNpc, friendBag, { materials: S.materialCatalog || forgeOpts.materials })
       : `<div class="empty">点左边任意一位仙友，即可当面往来。<br><br>
            见礼只有第一次给好感；<br>
            往后靠送礼与切磋、请教、游历。</div>`;
@@ -801,7 +830,7 @@ function viewArts() {
 
 // 用途：展示独立洞府页；流程：读取权威管理条件、灵田批次与训练报价；返回：HTML；成长和扣费只在服务端世界日发生。
 function viewCave() {
-  return renderCavePage(S, { plantSelections: gardenSelections, supplyHtml: renderSupplyPanel(S) });
+  return renderCavePage(S, { plantSelections: gardenSelections, plantFilters: gardenFilters, supplyHtml: renderSupplyPanel(S) });
 }
 
 // ------------------------------------------------------------
@@ -986,7 +1015,7 @@ function viewSociety() {
 
   if (sub === 'members') {
     const right = sel
-      ? renderFriendPanel(S, sel.id, friendBag, { materials: forgeOpts?.materials })
+      ? renderFriendPanel(S, sel.id, friendBag, { materials: S.materialCatalog || forgeOpts.materials })
       : `<div class="empty">点左边任意一位同门，即可当面往来。<br><br>
            见礼只有第一次给好感；<br>
            好感 30 解锁彻夜论道；拜师还需同宗高境界、声望与拜师礼，可在「拜师与受业」查看。</div>`;
@@ -1229,47 +1258,95 @@ function viewForgeWorkshop() {
     `<div style="padding:14px 22px 18px">${S.job?.type === 'forge' ? `<p class="choice-banner">正在铸炼：${escape(S.job.name)}，尚余 ${S.job.remaining} 天。下方为本炉配方成器后的效果。</p>` : ''}${r.forge}${renderForgePreview(forgePreview)}${renderCraftSupply(craftSupplyQuote?.key === JSON.stringify({ kind: 'forge', ...forgeSelection }) ? craftSupplyQuote.quote : null, { kind: 'forge', ...forgeSelection })}</div>`), aside);
 }
 
-// 切到该页时把行动清单拉回来
-// 用途：刷新营生与配料目录。
-// 流程：并行读取两个只读目录，校准选中配料，再刷新成器推演。
-// 调用方式：相关页面首次打开或动作改变状态时调用。
-// 返回值：Promise；更新缓存，无显式返回值。
+// 用途：声明当前子页缺少的经济数据；流程：按页面需求延迟加载；返回：目录需求，不计算报价。
+function economyNeeds() {
+  if (!S || S.battle || S.dungeons?.run || S.ended) return { actions: false, forge: false };
+  return {
+    actions: (tab === 'economy' && ['city', 'sect'].includes(subOf('economy', 'city')))
+      || (tab === 'society' && subOf('society', 'sect') === 'jobs'),
+    forge: tab === 'workshop' && subOf('workshop', 'brew') === 'forge',
+  };
+}
+// 用途：只读取当前页面需要的动态目录。
+// 流程：任务仅取行动；炼器取材料及预览；以状态修订号拒绝过期响应，并合并同类在途读取。
+// 调用方式：由主渲染在目录未就绪时调用；动作响应不等待它，炼丹和行囊直接使用state。
+// 返回值：Promise；失败向调用方传播以便提示和再次打开重试，不写游戏状态。
 async function refreshEconomy() {
-  if (economyLoading) return economyLoading;
-  economyLoading = (async () => {
-    const [o, f] = await Promise.all([loadEcoOptions(true), loadForgeOptions(true)]);
-    ecoOpts = o;
-    forgeOpts = f;
-    const defaults = { main: 'iron', aux: 'jade', core: 'wood', shape: f.shapes?.[0]?.id };
-    if (S.job?.type === 'forge') {
-      const [main, aux, core, shape] = (S.job.to || '').split('|');
-      if (main && aux && core && shape) forgeSelection = { main, aux, core, shape };
+  const needs = economyNeeds(), revision = economyRevision, reads = [];
+  if (needs.actions && !ecoReady) {
+    if (!ecoLoading) {
+      const loading = loadEcoOptions().then(options => {
+        if (revision !== economyRevision) return;
+        ecoOpts = options; ecoReady = true;
+      }).finally(() => { if (ecoLoading === loading) ecoLoading = null; });
+      ecoLoading = loading;
     }
-    for (const key of ['main', 'aux', 'core', 'shape']) {
-      const options = key === 'shape' ? f.shapes : f.materials;
-      if (!(options || []).some(option => option.id === forgeSelection[key]))
-        forgeSelection[key] = (options || []).find(option => option.id === defaults[key])?.id || options?.[0]?.id || '';
+    reads.push(ecoLoading);
+  }
+  if (needs.forge && !forgeReady) {
+    if (!forgeLoading) {
+      const loading = (async () => {
+        const definitions = await loadForgeOptions();
+        if (revision !== economyRevision) return;
+        forgeOpts = definitions;
+        const defaults = { main: 'iron', aux: 'jade', core: 'wood', shape: definitions.shapes?.[0]?.id };
+        if (S.job?.type === 'forge') {
+          const [main, aux, core, shape] = (S.job.to || '').split('|');
+          if (main && aux && core && shape) forgeSelection = { main, aux, core, shape };
+        }
+        for (const key of ['main', 'aux', 'core', 'shape']) {
+          const options = key === 'shape' ? definitions.shapes : definitions.materials;
+          if (!(options || []).some(option => option.id === forgeSelection[key]))
+            forgeSelection[key] = (options || []).find(option => option.id === defaults[key])?.id || options?.[0]?.id || '';
+        }
+        forgeReady = true;
+        if (economyNeeds().forge) await refreshForgePreview(false);
+      })().finally(() => { if (forgeLoading === loading) forgeLoading = null; });
+      forgeLoading = loading;
     }
-    economyReady = true;
-    await refreshForgePreview();
-  })();
-  try { await economyLoading; }
-  finally { economyLoading = null; }
+    reads.push(forgeLoading);
+  }
+  if (needs.forge && forgeReady && !forgePreview && !forgeLoading) reads.push(refreshForgePreview(false));
+  await Promise.all(reads);
+}
+// 用途：将延迟目录结果提交当前页面；流程：导航/动作后的异步补全；返回：Promise。
+// 使用方式：主渲染仅在缺少目录时调用；过期成功和失败均不重绘、不通知当前状态。
+function refreshEconomyView() {
+  const needs = economyNeeds(), revision = economyRevision;
+  const isCurrent = () => {
+    const current = economyNeeds();
+    return revision === economyRevision && ((needs.actions && current.actions) || (needs.forge && current.forge));
+  };
+  return refreshEconomy().then(() => { if (isCurrent()) render(); }).catch(error => {
+    if (isCurrent()) toast(error.message || '目录暂未读取成功，请重新打开此页重试。', 'bad');
+  });
 }
 // 用途：读取所选配方的权威效果。
 // 流程：生成请求序号，POST只读预览，丢弃过期响应并重绘工坊。
 // 调用方式：配方选择变化或目录刷新后调用。
 // 返回值：Promise；更新forgePreview，无显式返回值。
-async function refreshForgePreview() {
+async function refreshForgePreview(redraw = true) {
+  const selection = JSON.stringify(forgeSelection), revision = economyRevision;
+  if (forgePreviewLoading?.revision === revision && forgePreviewLoading.selection === selection)
+    return forgePreviewLoading.promise;
   const serial = ++forgePreviewSerial;
   forgePreview = null;
-  if (tab === 'workshop' && economyReady) render();
-  const response = await fetch('/api/forge-preview', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(forgeSelection),
-  }).then(response => response.json()).catch(() => ({ error: '配方推演暂未加载。' }));
-  if (serial !== forgePreviewSerial) return;
-  forgePreview = response;
-  if (tab === 'workshop') render();
+  const loading = (async () => {
+    const response = await fetch('/api/forge-preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: selection,
+    }).then(async response => {
+      const result = await response.json();
+      if (!response.ok || result?.ok === false || result?.error || !result?.info || typeof result.info !== 'object')
+        throw new Error(result?.error || '配方推演暂未加载。');
+      return result;
+    }).catch(error => ({ info: { valid: false, enabled: false, reason: `${error.message || '配方推演暂未加载。'}请重新选择配料重试。` } }));
+    if (serial !== forgePreviewSerial || revision !== economyRevision) return;
+    forgePreview = response;
+  })().finally(() => { if (forgePreviewLoading?.promise === loading) forgePreviewLoading = null; });
+  forgePreviewLoading = { promise: loading, revision, selection };
+  if (redraw && economyNeeds().forge) render();
+  await loading;
+  if (redraw && serial === forgePreviewSerial && economyNeeds().forge) render();
 }
 // ------------------------------------------------------------
 // 页签：坊市行囊
@@ -1359,7 +1436,7 @@ function viewMarket() {
   if (!recipes.some(recipe => recipe.id === brewSupplyRecipeId)) brewSupplyRecipeId = recipes[0]?.id || '';
   const brew = quotedRecipes.filter(o => o.batchQuote.enabled);
   const brewCards = quotedRecipes.map(o =>
-    `<button class="craft-card${o.batchQuote.enabled ? '' : ' card-disabled'}" data-action="craft" data-id="${o.id}" ${o.batchQuote.enabled ? '' : 'disabled'}>`
+    `<article class="craft-card${o.batchQuote.enabled ? '' : ' card-disabled'}">`
   + `<div class="craft-top"><strong>${escape(o.name)}</strong>`
   + `<span class="rate ${o.chance < 0.4 ? 'low' : ''}">成丹 ${pct(o.chance)}</span></div>`
   + `<div class="craft-cost">开炉 ${o.stoneCost} 灵石 · ${o.days} 天</div>`
@@ -1368,7 +1445,7 @@ function viewMarket() {
   + renderPillEffect(S, o.id, { catalog: true })
   + (o.batchQuote.rows.length ? `<p class="craft-materials">${o.batchQuote.rows.map(item => `${escape(item.name)}：需 ${item.required}，有 ${item.owned}${item.missing ? `，缺 ${item.missing}` : ''}`).join('；')}</p>` : '')
   + (o.batchQuote.reason ? `<p class="card-why">${escape(o.batchQuote.reason)}</p>` : '')
-  + `</button>`).join('')
+    + `<button class="primary" data-action="craft" data-id="${o.id}" ${o.batchQuote.enabled ? '' : 'disabled'}>开炉炼丹</button></article>`).join('')
     || `<div class="empty">材料或灵石不足，暂时无法开炉。</div>`;
 
   const blocked = quotedRecipes.filter(o => !o.batchQuote.enabled);
@@ -1902,18 +1979,13 @@ function render() {
     if (['society', 'quests', 'economy'].includes(tab) && !sectData) {
       refreshSects().then(() => { if (['society', 'quests', 'economy'].includes(tab)) render(); });
     }
-    // 宗门页的「山门差事」也要用 ecoOpts，进页时一并拉回来
-    if (tab === 'society' && !economyReady) {
-      refreshEconomy().then(() => { if (tab === 'society') render(); });
-    }
-    if (['economy', 'workshop', 'inventory'].includes(tab) && !economyReady) {
-      refreshEconomy().then(() => { if (['economy', 'workshop', 'inventory'].includes(tab)) render(); });
+    const needs = economyNeeds();
+    if ((needs.actions && !ecoReady && !ecoLoading) || (needs.forge && !forgeReady && !forgeLoading)
+      || (needs.forge && forgeReady && !forgePreview && !forgeLoading && !forgePreviewLoading)) {
+      refreshEconomyView();
     }
     if ((tab === 'society' || (tab === 'map' && subOf('map', 'atlas') === 'friends')) && selectedNpc) {
       loadSocialActions(selectedNpc);
-      if (tab === 'map' && !economyReady && !economyLoading && Object.values(S.arts.materials || {}).some(count => count > 0)) {
-        refreshEconomy().then(() => { if (tab === 'map') render(); });
-      }
     }
     // 通讯录的筛选/排序/传讯是委托事件，插进 DOM 之后才绑得上
     if (tab === 'roster') bindRosterTab();
@@ -2118,6 +2190,14 @@ document.addEventListener('click', async e => {
   if (shopTab) { shopKind = shopTab.dataset.shop; try { localStorage.setItem('nz-desktop-market-kind', shopKind); } catch {} render(); return; }
   const tideKind = e.target.closest('[data-tide-market-kind]');
   if (tideKind) { tideMarketKind = tideKind.dataset.tideMarketKind; try { localStorage.setItem('nz-desktop-tide-market-kind', tideMarketKind); } catch {} render(); return; }
+  const gardenGrade = e.target.closest('[data-cave-plant-grade]');
+  if (gardenGrade) {
+    const grade = gardenGrade.dataset.cavePlantGrade;
+    if (grade === 'all' || /^[1-6]$/.test(grade || '')) {
+      gardenFilters.grade = grade; saveGardenFilters(); render();
+    }
+    return;
+  }
 
   // 分类筛选只更新本地纪事视图，不请求服务端或推进时间。
   const logTab = e.target.closest('[data-logfilter]');
@@ -2350,7 +2430,8 @@ document.addEventListener('click', async e => {
     case 'cave-garden-plant': {
       const plotId = btn.dataset.plotId;
       const controls = btn.closest('.cave-plot');
-      const herbId = controls?.querySelector('[data-cave-plant-herb]')?.value || gardenSelections[plotId]?.herbId;
+      const herbId = controls?.querySelector('[data-cave-plant-herb]')?.value;
+      if (!herbId) { toast('请先选择行囊中可播种的药材。', 'warn'); break; }
       const count = Number(controls?.querySelector('[data-cave-plant-count]')?.value || gardenSelections[plotId]?.count);
       await call('cave/garden/plant', { plotId, herbId, count });
       break;
@@ -2787,7 +2868,11 @@ document.addEventListener('change', async e => {
     shopQty[id] = Math.max(1, Math.min(99, Number(inp.value) || 1));
     render();
   }
-  if (e.target.matches('[data-plan-select]')) { await call('plan', { id: e.target.value }); return; }
+  if (e.target.matches('[data-plan-select]')) {
+    const result = await call('plan', { plan: e.target.value });
+    if (!result || result.error || result.ok === false) e.target.value = S?.plan || e.target.value;
+    return;
+  }
   if (e.target.matches('[data-inventory-grade]')) { inventoryGrade = e.target.value; render(); return; }
   if (e.target.matches('[data-shop-grade]')) { shopGrades[shopKind] = e.target.value; try { localStorage.setItem('nz-desktop-market-grades', JSON.stringify(shopGrades)); } catch {} render(); return; }
   if (e.target.matches('[data-dungeon-intel-grade]')) { dungeonIntelGrade = e.target.value; try { localStorage.setItem('nz-desktop-intel-grade', dungeonIntelGrade); } catch {} render(); return; }
@@ -2809,6 +2894,11 @@ document.addEventListener('change', async e => {
 // 调用方式：由 document 的 input 事件自动调用。
 // 返回值：无返回值；不修改游戏规则或推进时间。
 document.addEventListener('input', e => {
+  if (e.target.matches('[data-cave-plant-search]')) {
+    gardenFilters.search = e.target.value;
+    if (!e.isComposing) applyGardenSearch(e.target);
+    return;
+  }
   if (e.target.matches('[data-dungeon-intel-search]')) {
     dungeonIntelSearch = e.target.value;
     const cursor = e.target.selectionStart;
@@ -2831,6 +2921,12 @@ document.addEventListener('input', e => {
   render();
   const input = document.querySelector('[data-brew-search]');
   input?.focus(); input?.setSelectionRange(cursor, cursor);
+});
+
+// 用途：在中文组词确认后应用搜索；流程：灵田药材输入法事件。
+// 用法：由document的compositionend事件调用；返回：无，避免组词中重建控件打断输入法。
+document.addEventListener('compositionend', e => {
+  if (e.target.matches('[data-cave-plant-search]')) applyGardenSearch(e.target);
 });
 
 // 快捷键

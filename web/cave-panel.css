@@ -117,6 +117,72 @@
   font-variant-numeric: tabular-nums;
 }
 
+.cave-page .cave-plant-filters {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--cave-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cave-page .cave-plant-filter-row,
+.cave-page .cave-plant-grade-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cave-page .cave-plant-filter-row + .cave-plant-filter-row {
+  margin-top: 12px;
+  gap: 12px 18px;
+}
+
+.cave-page .cave-plant-grade-group button {
+  padding: 7px 13px;
+  font-size: 12px;
+}
+
+.cave-page .cave-plant-grade-group button.is-active {
+  color: var(--surface);
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.cave-page .cave-plant-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 240px;
+  max-width: 400px;
+}
+
+.cave-page .cave-plant-search input {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  padding: 9px 11px;
+  border: 1px solid var(--cave-border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.cave-page .cave-plant-match-count {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.cave-page .cave-plant-filters p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
 .cave-page .cave-plot-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -365,6 +431,8 @@
   .cave-page .cave-entry-actions { grid-column: 1 / -1; align-items: stretch; }
   .cave-page .cave-entry-actions .cave-action-cost { text-align: left; max-width: none; }
   .cave-page .cave-plant-controls { align-items: stretch; flex-direction: column; }
+  .cave-page .cave-plant-filters { padding: 12px; }
+  .cave-page .cave-plant-search { max-width: none; flex-basis: 100%; }
   .cave-page .cave-plot { padding: 14px; }
   .cave-page .cave-training-choice { flex-basis: 100%; }
   .cave-page .cave-training-controls button { width: 100%; }

@@ -132,7 +132,10 @@ try {
   fixture.player.qiSupply = 1;
   fixture.player.renown = 80;
   fixture.player.stones = 100000;
-  fixture.player.arts.herbs = Object.fromEntries(initial.herbCatalog.filter(item => item.grade <= 2).map(item => [item.name, 50]));
+  fixture.player.arts.herbs = Object.fromEntries(initial.herbCatalog.map(item => [item.name, 50]));
+  const emptyStockHerb = initial.herbCatalog.find(item => item.id === '6002');
+  assert.ok(emptyStockHerb, '真实目录包含库存筛选对照药材');
+  fixture.player.arts.herbs[emptyStockHerb.name] = 0;
   fixture.player.arts.herbs[herb.name] = 300;
   fixture.player.herbs = Object.values(fixture.player.arts.herbs).reduce((sum, count) => sum + count, 0);
   fixture.player.arts.materials = Object.fromEntries(initial.materialCatalog.filter(item => item.grade <= 2).map(item => [item.id, 50]));
@@ -144,6 +147,52 @@ try {
   check(await page.locator('[data-cave-plot]').count() === 8, '聚灵洞府显示八格灵田');
   check(await page.locator('.cave-page [data-action="cave-enter"],.cave-page [data-action="cave-leave"],.cave-page [data-action="goto-workshop-forge"]').count() === 0, '洞府没有虚构进入旗标或重复工坊入口');
 
+  await page.locator('.main-tabs [data-tab="chronicle"]').click();
+  const planResponse = page.waitForResponse(response => response.url() === `${base}/api/plan` && response.request().method() === 'POST');
+  await page.locator('[data-plan-select]').selectOption('gather');
+  const changedPlan = await planResponse;
+  check(changedPlan.request().postDataJSON().plan === 'gather'
+    && (await changedPlan.json()).state.plan === 'gather', '真实日常安排使用plan字段并成功切换为采药');
+  await page.waitForFunction(() => document.body.getAttribute('aria-busy') !== 'true');
+  check(await page.locator('[data-plan-select]').inputValue() === 'gather', '日常安排重绘后保持服务端确认的选择');
+  await api('plan', { plan: initial.plan });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('[data-plan-select]').waitFor();
+  check(await page.locator('[data-plan-select]').inputValue() === initial.plan, '重新读取后显示已恢复的真实计划');
+  await page.locator('.main-tabs [data-tab="cave"]').click();
+
+  let emptyPlot = page.locator('[data-cave-plot="plot-2"]');
+  check(await page.locator('[data-cave-plant-grade="1"]').getAttribute('aria-pressed') === 'true',
+    '灵田默认一阶且只列行囊已有材料');
+  check((await emptyPlot.locator('[data-cave-plant-herb] option').allTextContents()).every(text => text.includes('1 阶'))
+    && await emptyPlot.locator(`[data-cave-plant-herb] option[value="${emptyStockHerb.id}"]`).count() === 0,
+    '大量材料时空田选项按品阶和真实库存缩小');
+  await page.locator('[data-cave-plant-grade="6"]').click();
+  check((await emptyPlot.locator('[data-cave-plant-herb] option').allTextContents()).every(text => text.includes('6 阶')),
+    '六阶品阶按钮真实切换空田药材');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.cave-page').waitFor();
+  check(await page.locator('[data-cave-plant-grade="6"]').getAttribute('aria-pressed') === 'true',
+    '刷新后保留灵田品阶偏好');
+  await page.locator('[data-cave-plant-grade="1"]').click();
+  await page.locator('[data-cave-plant-search]').fill(herb.name);
+  check(await emptyPlot.locator('[data-cave-plant-herb] option').count() === 1
+    && await emptyPlot.locator('[data-cave-plant-herb]').inputValue() === herb.id, '搜索药材名称直接定位到匹配材料');
+  await page.locator('[data-cave-plant-search]').fill('没有这种药材');
+  check(await emptyPlot.locator('[data-cave-plant-herb]').inputValue() === ''
+    && await emptyPlot.locator('[data-action="cave-garden-plant"]').isDisabled(), '搜索无匹配时不能播种隐藏的旧选择');
+  check(await page.evaluate(name => {
+    const input = document.querySelector('[data-cave-plant-search]');
+    input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    input.value = name.slice(0, 1);
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, inputType: 'insertCompositionText' }));
+    const retained = input === document.querySelector('[data-cave-plant-search]');
+    input.value = name;
+    input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: name }));
+    return retained && document.querySelector('[data-cave-plant-search]').value === name;
+  }, herb.name), '中文组词期间保留搜索控件，确认后应用搜索');
+  await page.locator('[data-cave-plant-search]').fill('');
+
   let plot = page.locator('[data-cave-plot="plot-1"]');
   await plot.locator('[data-cave-plant-herb]').selectOption(herb.id);
   await plot.locator('[data-cave-plant-count]').fill('99');
@@ -152,6 +201,12 @@ try {
   check(state.cave.garden.plots[0].seedCount === 99 && state.cave.garden.plots[0].remainingCapacity === 0,
     'DOM播种99份实际进入服务器批次并达到容量上限');
   check(await plot.locator('[data-action="cave-garden-plant"]').isDisabled(), '满格补种按钮真实禁用');
+  await page.locator('[data-cave-plant-grade="6"]').click();
+  await page.locator('[data-cave-plant-search]').fill('没有这种药材');
+  check(await plot.locator('[data-cave-plant-herb]').inputValue() === herb.id
+    && await plot.locator('[data-cave-plant-herb]').isDisabled(), '已种田固定原药材，不被其它品阶或搜索隐藏');
+  await page.locator('[data-cave-plant-search]').fill('');
+  await page.locator('[data-cave-plant-grade="1"]').click();
   const purseBefore = state.player.stones;
   await plot.locator('[data-cave-reserve-amount]').fill('2000');
   await clickAction(plot.locator('[data-action="cave-garden-deposit"]'), 'cave/garden/reserve/deposit');

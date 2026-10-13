@@ -21,42 +21,63 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g,
 // 行动清单缓存
 let optCache = null;
 let forgeCache = null;
+let optionsLoading = null;
+let forgeLoading = null;
+let cacheRevision = 0;
 
 // 用途：读取营生活动目录。
-// 流程：优先使用缓存，必要时POST eco-options并缓存options。
+// 流程：优先使用当前状态缓存，合并在途POST；状态失效后不提交旧响应，失败不缓存空清单。
 // 调用方式：任务与宗门页面可传force。
 // 返回值：Promise，行动数组。
 export async function loadEcoOptions(force) {
   if (optCache && !force) return optCache;
-  const r = await fetch('/api/eco-options', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  }).then(x => x.json()).catch(() => null);
-  optCache = r?.options || [];
-  return optCache;
+  if (optionsLoading) return optionsLoading;
+  const revision = cacheRevision;
+  const loading = (async () => {
+    const response = await fetch('/api/eco-options', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const result = await response.json();
+    if (!response.ok || result?.ok === false || result?.error || !Array.isArray(result?.options))
+      throw new Error(result?.error || '任务目录暂未读取成功，请重新打开任务页重试。');
+    if (revision === cacheRevision) optCache = result.options;
+    return result.options;
+  })().finally(() => { if (optionsLoading === loading) optionsLoading = null; });
+  optionsLoading = loading;
+  return loading;
 }
 
 // 用途：读取炼器材料与器型目录。
-// 流程：优先使用缓存，必要时POST forge-options并缓存结果。
+// 流程：合并当前状态的在途读取；失效后拒绝旧响应，网络失败留出下次重试机会。
 // 调用方式：工坊和行囊可传force。
 // 返回值：Promise，材料与器型对象。
 export async function loadForgeOptions(force) {
   if (forgeCache && !force) return forgeCache;
-  const r = await fetch('/api/forge-options', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  }).then(x => x.json()).catch(() => null);
-  forgeCache = r || { materials: [], shapes: [] };
-  return forgeCache;
+  if (forgeLoading) return forgeLoading;
+  const revision = cacheRevision;
+  const loading = (async () => {
+    const response = await fetch('/api/forge-options', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const result = await response.json();
+    if (!response.ok || result?.ok === false || result?.error || !Array.isArray(result?.materials) || !Array.isArray(result?.shapes))
+      throw new Error(result?.error || '炼器材料目录暂未读取成功，请重新打开炼器页重试。');
+    if (revision === cacheRevision) forgeCache = result;
+    return result;
+  })().finally(() => { if (forgeLoading === loading) forgeLoading = null; });
+  forgeLoading = loading;
+  return loading;
 }
 
 // 用途：清除营生和炼器目录缓存。
 // 流程：同时置空optCache与forgeCache。
 // 调用方式：游戏动作改变状态后调用。
 // 返回值：无返回值。
-export function invalidateEco() { optCache = null; forgeCache = null; }
+export function invalidateEco() {
+  cacheRevision++;
+  optCache = null; forgeCache = null;
+  optionsLoading = null; forgeLoading = null;
+}
 
 export function marketGrade(state, item) {
   const direct = Number(item.grade);

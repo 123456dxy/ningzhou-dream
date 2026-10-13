@@ -1483,23 +1483,35 @@ static bool lookupManual(const string& id, ManualEntryView& out) {
     return false;
 }
 
-// 公开版：给界面用（lookupManual 是本文件的内部实现）
-// 用途：公开功法元信息并补实际触发机制说明。
-// 参与流程：功法目录、学习与配装展示。
-// 使用方式：传 ID 和可写输出记录。
-// 返回值：找到时为真并填写 out；无定义时为假。
+// 用途：一次构建不可变功法展示目录；流程：功法/NPC授业纯查询；返回：静态目录常量引用，仅包含内容定义，不缓存玩家境界、权限、价格或已学状态。静态初始化无IO/RNG，线程安全。
+static const map<string, ManualInfo>& mfManualInfoCatalog() {
+    static const map<string, ManualInfo> Catalog = [] {
+        map<string, ManualInfo> Entries;
+        // 用途：按原基础表优先规则加入一个内容定义；返回：无，不重写重复ID或访问玩家状态。
+        const auto AddDefinition = [&](const string& ManualId) {
+            if (Entries.count(ManualId)) return;
+            ManualEntryView Definition;
+            if (!lookupManual(ManualId, Definition)) return;
+            ManualInfo Info;
+            Info.found = true; Info.id = Definition.id; Info.name = Definition.name; Info.dao = Definition.dao;
+            const auto* Manual = findManual(ManualId);
+            Info.effect = Manual ? Manual->effect + manualTriggerDesc(*Manual) : Definition.effect;
+            Info.coefficients = Definition.coefficients; Info.stage = Definition.stage; Info.price = Definition.price;
+            Entries.emplace(ManualId, std::move(Info));
+        };
+        for (const auto& Definition : data::BaseManualDef_TABLE()) AddDefinition(Definition.id);
+        for (const auto& Definition : data::ManualDef_TABLE()) AddDefinition(Definition.id);
+        return Entries;
+    }();
+    return Catalog;
+}
+
+// 用途：兼容原公共功法查询并复制不可变定义；流程：功法目录、NPC请教和配装；用法：传稳定ID和可写输出，动态学习资格仍由调用方计算；返回：找到为真，无定义返回假且保持out不变；无时间、RNG、IO或游戏写入。
 bool findManualInfo(const string& id, ManualInfo& out) {
-    ManualEntryView v;
-    if (!lookupManual(id, v)) return false;
-    out.found = true;
-    out.id = v.id;
-    out.name = v.name;
-    out.dao = v.dao;
-    const ManualEntry* man = findManual(id);
-    out.effect = man ? man->effect + manualTriggerDesc(*man) : v.effect;
-    out.coefficients = v.coefficients;
-    out.stage = v.stage;
-    out.price = v.price;
+    const auto& Catalog = mfManualInfoCatalog();
+    const auto Found = Catalog.find(id);
+    if (Found == Catalog.end()) return false;
+    out = Found->second;
     return true;
 }
 

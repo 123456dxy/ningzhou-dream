@@ -18,6 +18,11 @@ constexpr int HarvestYield = 3;
 constexpr int UnitsPerBaseDay = 100;
 constexpr std::array GrowthDurationDays{30, 60, 120, 240, 480, 960};
 constexpr std::array UnlockedPlotCounts{3, 5, 8};
+// 类型：灵田单日内部报价值；所属crafting，无外部资源或状态写权；费用与速度来自同一次规则计算，供日结算及隔离成熟预报使用。
+struct GardenDayQuote {
+    GardenPlotInfo Info;
+    int CostPerSeed = 0;
+};
 // 用途：按稳定ID查可种草药；流程：播种/加载验证；返回：目录借用指针或空，不依赖展示名称。
 const data::HerbDef* mfPlantableHerb(const std::string& HerbId) {
     return mfIsPlantHerb(HerbId) ? findHerbById(HerbId) : nullptr;
@@ -79,16 +84,17 @@ int mfFundedDaysForecast(const GardenPlot& Plot, int RequiredUnits, int NaturalU
     }
     return MaximumDays;
 }
-// 用途：构建格内下一日权威成长与储备报价；流程：只读视图/真实日tick共用；返回：不持有状态引用的报价值。
-GardenPlotInfo mfPlotInfo(const Game& State, std::size_t PlotIndex) {
-    GardenPlotInfo Info; Info.PlotId = "plot-" + std::to_string(PlotIndex + 1);
+// 用途：构建格内下一日权威成长与储备报价；流程：只读视图/真实日tick共用；返回：不持有状态引用的报价值，不执行跨日成熟预演。
+GardenDayQuote mfDailyPlotInfo(const Game& State, std::size_t PlotIndex) {
+    GardenDayQuote Quote;
+    auto& Info = Quote.Info; Info.PlotId = "plot-" + std::to_string(PlotIndex + 1);
     Info.NaturalUnitsPerDay = UnitsPerBaseDay + clampInt(State.player.caveTier, 0, 2) * 10;
     Info.SpiritUnitsPerDay = Info.BottleUnitsPerDay = Info.FullyAcceleratedUnitsPerDay = Info.EffectiveUnitsPerDay = Info.NaturalUnitsPerDay;
     const auto* Plot = mfPlot(State, PlotIndex);
-    if (!Plot) return Info;
+    if (!Plot) return Quote;
     Info.ReserveStones = Plot->ReserveStones; Info.HerbId = Plot->HerbId;
     const auto* Herb = mfPlantableHerb(Plot->HerbId);
-    if (!Herb) return Info;
+    if (!Herb) return Quote;
     Info.Name = Herb->name; Info.Grade = Herb->grade; Info.RequiredUnits = mfRequiredUnits(*Herb);
     Info.SeedCount = mfSeedCount(*Plot); Info.ReadyCount = mfReadyCount(*Plot, Info.RequiredUnits);
     Info.GrowingCount = Info.SeedCount - Info.ReadyCount;
@@ -105,15 +111,24 @@ GardenPlotInfo mfPlotInfo(const Game& State, std::size_t PlotIndex) {
     Info.FullyAcceleratedUnitsPerDay = Info.SpiritUnitsPerDay + (HasBottle ? 200 : 0);
     Info.SpiritDailyCostStones = ChargeableSeeds * Herb->grade * QiLevel;
     Info.BottleDailyCostStones = ChargeableSeeds * Herb->grade * (HasBottle ? 1 : 0);
+    Quote.CostPerSeed = Herb->grade * (QiLevel + (HasBottle ? 1 : 0));
     Info.DailyCostStones = Info.SpiritDailyCostStones + Info.BottleDailyCostStones;
     Info.AccelerationFunded = Info.DailyCostStones > 0 && Plot->ReserveStones >= Info.DailyCostStones;
     Info.EffectiveUnitsPerDay = Info.AccelerationFunded ? Info.FullyAcceleratedUnitsPerDay : Info.NaturalUnitsPerDay;
+    return Quote;
+}
+// 用途：为下一日权威报价补充成熟预报；流程：洞府纯查询；用法：传稳定Game及地块索引；返回：完整视图，隔离预演不提交到活动日历、RNG或储备。
+GardenPlotInfo mfPlotInfo(const Game& State, std::size_t PlotIndex) {
+    auto Quote = mfDailyPlotInfo(State, PlotIndex);
+    auto& Info = Quote.Info;
+    const auto* Plot = mfPlot(State, PlotIndex);
+    if (!Plot || Info.RequiredUnits == 0) return Info;
     Info.EstimatedNaturalDays = mfEstimatedDays(*Plot, Info.RequiredUnits, Info.NaturalUnitsPerDay);
     Info.EstimatedSpiritDays = mfEstimatedDays(*Plot, Info.RequiredUnits, Info.SpiritUnitsPerDay);
     Info.EstimatedBottleDays = mfEstimatedDays(*Plot, Info.RequiredUnits, Info.BottleUnitsPerDay);
     Info.EstimatedFullyAcceleratedDays = mfEstimatedDays(*Plot, Info.RequiredUnits, Info.FullyAcceleratedUnitsPerDay);
     Info.EstimatedEffectiveDays = mfFundedDaysForecast(*Plot, Info.RequiredUnits, Info.NaturalUnitsPerDay,
-        Info.FullyAcceleratedUnitsPerDay, Herb->grade * (QiLevel + (HasBottle ? 1 : 0)));
+        Info.FullyAcceleratedUnitsPerDay, Quote.CostPerSeed);
     return Info;
 }
 // 用途：原子转移格内储备；流程：存入/取回命令；返回：空成功或拒绝原因，所有检查通过后转账。
@@ -260,7 +275,8 @@ void mfGardenDayTick(Game& State) {
     State.Garden.LastGrowthDay = State.clock.days;
     if (State.ended || State.player.health <= 0 || State.player.age >= State.player.lifespan) return;
     for (std::size_t PlotIndex = 0; PlotIndex < State.Garden.Plots.size(); ++PlotIndex) {
-        const auto Info = mfPlotInfo(State, PlotIndex); if (Info.RequiredUnits == 0 || Info.GrowingCount == 0) continue;
+        const auto Quote = mfDailyPlotInfo(State, PlotIndex);
+        const auto& Info = Quote.Info; if (Info.RequiredUnits == 0 || Info.GrowingCount == 0) continue;
         auto& Plot = State.Garden.Plots[PlotIndex];
         if (Info.AccelerationFunded) Plot.ReserveStones -= Info.DailyCostStones;
         for (auto& Cohort : Plot.Cohorts) Cohort.ProgressUnits = std::min(Info.RequiredUnits, Cohort.ProgressUnits + Info.EffectiveUnitsPerDay);

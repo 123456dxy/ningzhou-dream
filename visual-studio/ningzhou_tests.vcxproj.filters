@@ -63,5 +63,6 @@
 <ClCompile Include="..\tests\test_tide_api.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tide_integration.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tide_rules.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_time_performance.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_travel.cpp"><Filter>Tests</Filter></ClCompile>
 </ItemGroup></Project>

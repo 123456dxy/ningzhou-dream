@@ -95,4 +95,72 @@ const escapedHtml = renderCavePage(escaped);
 verify(!escapedHtml.includes('<script>') && !escapedHtml.includes('<img src=x'), '地点和药材名称严格HTML转义');
 verify(escapedHtml.includes('&lt;script&gt;') && escapedHtml.includes('&quot; onclick=&quot;'), '动态标题与拒绝原因不会变成代码或属性');
 
+// 用途：从纯展示 HTML 读取指定灵田的控件范围。
+// 流程：药材筛选和已种田锁定行为检查。
+// 使用方式：传页面 HTML 和测试夹具的稳定 plotId，不执行 DOM 或服务器动作。
+// 返回值：该灵田 article 的 HTML；找不到返回空文本。
+function plotHtml(pageHtml, plotId) {
+  return pageHtml.match(new RegExp(`<article[^>]*data-cave-plot="${plotId}"[^>]*>([\\s\\S]*?)</article>`))?.[1] || '';
+}
+
+const catalogFixture = structuredClone(fixture);
+catalogFixture.cave.garden.plantOptions.push(
+  { herbId: 'herb-d', name: '灵香芝', grade: 3, ownedCount: 6, baseGrowthDays: 120 },
+  { herbId: 'herb-e', name: '星香芝', grade: 6, ownedCount: 1, baseGrowthDays: 960 },
+);
+const catalogBefore = JSON.stringify(catalogFixture);
+const defaultFilterHtml = renderCavePage(catalogFixture);
+const defaultEmptyPlot = plotHtml(defaultFilterHtml, 'plot-1');
+verify(defaultFilterHtml.includes('data-cave-plant-grade="1"') && defaultFilterHtml.includes('data-cave-plant-grade="all"')
+  && defaultFilterHtml.includes('data-cave-plant-grade="6"') && !defaultFilterHtml.includes('data-cave-plant-grade="5"'),
+  '品阶由可播种目录提取并提供全部选项，不伪造不存在的品阶');
+verify(/data-cave-plant-grade="1"[^>]*aria-pressed="true"/.test(defaultFilterHtml)
+  && defaultFilterHtml.includes('仅列行囊已有药材') && !defaultFilterHtml.includes('data-cave-plant-owned'),
+  '默认选一阶并说明权威目录仅列已有药材，不提供无效库存开关');
+verify(defaultEmptyPlot.includes('value="herb-a"') && !defaultEmptyPlot.includes('value="herb-b"')
+  && !defaultEmptyPlot.includes('value="herb-d"'), '空灵田默认只显示一阶有库存药材');
+
+const gradeHtml = renderCavePage(catalogFixture, { plantFilters: { grade: '3', search: '' },
+  plantSelections: { 'plot-1': { herbId: 'herb-a', count: 7 } } });
+const gradeEmptyPlot = plotHtml(gradeHtml, 'plot-1');
+verify(gradeEmptyPlot.includes('value="herb-d" selected') && !gradeEmptyPlot.includes('value="herb-a"')
+  && gradeEmptyPlot.includes('value="7"'), '切换品阶舍弃不可见的旧药材草稿，同时保留份数');
+const lockedPlot = plotHtml(gradeHtml, 'plot-2');
+verify(lockedPlot.includes('value="herb-a" selected') && !lockedPlot.includes('value="herb-d"')
+  && /data-cave-plant-herb[^>]*disabled/.test(lockedPlot)
+  && !/data-action="cave-garden-plant"[^>]*disabled/.test(lockedPlot), '已种田忽略全局筛选，锁定同种并允许补种');
+
+const searchHtml = renderCavePage(catalogFixture, { plantFilters: { grade: 'all', search: '香芝' } });
+const searchedPlot = plotHtml(searchHtml, 'plot-1');
+verify(searchedPlot.includes('value="herb-d"') && searchedPlot.includes('value="herb-e"')
+  && !searchedPlot.includes('value="herb-a"') && !searchedPlot.includes('value="herb-b"'), '名称搜索可跨品阶匹配当前目录');
+
+const emptySearchHtml = renderCavePage(catalogFixture, { plantFilters: { grade: 'all', search: '不存在' },
+  plantSelections: { 'plot-1': { herbId: 'herb-a', count: 12 } } });
+const emptySearchPlot = plotHtml(emptySearchHtml, 'plot-1');
+verify(emptySearchPlot.includes('<option value="">没有符合筛选的药材</option>')
+  && /data-action="cave-garden-plant"[^>]*disabled/.test(emptySearchPlot)
+  && !emptySearchPlot.includes('value="herb-a"'), '筛选无匹配时空选择并禁用播种，不提交隐藏的旧草稿');
+verify(plotHtml(emptySearchHtml, 'plot-2').includes('value="herb-a" selected'), '无匹配搜索不隐藏已种田的同种补种');
+
+const lockedEmpty = structuredClone(catalogFixture);
+lockedEmpty.cave.garden.plantOptions = lockedEmpty.cave.garden.plantOptions.filter(option => option.herbId !== 'herb-a');
+const lockedEmptyHtml = renderCavePage(lockedEmpty);
+verify(/data-cave-plant-grade="1"[^>]*aria-pressed="true"/.test(lockedEmptyHtml),
+  '选中品阶库存用光时仍保留当前筛选标识，避免空目录却看不出筛选条件');
+verify(plotHtml(lockedEmptyHtml, 'plot-2').includes('value="herb-a" selected')
+  && plotHtml(lockedEmptyHtml, 'plot-2').includes('青灵草 · 1 阶 · 行囊 0')
+  && /data-action="cave-garden-plant"[^>]*disabled/.test(plotHtml(lockedEmptyHtml, 'plot-2'))
+  && plotHtml(lockedEmptyHtml, 'plot-2').includes('行囊中没有此药材'),
+  '已种药材用光并离开可播种目录时，依据灵田快照保留固定条目并禁止补种');
+verify(!plotHtml(lockedEmptyHtml, 'plot-2').includes('自然成长'), '库存用光后缺少基础天数时不伪造药材自然成长时间');
+
+const invalidGradeHtml = renderCavePage(catalogFixture, { plantFilters: { grade: '<script>', search: '' } });
+verify(/data-cave-plant-grade="1"[^>]*aria-pressed="true"/.test(invalidGradeHtml)
+  && !invalidGradeHtml.includes('<script>'), '非法本地品阶回退一阶，不插入动态代码');
+const escapedSearchHtml = renderCavePage(catalogFixture, { plantFilters: { grade: 'all', search: '\" onfocus=\"alert(1)' } });
+verify(escapedSearchHtml.includes('value="&quot; onfocus=&quot;alert(1)"')
+  && !escapedSearchHtml.includes('value="\" onfocus="'), '搜索输入值严格转义，不成为事件属性');
+verify(JSON.stringify(catalogFixture) === catalogBefore, '筛选不改变材料目录、行囊或灵田状态');
+
 console.log(`洞府纯展示契约：${checks} 项通过。`);

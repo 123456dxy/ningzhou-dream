@@ -36,6 +36,7 @@
 `tests/test_craft.cpp`、`test_equipment_task.cpp`、`test_material_sources.cpp`、`test_passive_life_travel.cpp`、`test_numeric_previews.cpp`；API 与收益另见 `test_api.cpp`、`test_renown_artifact_api.cpp`、`test_event_rewards.cpp`。测试统一编入 `ningzhou_tests`；此处仅列出已有覆盖入口。
 新增时长与月预算回归见 `tests/test_craft_timing.cpp`，包含真实核心 API、旧工作合同和同月余额保持。
 洞府灵田规则见 [灵田说明](../../../docs/CAVE_GARDEN.md)，定向批次/储备/日历回归为 `tests/test_cave_garden.cpp`。
+灵田真实日结算只计算下一日成长与费用，成熟时间预报仅在纯视图中隔离执行；两者共用单日报价值。性能定位与等价验证见 [时间流程性能记录](../../../docs/reviews/2026-10-13-time-performance.md)。
 丹方用途、稳定生境与丹炉资格闭环见 [药材取得说明](../../../docs/HERB_ACQUISITION.md)，全目录及真实动作回归为 `tests/test_herb_acquisition.cpp`。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。

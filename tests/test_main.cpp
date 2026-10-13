@@ -69,6 +69,7 @@ int main() {
     nztest::mfRunIntelPurchaseTests();
     nztest::mfRunPillEffectsTests();
     nztest::mfRunHerbAcquisitionTests();
+    nztest::mfRunTimePerformanceTests();
 
     const int f = nztest::failures();
     std::printf("\n===== 结果: %s（%d 项失败）=====\n",

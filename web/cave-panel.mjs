@@ -117,29 +117,73 @@ function renderReserve(plot, amount) {
     + `${plot.withdraw?.reason ? ` ${esc(plot.withdraw.reason)}` : ''}</p></div>`;
 }
 
+// 用途：约束本地灵田筛选项，不把非法缓存值传播到控件。
+// 流程：洞府纯展示入口接收根应用保存的筛选偏好。
+// 调用方式：传 grade、search；默认一阶、空搜索，库存范围由后端目录决定。
+// 返回值：独立筛选快照，不修改输入或服务器状态。
+function normalizePlantFilters(filters) {
+  const grade = String(filters?.grade ?? '1');
+  return { grade: grade === 'all' || /^[1-6]$/.test(grade) ? grade : '1',
+    search: String(filters?.search ?? '') };
+}
+
+// 用途：按品阶、名称缩小空田可选药材，后端目录仅列行囊已有材料。
+// 流程：所有空灵田复用一次筛选结果；已种田另从原目录锁定同种。
+// 调用方式：传权威材料目录及规范化筛选快照，只比较展示名称用于搜索。
+// 返回值：原目录条目的筛选数组，不计算成长、扣费或产出。
+function matchingPlantOptions(catalog, filters) {
+  const search = filters.search.trim().toLocaleLowerCase();
+  return catalog.filter(option => (filters.grade === 'all' || Number(option.grade) === Number(filters.grade))
+    && (!search || String(option.name ?? '').toLocaleLowerCase().includes(search)));
+}
+
+// 用途：提供空田药材品阶、名称筛选，不展开全目录。
+// 流程：灵田面板顶部；动作绑定与偏好保存由根应用负责。
+// 调用方式：传权威目录、筛选快照与匹配数；目录品阶和当前选中品阶保持可见。
+// 返回值：筛选 HTML，不产生请求或更新种植草稿。
+function renderPlantFilters(catalog, filters, matchingCount) {
+  const grades = [...new Set([...catalog.map(option => Number(option.grade)), Number(filters.grade)])]
+    .filter(grade => Number.isInteger(grade) && grade >= 1 && grade <= 6).sort((left, right) => left - right);
+  const gradeChoices = [{ value: 'all', label: '全部' }, ...grades.map(grade => ({ value: String(grade), label: `${grade} 阶` }))];
+  return `<div class="cave-plant-filters"><div class="cave-plant-filter-row"><span>药材品阶</span>`
+    + `<div class="cave-plant-grade-group" role="group" aria-label="灵田药材品阶">`
+    + gradeChoices.map(choice => `<button type="button" class="${filters.grade === choice.value ? 'is-active' : ''}"`
+      + ` data-cave-plant-grade="${choice.value}" aria-pressed="${filters.grade === choice.value}">${choice.label}</button>`).join('')
+    + `</div></div><div class="cave-plant-filter-row"><label class="cave-plant-search">搜索药材`
+    + `<input type="search" data-cave-plant-search value="${esc(filters.search)}" placeholder="输入药材名称" aria-label="搜索灵田药材"></label>`
+    + `<span class="cave-plant-match-count" aria-live="polite">匹配 ${matchingCount} 种药材</span></div>`
+    + `<p>仅列行囊已有药材。筛选用于空灵田；已种田固定显示同种药材，方便追加播种。</p></div>`;
+}
+
 // 用途：展示同格同种药材的补种选择和数量范围。
 // 流程：空灵田播种及已种田补充新批次。
-// 调用方式：传权威剩余容量和材料目录、当前本地草稿。
+// 调用方式：传权威剩余容量和材料目录、当前本地草稿及全局筛选结果。
 // 返回值：播种控件HTML；不用展示名判断药材，不计算扣料或产出。
-function renderPlantControls(plot, garden, choices) {
-  const options = (garden.plantOptions || []).filter(option => !plot.herbId || option.herbId === plot.herbId);
-  const selectedId = plot.herbId || (options.some(option => option.herbId === choices.herbId) ? choices.herbId
-    : options.find(option => Number(option.ownedCount) > 0)?.herbId || options[0]?.herbId || '');
+function renderPlantControls(plot, garden, choices, matchingOptions) {
+  const locked = !!plot.herbId;
+  const catalog = Array.isArray(garden.plantOptions) ? garden.plantOptions : [];
+  const lockedOption = locked ? catalog.find(option => option.herbId === plot.herbId) : null;
+  const options = locked ? [lockedOption || { herbId: plot.herbId, name: plot.name || '药材',
+    grade: plot.grade, ownedCount: 0 }] : matchingOptions;
+  const selectedId = locked ? plot.herbId : options.some(option => option.herbId === choices.herbId)
+    ? choices.herbId : options[0]?.herbId || '';
   const selected = options.find(option => option.herbId === selectedId);
   const capacity = Number(plot.remainingCapacity);
   const hasCapacity = Number.isSafeInteger(capacity) && capacity > 0;
   const count = inputCount(choices.count, hasCapacity ? Math.min(99, capacity) : 1);
-  const qualification = { enabled: plot.plantEnabled === true && !!selected && hasCapacity,
-    reason: plot.plantReason || (!hasCapacity ? '此格已满，收获后可以继续播种。' : '') };
+  const hasSeeds = Number(selected?.ownedCount) > 0;
+  const qualification = { enabled: plot.plantEnabled === true && !!selected && hasSeeds && hasCapacity,
+    reason: plot.plantReason || (!hasCapacity ? '此格已满，收获后可以继续播种。'
+      : !selected ? '没有符合当前筛选的药材。' : !hasSeeds ? '行囊中没有此药材，取得后可播种。' : '') };
   return `<div class="cave-plant-controls"><label>播种药材<select data-cave-plant-herb data-plot-id="${esc(plot.plotId)}"`
-    + ` ${options.length && hasCapacity ? '' : 'disabled'}>${options.length ? options.map(option => `<option value="${esc(option.herbId)}"`
+    + ` ${options.length && hasCapacity && !locked ? '' : 'disabled'}>${options.length ? options.map(option => `<option value="${esc(option.herbId)}"`
       + `${option.herbId === selectedId ? ' selected' : ''}>${esc(option.name)} · ${numberText(option.grade)} 阶 · 行囊 ${numberText(option.ownedCount)}</option>`).join('')
-      : '<option value="">没有可播种药材</option>'}</select></label>`
+      : '<option value="">没有符合筛选的药材</option>'}</select></label>`
     + `<label class="cave-plant-quantity">份数<input type="number" min="1" max="${hasCapacity ? Math.min(99, capacity) : 1}" step="1" value="${count}"`
     + ` data-cave-plant-count data-plot-id="${esc(plot.plotId)}" ${hasCapacity ? '' : 'disabled'} inputmode="numeric"></label>`
     + actionButton('cave-garden-plant', Number(plot.seedCount) > 0 ? '追加播种' : '播种', qualification,
       `data-plot-id="${esc(plot.plotId)}"`, 'primary') + '</div>'
-    + `<p>本格还可播种 ${numberText(plot.remainingCapacity)} 份${selected ? ` · ${esc(selected.name)}自然成长 ${numberText(selected.baseGrowthDays)} 天` : ''}`
+    + `<p>${locked ? '本格仅可追加同种药材 · ' : ''}本格还可播种 ${numberText(plot.remainingCapacity)} 份${selected?.baseGrowthDays != null ? ` · ${esc(selected.name)}自然成长 ${numberText(selected.baseGrowthDays)} 天` : ''}`
     + `${qualification.reason ? ` · ${esc(qualification.reason)}` : ''}</p>`;
 }
 
@@ -147,13 +191,13 @@ function renderPlantControls(plot, garden, choices) {
 // 流程：洞府灵田主面板。
 // 调用方式：传后端plot、garden及本地输入，不写调用方数组或对象。
 // 返回值：灵田卡HTML；清理动作由根入口确认，保留储备语义清晰可见。
-function renderPlot(plot, garden, choices) {
+function renderPlot(plot, garden, choices, matchingOptions) {
   const planted = Number(plot.seedCount) > 0;
   const ready = Number(plot.readyCount) > 0;
   return `<article class="cave-plot ${planted ? ready ? 'is-ready' : '' : 'is-empty'}" data-cave-plot="${esc(plot.plotId)}">`
     + `<div class="cave-plot-head"><h4>${planted ? esc(plot.name || '药材') : '空灵田'}</h4>`
     + `<span class="tag">${planted ? `${numberText(plot.grade)} 阶 · 已种 ${numberText(plot.seedCount)} / ${numberText(garden.plantsPerPlotLimit)}` : `可容纳 ${numberText(garden.plantsPerPlotLimit)} 份`}</span></div>`
-    + renderPlantControls(plot, garden, choices)
+    + renderPlantControls(plot, garden, choices, matchingOptions)
     + renderGrowth(plot, garden)
     + renderReserve(plot, choices.reserveAmount)
     + (planted ? `<div class="cave-plot-actions">${actionButton('cave-garden-clear', '清除种苗', plot.clear,
@@ -163,19 +207,23 @@ function renderPlot(plot, garden, choices) {
 
 // 用途：展示多格灵田与后台成长的共同规则。
 // 流程：洞府独立页主体。
-// 调用方式：传state与按plotId保存的本地输入草稿；权威状态缺失时明确占位。
+// 调用方式：传state、按plotId保存的本地输入和全局药材筛选；权威状态缺失时明确占位。
 // 返回值：灵田面板HTML，不对缺失状态进行客户端初始化。
-function renderGarden(state, plantSelections) {
+function renderGarden(state, plantSelections, plantFilters) {
   const garden = state.cave?.garden;
   if (!garden) return panel('灵田', '', '<div class="empty">正在读取洞府灵田……</div>');
   const plots = Array.isArray(garden.plots) ? garden.plots : [];
+  const catalog = Array.isArray(garden.plantOptions) ? garden.plantOptions : [];
+  const filters = normalizePlantFilters(plantFilters);
+  const matchingOptions = matchingPlantOptions(catalog, filters);
   return panel('灵田', `${numberText(garden.plotCountUnlocked)} 格已解锁`, `<div class="cave-section-body">`
     + `<div class="cave-garden-summary"><span>每格最多<strong>${numberText(garden.plantsPerPlotLimit)} 份种苗</strong></span>`
     + `<span>每份成熟产出<strong>${numberText(garden.harvestMultiplier)} 份药材</strong></span>`
     + `<span>小绿瓶<strong>${garden.hasGreenBottle === true ? '已持有' : '未持有'}</strong></span></div>`
     + `<p class="cave-section-intro">同一格只种同种药材；追加播种形成独立批次，不继承已有成熟进度。</p>`
     + (garden.accessReason ? `<p class="cave-access-note">${esc(garden.accessReason)}</p>` : '')
-    + `<div class="cave-plot-list">${plots.map(plot => renderPlot(plot, garden, plantSelections[plot.plotId] || {})).join('')
+    + renderPlantFilters(catalog, filters, matchingOptions.length)
+    + `<div class="cave-plot-list">${plots.map(plot => renderPlot(plot, garden, plantSelections[plot.plotId] || {}, matchingOptions)).join('')
       || '<div class="empty">灵田状态尚未就绪。</div>'}</div>`
     + `<p class="cave-training-note">${esc(garden.growthCostRule || '')}</p>`
     + `<button class="subtle" data-action="goto-tab" data-tab="chronicle">前往岁月纪事安排时间 →</button>`
@@ -201,13 +249,13 @@ function renderTraining(state) {
 
 // 用途：生成与功法、悟道、工坊分开的洞府独立页面。
 // 流程：桌面主导航选择洞府后，由根应用调用和绑定动作。
-// 调用方式：传权威state及本地草稿，supplyHtml仅接受既有配给渲染器生成的可信HTML。
+// 调用方式：传权威state及本地草稿和plantFilters；supplyHtml仅接受既有配给渲染器生成的可信HTML。
 // 返回值：整页HTML；没有进入/离开旗标、单次加速或炼丹炼器入口，不产生网络请求。
-export function renderCavePage(state, { supplyHtml = '', plantSelections = {} } = {}) {
+export function renderCavePage(state, { supplyHtml = '', plantSelections = {}, plantFilters = {} } = {}) {
   return `<div class="cave-page">`
     + heading('洞府', '安置修行居所，管理灵田、储备、配给与训练。', state.cave?.access?.atHome ? '在府' : '只读查看')
     + renderResidence(state)
-    + `<div class="cave-main-column">${renderGarden(state, plantSelections)}${renderTraining(state)}</div>`
+    + `<div class="cave-main-column">${renderGarden(state, plantSelections, plantFilters)}${renderTraining(state)}</div>`
     + (supplyHtml ? `<div class="cave-supply-section">${supplyHtml}</div>` : '')
     + '</div>';
 }
