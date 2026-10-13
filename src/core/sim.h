@@ -168,6 +168,7 @@ BreakthroughInfo breakthroughInfo(const Game& g);
 struct CreateOptions {
     string name = "沈知微";
     string gender = "女";
+    string portraitId;
     string talent = "sword";
     uint32_t seed = 20261004;
     vector<string> traits;              // 空则用 talent 预设
@@ -175,7 +176,8 @@ struct CreateOptions {
     // 建号面板允许「一个天赋都不选、点数全给属性」，
     // 这时不能再偷偷塞一个默认天赋，否则预算会超、建号静默退回默认值。
     bool traitsExplicit = false;
-    map<string, int> allocation;        // 空则按预算自动分配
+    map<string, int> allocation;        // 未显式给出时按预算自动分配
+    bool allocationExplicit = false;   // 明确给出空对象时保留零分配
     int budget = BASE_POINTS;
     string lifeId;
 };

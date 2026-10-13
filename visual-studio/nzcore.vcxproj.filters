@@ -16,9 +16,13 @@
 <Filter Include="Documentation"><UniqueIdentifier>{AE2AC09B-9066-5D3A-A645-411C5E60C371}</UniqueIdentifier></Filter>
 </ItemGroup><ItemGroup>
 <ClInclude Include="..\data\reference_tables.h"><Filter>Content Tables</Filter></ClInclude>
+<None Include="..\docs\ALCHEMY_ECONOMY.md"><Filter>Documentation</Filter></None>
 <None Include="..\docs\BACKEND_ARCHITECTURE.md"><Filter>Documentation</Filter></None>
+<None Include="..\docs\CODING_STANDARDS.md"><Filter>Documentation</Filter></None>
 <None Include="..\docs\CPP_API_INDEX.md"><Filter>Documentation</Filter></None>
 <None Include="..\docs\HTTP_API_REFERENCE.md"><Filter>Documentation</Filter></None>
+<None Include="..\docs\INITIAL_TALENTS.md"><Filter>Documentation</Filter></None>
+<None Include="..\docs\MANUAL_STUDY_AND_NPC_PILLS.md"><Filter>Documentation</Filter></None>
 <None Include="..\docs\mobile-frontend-v2.md"><Filter>Documentation</Filter></None>
 <None Include="..\docs\tianji-rollback-performance.md"><Filter>Documentation</Filter></None>
 <ClInclude Include="..\src\core\adventure.h"><Filter>Backend</Filter></ClInclude>
@@ -30,6 +34,7 @@
 <ClInclude Include="..\src\core\base.h"><Filter>Backend</Filter></ClInclude>
 <ClInclude Include="..\src\core\battle.h"><Filter>Backend</Filter></ClInclude>
 <ClInclude Include="..\src\core\calendar.h"><Filter>Backend</Filter></ClInclude>
+<ClInclude Include="..\src\core\character_build.h"><Filter>Backend</Filter></ClInclude>
 <ClInclude Include="..\src\core\checkpoint.h"><Filter>Backend</Filter></ClInclude>
 <ClCompile Include="..\src\core\combat\artifact.cpp"><Filter>Backend\combat</Filter></ClCompile>
 <ClCompile Include="..\src\core\combat\battle.cpp"><Filter>Backend\combat</Filter></ClCompile>
@@ -101,6 +106,8 @@
 <ClCompile Include="..\src\core\progression\arts.cpp"><Filter>Backend\progression</Filter></ClCompile>
 <ClCompile Include="..\src\core\progression\cultivate.cpp"><Filter>Backend\progression</Filter></ClCompile>
 <ClCompile Include="..\src\core\progression\legacy.cpp"><Filter>Backend\progression</Filter></ClCompile>
+<ClCompile Include="..\src\core\progression\manual_study.cpp"><Filter>Backend\progression</Filter></ClCompile>
+<ClInclude Include="..\src\core\progression\manual_study.h"><Filter>Backend\progression</Filter></ClInclude>
 <None Include="..\src\core\progression\README.md"><Filter>Backend\progression</Filter></None>
 <ClCompile Include="..\src\core\progression\talents.cpp"><Filter>Backend\progression</Filter></ClCompile>
 <ClCompile Include="..\src\core\pwhash.cpp"><Filter>Backend</Filter></ClCompile>
@@ -114,6 +121,7 @@
 <ClInclude Include="..\src\core\shop.h"><Filter>Backend</Filter></ClInclude>
 <ClInclude Include="..\src\core\sim.h"><Filter>Backend</Filter></ClInclude>
 <ClCompile Include="..\src\core\simulation\calendar.cpp"><Filter>Backend\simulation</Filter></ClCompile>
+<ClCompile Include="..\src\core\simulation\character_build.cpp"><Filter>Backend\simulation</Filter></ClCompile>
 <ClCompile Include="..\src\core\simulation\checkpoint.cpp"><Filter>Backend\simulation</Filter></ClCompile>
 <ClCompile Include="..\src\core\simulation\play.cpp"><Filter>Backend\simulation</Filter></ClCompile>
 <None Include="..\src\core\simulation\README.md"><Filter>Backend\simulation</Filter></None>
@@ -122,6 +130,8 @@
 <ClCompile Include="..\src\core\simulation\sim.cpp"><Filter>Backend\simulation</Filter></ClCompile>
 <ClCompile Include="..\src\core\simulation\tide.cpp"><Filter>Backend\simulation</Filter></ClCompile>
 <ClCompile Include="..\src\core\social\friendship.cpp"><Filter>Backend\social</Filter></ClCompile>
+<ClCompile Include="..\src\core\social\npc_consumables.cpp"><Filter>Backend\social</Filter></ClCompile>
+<ClInclude Include="..\src\core\social\npc_consumables.h"><Filter>Backend\social</Filter></ClInclude>
 <ClCompile Include="..\src\core\social\npc_learning.cpp"><Filter>Backend\social</Filter></ClCompile>
 <None Include="..\src\core\social\README.md"><Filter>Backend\social</Filter></None>
 <ClCompile Include="..\src\core\social\renown.cpp"><Filter>Backend\social</Filter></ClCompile>

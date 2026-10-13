@@ -13,6 +13,7 @@
 <ItemGroup>
 <ClInclude Include="..\tests\harness.h"/>
 <ClCompile Include="..\tests\test_adventure.cpp"/>
+<ClCompile Include="..\tests\test_alchemy_economy.cpp"/>
 <ClCompile Include="..\tests\test_api.cpp"/>
 <ClCompile Include="..\tests\test_api_refactor.cpp"/>
 <ClCompile Include="..\tests\test_artifact.cpp"/>
@@ -22,6 +23,7 @@
 <ClCompile Include="..\tests\test_battle_state.cpp"/>
 <ClCompile Include="..\tests\test_calendar.cpp"/>
 <ClCompile Include="..\tests\test_catalog_display.cpp"/>
+<ClCompile Include="..\tests\test_character_build.cpp"/>
 <ClCompile Include="..\tests\test_checkpoint.cpp"/>
 <ClCompile Include="..\tests\test_combat_design.cpp"/>
 <ClCompile Include="..\tests\test_combat_fixes.cpp"/>
@@ -54,6 +56,7 @@
 <ClCompile Include="..\tests\test_social_integrity.cpp"/>
 <ClCompile Include="..\tests\test_society.cpp"/>
 <ClCompile Include="..\tests\test_state_integrity.cpp"/>
+<ClCompile Include="..\tests\test_study_npc.cpp"/>
 <ClCompile Include="..\tests\test_talents.cpp"/>
 <ClCompile Include="..\tests\test_tianji.cpp"/>
 <ClCompile Include="..\tests\test_travel.cpp"/>

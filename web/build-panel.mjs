@@ -1,7 +1,7 @@
 // 宁州一梦 · C++ 版 — 建号面板
 //
 // 为什么单独写一个文件：建号是个"非游戏内"的状态机，
-// 把 34 项天赋和 5 项属性全列出来、实时算点数，逻辑不少，
+// 把全部天赋和 5 项属性列出来、实时算点数，逻辑不少，
 // 塞进 app.mjs 会让那个文件很难读。
 //
 // 设计：
@@ -11,6 +11,9 @@
 //   - 点「开始这一世」才真正建号，之前只是本地状态
 
 'use strict';
+
+import { buildRequest, defaultBuildPortrait, lockBuildPlan, matchesBuildPlan,
+  renderBuildPortraits, renderOpeningPreview } from './build-preview.mjs';
 
 // 随机道号：姓 + 单/双字名，风格偏清冷仙气，和 NPC 名字同一套用字。
 const SURNAMES = ['沈', '苏', '陆', '秦', '徐', '顾', '谢', '江', '萧', '林',
@@ -39,6 +42,12 @@ export function createBuildPanel({ onStart, onCancel }) {
   let name = randomName();
   let namesUsed = [];
   let gender = '女';
+  let portraitId = '';
+  let lockedPlan = null;
+  let checking = false;
+  let validationVersion = 0;
+  let optionsVersion = 0;
+  let loadingOptions = false;
   let traits = [];          // 已选天赋 id
   let alloc = {};           // 属性 id -> 点数
   let budget = 10;
@@ -48,8 +57,10 @@ export function createBuildPanel({ onStart, onCancel }) {
   let events = null;
   let starting = false;
   // 地图种子：决定这一世的初始资质/悟性与整个宁州。
-  // 0 表示「让服务端现摇一个」。
-  let seed = 0;
+  // 显式生成非零种子；build-options 对传入的 0 也会按固定种子处理。
+  let seed = Math.floor(Math.random() * 2000000000) + 1;
+
+  const draft = () => ({ name, gender, portraitId, seed, traits, allocation: alloc });
 
   // ---- 取选项 ----
   // 用途：读取当前建号预算与种子。
@@ -57,17 +68,39 @@ export function createBuildPanel({ onStart, onCancel }) {
   // 调用方式：面板挂载、重试或更换种子时调用。
   // 返回值：Promise；更新内部状态，无显式返回值。
   async function load() {
-    const r = await fetch('/api/build-options', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ seed }),
-    }).then(x => x.json()).catch(() => null);
+    const ticket = ++optionsVersion;
+    validationVersion++;
+    clearTimeout(timer);
+    loadingOptions = true;
+    checking = true;
+    lockedPlan = null;
+    check = { valid: false, error: '' };
+    paintActions();
+    paintInnate();
+    let r = null;
+    try {
+      const response = await fetch('/api/build-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seed }),
+      });
+      const result = await response.json();
+      if (response.ok && !result.error && Array.isArray(result.talents)
+          && Array.isArray(result.stats) && result.innate?.seed) r = result;
+    } catch { /* The retry panel below also handles unavailable or malformed responses. */ }
+    if (!root || ticket !== optionsVersion) return;
+    loadingOptions = false;
     if (r) {
       opts = r;
       budget = r.budget;
       // 服务端现摇的种子要记下来，建号时必须用同一个
       if (r.innate && r.innate.seed) seed = r.innate.seed;
+      if (!r.portraits?.some(portrait => portrait.id === portraitId && portrait.gender === gender)) {
+        portraitId = defaultBuildPortrait(r, gender);
+      }
     } else if (root) {
+      opts = null;
+      checking = false;
       root.innerHTML = `<div class="build-overlay"><div class="build-panel"><h2>无法读取建号数据</h2><p>请确认 C++ 服务还在运行，然后重试。</p><div class="build-actions"><button id="bp-retry">重试</button>${onCancel ? '<button id="bp-cancel">返回</button>' : ''}</div></div></div>`;
     }
   }
@@ -79,14 +112,47 @@ export function createBuildPanel({ onStart, onCancel }) {
   // 返回值：无返回值。
   function scheduleCheck() {
     clearTimeout(timer);
-    timer = setTimeout(async () => {
+    validationVersion++;
+    checking = true;
+    lockedPlan = null;
+    check = { valid: false, error: '' };
+    paintActions();
+    if (opts && !loadingOptions) timer = setTimeout(validateBuild, 90);
+  }
+
+  // Ignore old replies and unmounted panels; only the current full draft can be locked.
+  async function validateBuild() {
+    clearTimeout(timer);
+    const ticket = ++validationVersion;
+    checking = true;
+    paintActions();
+    try {
       const r = await fetch('/api/build-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ traits, allocation: alloc, budget }),
-      }).then(x => x.json()).catch(() => null);
-      if (r) { check = r; paintPoints(); paintActions(); }
-    }, 90);
+        body: JSON.stringify(buildRequest(draft())),
+      }).then(async response => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || '无法校验方案，请重试。');
+        return result;
+      });
+      if (!root || ticket !== validationVersion) return null;
+      check = r;
+      return r;
+    } catch (error) {
+      if (root && ticket === validationVersion) {
+        check = { valid: false, error: error.message || '无法校验，请确认服务还在运行后重试。' };
+        lockedPlan = null;
+      }
+      return null;
+    } finally {
+      if (root && ticket === validationVersion) {
+        checking = false;
+        paintPoints();
+        paintActions();
+        paintInnate();
+      }
+    }
   }
 
   // 本地即时估算，让界面不卡
@@ -135,12 +201,15 @@ export function createBuildPanel({ onStart, onCancel }) {
     const e = estimate();
     const over = e.remain < 0;
     const why = over ? `点数超支 ${-e.remain} 点，请减少天赋或属性。`
-                     : (check.error || '');
+                     : (checking ? '正在核对开局效果……' : check.error || '');
+    const locked = matchesBuildPlan(lockedPlan, draft());
     host.innerHTML =
-      `<span class="why">${why}</span>`
-    + `<button id="bp-reset">清空重来</button>`
+      `<span class="why">${esc(why)}</span>`
+    + `<button id="bp-reset" ${locked || starting ? 'disabled' : ''}>清空重来</button>`
     + (onCancel ? `<button id="bp-cancel">返回</button>` : '')
-    + `<button class="primary" id="bp-start" ${over || !name.trim() || starting ? 'disabled' : ''}>`
+    + (locked ? `<button id="bp-unlock" ${starting ? 'disabled' : ''}>解锁修改</button>`
+      : `<button id="bp-lock" ${over || !name.trim() || checking || starting || !check.valid ? 'disabled' : ''}>锁定方案并预览</button>`)
+    + `<button class="primary" id="bp-start" ${!locked || checking || over || !name.trim() || starting ? 'disabled' : ''}>`
     + `${starting ? '正在开辟……' : '开始这一世'}</button>`;
   }
 
@@ -159,14 +228,15 @@ export function createBuildPanel({ onStart, onCancel }) {
   // 调用方式：构筑加载完成或选择变化后无参调用。
   // 返回值：无返回值；修改面板宿主DOM。
   function render() {
-    if (!opts) return;
+    if (!opts || !root) return;
     const scrollTop = root.querySelector('.build-panel')?.scrollTop || 0;
     const active = document.activeElement;
     const focusSelector = active && root.contains(active)
       ? active.id ? `#${active.id}`
         : active.dataset.talent ? `[data-talent="${active.dataset.talent}"]`
         : active.dataset.alloc ? `[data-alloc="${active.dataset.alloc}"][data-d="${active.dataset.d}"]`
-        : active.dataset.gender ? `[data-gender="${active.dataset.gender}"]` : null
+        : active.dataset.gender ? `[data-gender="${active.dataset.gender}"]`
+        : active.dataset.buildPortrait ? `[data-build-portrait="${active.dataset.buildPortrait}"]` : null
       : null;
     const e = estimate();
 
@@ -195,7 +265,7 @@ export function createBuildPanel({ onStart, onCancel }) {
         const costCls = t.cost < 0 ? 'free' : (t.cost >= 6 ? 'bad' : '');
         const costText = t.cost < 0 ? `${t.cost}（退还）` : `${t.cost} 点`;
         return `<button class="talent-card ${picked ? 'picked' : ''} ${off ? 'off' : ''}" `
-          + `data-talent="${t.id}" title="${esc(t.effect)}">`
+          + `data-talent="${t.id}" title="${esc(t.effect)}" ${lockedPlan ? 'disabled' : ''}>`
           + `<div class="tc-head"><span class="tc-name">${esc(t.name)}</span>`
           + `<span class="tc-cost ${costCls}">${costText}</span></div>`
           + `<div class="tc-effect">${esc(t.effect)}</div></button>`;
@@ -214,9 +284,9 @@ export function createBuildPanel({ onStart, onCancel }) {
           ? `<br><span class="soft-cap">软上限：前 8 点每点 +6%，之后每点只 +2%，封顶 +72%</span>`
           : ''}</div>
         <div class="alloc-ctl">
-          <button data-alloc="${s.id}" data-d="1" ${v > 0 ? '' : 'disabled'}>−</button>
+          <button data-alloc="${s.id}" data-d="1" ${v > 0 && !lockedPlan ? '' : 'disabled'}>−</button>
           <span class="av">${v}</span>
-          <button data-alloc="${s.id}" data-d="-1" ${canAdd ? '' : 'disabled'}>+</button>
+          <button data-alloc="${s.id}" data-d="-1" ${canAdd && !lockedPlan ? '' : 'disabled'}>+</button>
           <span class="cap">/ ${s.max}</span>
         </div></div>`;
     }).join('');
@@ -251,13 +321,18 @@ export function createBuildPanel({ onStart, onCancel }) {
             <h3>道号与出身</h3>
             <div class="build-fields">
               <input type="text" id="bp-name" value="${esc(name)}"
-                     placeholder="道号" maxlength="12">
-              <button id="bp-name-reroll" title="随机一个道号">🎲 换一个</button>
+                     placeholder="道号" maxlength="12" ${lockedPlan ? 'disabled' : ''}>
+              <button id="bp-name-reroll" title="随机一个道号" ${lockedPlan ? 'disabled' : ''}>🎲 换一个</button>
               <div class="seg" id="bp-gender">
-                <button data-gender="女" class="${gender === '女' ? 'active' : ''}">女</button>
-                <button data-gender="男" class="${gender === '男' ? 'active' : ''}">男</button>
+                <button data-gender="女" class="${gender === '女' ? 'active' : ''}" ${lockedPlan ? 'disabled' : ''}>女</button>
+                <button data-gender="男" class="${gender === '男' ? 'active' : ''}" ${lockedPlan ? 'disabled' : ''}>男</button>
               </div>
             </div>
+          </div>
+
+          <div class="build-section"><h3>角色立绘</h3>
+            <p class="build-note">立绘只改变外观；门派、属性与天赋仍由建角方案决定。</p>
+            ${renderBuildPortraits(opts, portraitId, gender, !!lockedPlan)}
           </div>
 
           <div class="build-section">
@@ -266,11 +341,12 @@ export function createBuildPanel({ onStart, onCancel }) {
           </div>
 
           <div class="build-section">
-            <h3>属性分配 <span>剩余点数可以留到下一世，也可以在这里花掉</span></h3>
+            <h3>属性分配 <span>先天气运与种子固定；加点和天赋的实际效果在锁定后预览</span></h3>
             <div class="alloc-list">${allocHTML}</div>
           </div>
 
           <div class="build-preview">${preview}</div>
+          <div id="bp-opening-preview">${lockedPlan ? renderOpeningPreview(lockedPlan.preview) : '<p class="build-note">选好天赋和属性后，锁定方案查看实际开局效果，再开始这一世。</p>'}</div>
           <div class="build-actions" id="bp-actions"></div>
         </div>
       </div>`;
@@ -331,7 +407,7 @@ export function createBuildPanel({ onStart, onCancel }) {
     + `<em>初始 ${insLo}–${insHi} · 上限 ${inn.insightMax ?? 200}</em></div>`
     + `<div class="innate-seed"><label>地图种子</label>`
     + `<strong>${inn.seed ?? '—'}</strong>`
-    + `<button id="bp-reroll">换个种子</button></div>`;
+    + `<button id="bp-reroll" ${lockedPlan || checking ? 'disabled' : ''}>换个种子</button></div>`;
   }
 
   // ---- 事件 ----
@@ -347,7 +423,25 @@ export function createBuildPanel({ onStart, onCancel }) {
     // 返回值：Promise；真正建号结果由 onStart 完成。
     root.addEventListener('click', async ev => {
       if (starting) return;
-      if (ev.target.closest('#bp-retry')) { await load(); render(); return; }
+      if (ev.target.closest('button:disabled')) return;
+      if (ev.target.closest('#bp-retry')) { await load(); render(); scheduleCheck(); return; }
+      if (ev.target.closest('#bp-cancel') && onCancel) { onCancel(); return; }
+      if (loadingOptions) return;
+      if (ev.target.closest('#bp-unlock')) { lockedPlan = null; render(); return; }
+      if (ev.target.closest('#bp-lock')) {
+        const result = await validateBuild();
+        if (!root || !result) return;
+        lockedPlan = lockBuildPlan(draft(), result);
+        render();
+        if (lockedPlan) root.querySelector('#bp-opening-preview')?.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      if (lockedPlan && !ev.target.closest('#bp-start')) return;
+      const portrait = ev.target.closest('[data-build-portrait]');
+      if (portrait) {
+        portraitId = portrait.dataset.buildPortrait;
+        render(); scheduleCheck(); return;
+      }
       const t = ev.target.closest('[data-talent]');
       if (t) {
         const id = t.dataset.talent;
@@ -364,7 +458,11 @@ export function createBuildPanel({ onStart, onCancel }) {
       }
 
       const g = ev.target.closest('[data-gender]');
-      if (g) { gender = g.dataset.gender; render(); return; }
+      if (g) {
+        gender = g.dataset.gender;
+        portraitId = defaultBuildPortrait(opts, gender);
+        render(); scheduleCheck(); return;
+      }
 
       const a = ev.target.closest('[data-alloc]');
       if (a) {
@@ -396,33 +494,33 @@ export function createBuildPanel({ onStart, onCancel }) {
         name = randomName();
         namesUsed.push(name);
         render();
+        scheduleCheck();
         return;
       }
       if (ev.target.closest('#bp-reroll')) {
-      // 换一个种子：先天气运与地图都会跟着换
-      seed = Math.floor(Math.random() * 2000000000) + 1;
-      await load();
-      render();
-      return;
-    }
-    if (ev.target.closest('#bp-cancel') && onCancel) { onCancel(); return; }
+        // 换一个种子：先天气运与地图都会跟着换。
+        seed = Math.floor(Math.random() * 2000000000) + 1;
+        await load();
+        render();
+        scheduleCheck();
+        return;
+      }
 
       if (ev.target.closest('#bp-start')) {
         const e = estimate();
-        if (e.remain < 0) return;
+        if (e.remain < 0 || checking || !matchesBuildPlan(lockedPlan, draft())) return;
+        const submittedPlan = lockedPlan;
         starting = true; paintActions();
         clearTimeout(timer);
         // 最后再校验一次，确保服务端也认可
-        const r = await fetch('/api/build-check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ traits, allocation: alloc, budget }),
-        }).then(x => x.json()).catch(() => null);
+        const r = await validateBuild();
+        if (!root) return;
         if (!r || !r.valid) {
           check = r || { error: '无法校验，请确认服务还在运行后重试。' };
-          starting = false; paintActions(); return;
+          lockedPlan = null;
+          starting = false; render(); return;
         }
-        try { await onStart({ name: name.trim(), gender, traits, allocation: alloc, budget, seed }); }
+        try { await onStart(submittedPlan.request); }
         finally { starting = false; paintActions(); }
         return;
       }
@@ -433,9 +531,9 @@ export function createBuildPanel({ onStart, onCancel }) {
     // 调用方式：面板 input 事件自动触发。
     // 返回值：无返回值。
     root.addEventListener('input', ev => {
-      if (ev.target.id === 'bp-name') {
+      if (ev.target.id === 'bp-name' && !lockedPlan && !starting) {
         name = ev.target.value;
-        paintActions();
+        scheduleCheck();
       }
     }, { signal: events.signal });
   }
@@ -449,8 +547,10 @@ export function createBuildPanel({ onStart, onCancel }) {
     async mount(host) {
       root = host;
       await load();
+      if (!root) return;
       render();
       bind();
+      scheduleCheck();
     },
     // 用途：卸载建号面板。
     // 流程：撤销事件、清理防抖计时器并清空宿主。
@@ -459,6 +559,8 @@ export function createBuildPanel({ onStart, onCancel }) {
     unmount() {
       events?.abort();
       clearTimeout(timer);
+      validationVersion++;
+      optionsVersion++;
       if (root) root.innerHTML = '';
       root = null;
     },

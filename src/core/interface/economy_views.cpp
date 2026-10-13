@@ -143,6 +143,11 @@ void appendEconomyState(const Game& game, Value& state) {
             entry.set("desc", str(c.desc));
             entry.set("chance", num(c.chance));
             entry.set("output", num(c.output));
+            // 数量和收益仅由后端报价；期望收入不承诺成功或即时售出。
+            const int salePrice = shop::salePrice(game, "potion", c.id);
+            entry.set("sellPrice", num(salePrice));
+            entry.set("expectedOutput", num(c.chance * c.output));
+            entry.set("expectedSaleIncome", num(c.chance * c.output * salePrice));
             entry.set("stoneCost", num(c.stoneCost));
             entry.set("days", num(c.days));
             entry.set("enabled", Value(c.enabled));
@@ -184,6 +189,8 @@ void appendEconomyState(const Game& game, Value& state) {
         state.set("poison", std::move(entry));
     }
     state.set("marketCash", num(game.economy.marketCash));
+    state.set("marketBudget", num(ecoMarketBudget(game)));
+    state.set("marketTier", num(ecoMarketTier(game.player)));
     state.set("coreBuyPrice", num(shop::corePrice(game, true)));
     state.set("pillBuyPrice", num(shop::pillPrice(game, true)));
     {

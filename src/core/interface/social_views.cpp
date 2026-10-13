@@ -9,6 +9,7 @@
 #include "core/play.h"
 #include "core/conflict.h"
 #include "core/renown.h"
+#include "core/economy.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 
@@ -158,7 +159,9 @@ void appendSocialState(const Game& game, Value& state) {
         entry.set("buyDiscount", num(renown::buyDiscount(rn)));
         entry.set("sellBonus", num(renown::sellBonus(rn)));
         entry.set("sellLimit", num(renown::sellLimit(rn)));
-        entry.set("marketCashCap", num(renown::marketCashCap(rn)));
+        entry.set("marketCashCap", num(ecoMarketBudget(game)));
+        entry.set("marketTier", num(ecoMarketTier(game.player)));
+        entry.set("marketBudgetRule", str("声望基础额度与当前市场层级最高单枚丹药收购价取较高值，每月刷新；同月交易只扣减剩余资金。"));
         entry.set("firstImpression", num(renown::firstImpression(rn)));
         entry.set("libraryDiscount", num(renown::libraryDiscount(rn)));
         entry.set("stipendBonus", num(renown::stipendBonus(rn)));

@@ -1,5 +1,6 @@
 // 宁州一梦 · C++ 版 — 道友往来（实现）
 #include "core/friendship.h"
+#include "core/social/npc_consumables.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,6 +12,7 @@
 #include "core/play.h"
 #include "core/renown.h"
 #include "core/sim.h"
+#include "core/talents.h"
 #include "core/sword.h"
 #include "data/reference_tables.h"
 
@@ -226,6 +228,10 @@ GreetResult greet(Game& g, const string& npcId) {
     if (!p.sect.empty() && p.sect == n->sect) { delta += 2; why += "，同门之谊"; }
 
     delta = clampInt(delta, -6, 12);
+    if (delta > 0) {
+        delta += talentAffinityBonus(p);
+        if (talentAffinityBonus(p)) why += "，福缘深厚";
+    }
     addRelation(g, npcId, delta);
 
     r.ok = true;
@@ -314,6 +320,10 @@ GiftOutcome giftOutcome(const Game& g, const Npc& npc, int value,
     const int divisor = 1 + std::max(0, repeated - 2);
     o.affinity = static_cast<int>(std::floor(clampInt(delta, 1, 18) / static_cast<double>(divisor)));
     if (divisor > 1) why += "；本月反复赠礼，好感收益递减，交情不减";
+    if (o.affinity > 0 && talentAffinityBonus(p)) {
+        o.affinity += talentAffinityBonus(p);
+        why += "；福缘深厚，好感额外+2";
+    }
     o.credit = creditFromValue(value);
     o.reason = why;
     return o;
@@ -395,19 +405,8 @@ GiftResult giftItem(Game& g, const string& npcId, const string& kind,
     if (kind == "potion") {
         p.arts.potions[id] -= 1;
         n->bag["potion:" + id] += 1;
-        const auto* recipe = findRecipe(id);
-        const bool unused = std::find(n->pillsUsed.begin(), n->pillsUsed.end(), id) == n->pillsUsed.end();
-        if (recipe && recipe->grade <= 1 + n->stage / 3 && unused) {
-            Player proxy; static_cast<Person&>(proxy) = static_cast<const Person&>(*n);
-            const int effect = artPillEffect(proxy, *recipe).value;
-            bool used = false;
-            if (recipe->kind == "heal" && n->health < 100) { n->health = std::min(100, n->health + effect); used = true; }
-            else if (recipe->kind == "xp" && n->stage < 12 && n->xp < realmOf(n->stage).need) { n->xp = std::min(realmOf(n->stage).need, n->xp + effect); used = true; }
-            else if (recipe->kind == "apt" && n->apt < APT_MAX) { n->apt = std::min(APT_MAX, n->apt + effect); used = true; }
-            else if (recipe->kind == "insight" && n->insight < INSIGHT_MAX) { n->insight = std::min(INSIGHT_MAX, n->insight + effect); used = true; }
-            else if (recipe->kind == "life") { n->lifespan += effect; n->lifeBonus += effect; used = true; }
-            if (used) { n->bag["potion:" + id] -= 1; n->pillsUsed.push_back(id); r.text = n->name + "收下「" + name + "」并当即服用。"; }
-        }
+        if (npcUsePill(*n, id))
+            r.text = n->name + "收下「" + name + "」并当即服用。";
     }
     else if (kind == "herb") {
         p.arts.herbs[id] -= 1;

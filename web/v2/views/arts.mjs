@@ -13,9 +13,6 @@ const kindLabel = value => ({ attack: '攻击', sword: '剑术', human: '剑术'
 const queryOf = value => String(value || '').trim().toLocaleLowerCase();
 const matches = (query, ...values) => !query || values.filter(Boolean).join(' ').toLocaleLowerCase().includes(query);
 const searchField = (key, value, label) => `<label class="search-label">${esc(label)}<input type="search" data-input="${esc(key)}" value="${esc(value || '')}" placeholder="名称、大道或效果" autocomplete="off"></label>`;
-const compactList = (items, render, limit = 8) => `<div class="list">${items.slice(0, limit).map(render).join('')}</div>`
-  + (items.length > limit ? `<details><summary>展开其余 ${items.length - limit} 项</summary><div class="list">${items.slice(limit).map(render).join('')}</div></details>` : '');
-
 const selectControl = (id, label, entries, active) => `<label class="player-control"><span>${esc(label)}</span><select data-ui="${esc(id)}">${entries.map(([value, text]) => `<option value="${esc(value)}"${String(value) === String(active) ? ' selected' : ''}>${esc(text)}</option>`).join('')}</select></label>`;
 function continuation(state) {
   if (!state.job) return '';

@@ -12,9 +12,13 @@
 <Import Project="ningzhou.props"/>
 <ItemGroup>
 <ClInclude Include="..\data\reference_tables.h"/>
+<None Include="..\docs\ALCHEMY_ECONOMY.md"/>
 <None Include="..\docs\BACKEND_ARCHITECTURE.md"/>
+<None Include="..\docs\CODING_STANDARDS.md"/>
 <None Include="..\docs\CPP_API_INDEX.md"/>
 <None Include="..\docs\HTTP_API_REFERENCE.md"/>
+<None Include="..\docs\INITIAL_TALENTS.md"/>
+<None Include="..\docs\MANUAL_STUDY_AND_NPC_PILLS.md"/>
 <None Include="..\docs\mobile-frontend-v2.md"/>
 <None Include="..\docs\tianji-rollback-performance.md"/>
 <ClInclude Include="..\src\core\adventure.h"/>
@@ -26,6 +30,7 @@
 <ClInclude Include="..\src\core\base.h"/>
 <ClInclude Include="..\src\core\battle.h"/>
 <ClInclude Include="..\src\core\calendar.h"/>
+<ClInclude Include="..\src\core\character_build.h"/>
 <ClInclude Include="..\src\core\checkpoint.h"/>
 <ClCompile Include="..\src\core\combat\artifact.cpp"/>
 <ClCompile Include="..\src\core\combat\battle.cpp"/>
@@ -97,6 +102,8 @@
 <ClCompile Include="..\src\core\progression\arts.cpp"/>
 <ClCompile Include="..\src\core\progression\cultivate.cpp"/>
 <ClCompile Include="..\src\core\progression\legacy.cpp"/>
+<ClCompile Include="..\src\core\progression\manual_study.cpp"/>
+<ClInclude Include="..\src\core\progression\manual_study.h"/>
 <None Include="..\src\core\progression\README.md"/>
 <ClCompile Include="..\src\core\progression\talents.cpp"/>
 <ClCompile Include="..\src\core\pwhash.cpp"/>
@@ -110,6 +117,7 @@
 <ClInclude Include="..\src\core\shop.h"/>
 <ClInclude Include="..\src\core\sim.h"/>
 <ClCompile Include="..\src\core\simulation\calendar.cpp"/>
+<ClCompile Include="..\src\core\simulation\character_build.cpp"/>
 <ClCompile Include="..\src\core\simulation\checkpoint.cpp"/>
 <ClCompile Include="..\src\core\simulation\play.cpp"/>
 <None Include="..\src\core\simulation\README.md"/>
@@ -118,6 +126,8 @@
 <ClCompile Include="..\src\core\simulation\sim.cpp"/>
 <ClCompile Include="..\src\core\simulation\tide.cpp"/>
 <ClCompile Include="..\src\core\social\friendship.cpp"/>
+<ClCompile Include="..\src\core\social\npc_consumables.cpp"/>
+<ClInclude Include="..\src\core\social\npc_consumables.h"/>
 <ClCompile Include="..\src\core\social\npc_learning.cpp"/>
 <None Include="..\src\core\social\README.md"/>
 <ClCompile Include="..\src\core\social\renown.cpp"/>

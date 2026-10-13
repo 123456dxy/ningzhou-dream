@@ -134,7 +134,7 @@ Build buildCharacter(const vector<string>& traits,
     for (const auto& id : traits) spent += findTalent(id)->cost;
     for (const auto& [k, v] : points) spent += v;
     if (spent > budget)
-        throw std::invalid_argument("天赋点不足，请减少天赋或属性分配。");
+        throw std::invalid_argument("点数超支 " + std::to_string(spent - budget) + " 点，请减少天赋或属性分配。");
 
     auto has = [&](const char* id) {
         return std::find(traits.begin(), traits.end(), string(id)) != traits.end();

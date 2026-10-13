@@ -10,7 +10,7 @@ import { createApi, ApiError } from '../web/v2/api.mjs';
 import { createStore } from '../web/v2/store.mjs';
 import { createRouter, parseRoute } from '../web/v2/router.mjs';
 import { esc, action, uiButton, card, numericPreview } from '../web/v2/ui.mjs';
-import { renderBattle, renderDungeon } from '../web/v2/views/battle.mjs';
+import { renderBattle, renderBattleDetail, renderDungeon } from '../web/v2/views/battle.mjs';
 import { renderCreate } from '../web/v2/views/create.mjs';
 import { renderHome } from '../web/v2/views/home.mjs';
 import { renderMap } from '../web/v2/views/map.mjs';
@@ -311,9 +311,23 @@ if(process.argv.includes('--dom')) {
       await set(action(hostile,'gift',{npc:hostile}));assert.equal(await page.locator('script,img').count(),0);assert.equal(await page.evaluate(()=>globalThis.XSS),undefined);
       assert.deepEqual((await commands())[0].body,{npc:hostile});assert.equal(await page.locator('button').textContent(),hostile);
     });
-    await domTest('ordinary battle submits unique card UID and distinct artifact identifier',async()=>{
-      await set(renderBattle({...state,battle}));const all=await commands();assert.ok(all.some(x=>x.path==='battle/turn'&&x.body.id==='card-uid-1'));assert.ok(all.some(x=>x.body.id==='artifact:gear1'));
-      assert.ok(!all.some(x=>x.body.id==='spell-definition-1'));assert.ok(all.some(x=>x.body.id==='end'));assert.ok(all.some(x=>x.body.id==='escape'));
+    await domTest('ordinary battle submits unique card UID and exposes detail entry points',async()=>{
+      await set(renderBattle({...state,battle}));const all=await commands();
+      assert.ok(all.some(x=>x.path==='battle/turn'&&x.body.id==='card-uid-1'&&!x.disabled));
+      assert.ok(!all.some(x=>x.body.id==='spell-definition-1'));
+      assert.ok(all.some(x=>x.path==='battle/turn'&&x.body.id==='end'));
+      assert.equal(await page.locator('[data-ui="combat-detail"][data-value="artifacts"]').count(),1);
+      assert.equal(await page.locator('[data-ui="combat-detail"][data-value="more"]').count(),1);
+    });
+    await domTest('battle detail submits the artifact ID, respects cooldown, and exposes retreat',async()=>{
+      const detail=renderBattleDetail({...state,battle},'artifacts');assert.ok(detail);
+      await set(detail.content);let all=await commands();assert.equal(all.length,1);
+      assert.equal(all[0].path,'battle/turn');assert.deepEqual(all[0].body,{id:'artifact:gear1'});assert.equal(all[0].disabled,false);
+      const unavailable={...battle,artifacts:[{...battle.artifacts[0],playable:false,cooldownRemaining:1,reason:'法宝冷却中'}]};
+      await set(renderBattleDetail({...state,battle:unavailable},'artifacts').content);
+      assert.equal((await commands())[0].disabled,true);assert.ok((await page.locator('main').textContent()).includes('法宝冷却中'));
+      await set(renderBattleDetail({...state,battle},'more').content);all=await commands();
+      assert.equal(all.length,1);assert.equal(all[0].path,'battle/turn');assert.deepEqual(all[0].body,{id:'escape'});assert.equal(all[0].disabled,false);
     });
     await domTest('unplayable target card cannot open an actionable target selector',async()=>{
       await set(renderBattle({...state,battle}));const target=page.locator('[data-ui="battle-target"][data-value="target-uid"]');assert.ok(await target.count()===0 || await target.isDisabled());
@@ -322,16 +336,29 @@ if(process.argv.includes('--dom')) {
       await set(renderBattle({...state,battle}));assert.ok(!(await page.locator('.actor.enemy').textContent()).includes('-10'));assert.equal(battle.enemyHp,-10);assert.ok((await page.locator('main').textContent()).includes('原始战报敌方气血 -10'));
     });
     await domTest('travel commands preserve destination/mode/begin and disabled sea walking',async()=>{
-      await set(renderMap(state,{mapFocus:'sea'}));const all=(await commands()).filter(x=>x.path==='travel');assert.equal(all.length,2);
-      assert.deepEqual(all.find(x=>x.body.mode==='boat').body,{to:'sea',mode:'boat',begin:true});assert.equal(all.find(x=>x.body.mode==='walk').disabled,true);assert.equal(all.find(x=>x.body.mode==='boat').disabled,false);
+      await set(renderMap(state,{mapFocus:'sea'}));
+      assert.deepEqual(await page.locator('[data-ui="travel-mode"] option').evaluateAll(options=>options.map(o=>o.value)),['walk','boat']);
+      const checkTravel=async(mode,disabled)=>{
+        const all=(await commands()).filter(x=>x.path==='travel');assert.equal(all.length,1);
+        assert.deepEqual(all[0].body,{to:'sea',mode,begin:true});assert.equal(all[0].disabled,disabled);
+        assert.equal(await page.locator('[data-ui="travel-mode"]').inputValue(),mode);
+        if(disabled)assert.ok((await page.locator('.local-action-description').textContent()).includes('无步行通路'));
+      };
+      await checkTravel('walk',true);
+      // The view is pure: feed the actual select value back through the same UI state field.
+      for(const mode of ['boat','walk']){
+        await page.locator('[data-ui="travel-mode"]').selectOption(mode);
+        const travelMode=await page.locator('[data-ui="travel-mode"]').inputValue();
+        await set(renderMap(state,{mapFocus:'sea',travelMode}));await checkTravel(mode,mode==='walk');
+      }
     });
     await domTest('invalid new-life build keeps actual submit disabled',async()=>{
       const ui={build:{name:'甲',traits:[],allocation:{}}},data={buildOptions:{budget:10,talents:[],stats:[]},buildCheck:{valid:false,error:'互斥'}};
       await set(renderCreate(ui,data));assert.equal(await page.locator('[data-ui="start-life"]').isDisabled(),true);assert.ok((await page.locator('main').textContent()).includes('互斥'));
     });
-    await domTest('valid new-life build enables submit and cancel has no game command',async()=>{
+    await domTest('valid draft requires lock and cancel has no game command',async()=>{
       await set(renderCreate({build:{name:'甲',traits:[],allocation:{}}},{buildOptions:{budget:10,talents:[],stats:[]},buildCheck:{valid:true,remain:10}}));
-      assert.equal(await page.locator('[data-ui="start-life"]').isDisabled(),false);assert.equal(await page.locator('[data-ui="cancel-build"]').getAttribute('data-command'),null);
+      assert.equal(await page.locator('[data-ui="start-life"]').isDisabled(),true);assert.equal(await page.locator('[data-ui="build-lock"]').isDisabled(),false);assert.equal(await page.locator('[data-ui="cancel-build"]').getAttribute('data-command'),null);
     });
     await domTest('Tianji commands carry encounter revision and never ordinary battle path',async()=>{
       await set(renderTianji(state,{}, {tianji:active}));const all=await commands();assert.ok(!all.some(x=>x.path==='battle/turn'));

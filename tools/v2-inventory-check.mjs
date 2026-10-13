@@ -22,6 +22,7 @@ const { esc } = await import(pathToFileURL(join(root, 'web/v2/ui.mjs')));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const temporary = await mkdtemp(join(tmpdir(), 'ningzhou-v2-inventory-'));
 let server, serverError, interrupted, origin, cookie = '', renderCases = 0, requests = 0, lastRequestAt = 0;
+const purchaseFunding = [];
 
 function interrupt(signal) {
   interrupted = signal;
@@ -32,7 +33,7 @@ const onTerminate = () => interrupt('SIGTERM');
 process.on('SIGINT', onInterrupt);
 process.on('SIGTERM', onTerminate);
 
-async function api(path, body = {}) {
+async function api(path, body = {}, expectedError = null) {
   assert.ok(!interrupted, 'test interrupted');
   await delay(Math.max(0, 75 - (Date.now() - lastRequestAt)));
   lastRequestAt = Date.now();
@@ -48,9 +49,35 @@ async function api(path, body = {}) {
     if (response.headers.has('set-cookie')) cookie = response.headers.get('set-cookie').split(';')[0];
     const result = await response.json();
     // Do not print request bodies, credentials, session IDs or full game states.
-    assert.ok(response.ok && result.ok !== false && !result.error, `${path}: ${result.error || response.status}`);
+    if (expectedError) {
+      assert.ok(!response.ok || result.ok === false || result.error, `${path}: expected rejection`);
+      assert.match(result.error || '', expectedError, `${path}: expected rejection reason`);
+    } else assert.ok(response.ok && result.ok !== false && !result.error, `${path}: ${result.error || response.status}`);
     return result;
   } finally { clearTimeout(timer); }
+}
+
+// Rendering acquired items is independent of opening-wallet balance. Fund only
+// the shortage through this disposable account's real export/import endpoints;
+// leave market quotes, realm, stock and all item eligibility untouched.
+async function fundPurchase(state, offer) {
+  assert.ok(offer && Number.isFinite(offer.price) && offer.price > 0, 'server quotes a purchasable item');
+  if (state.player.stones >= offer.price) return state;
+  const request = { kind: offer.kind, id: offer.id, count: 1 };
+  await api('buy', request, /灵石/);
+  const rejectedState = (await api('state')).state;
+  assert.equal(rejectedState.player.stones, state.player.stones, 'unaffordable buy cannot spend money');
+  assert.deepEqual(rejectedState.arts.potions, state.arts.potions, 'unaffordable buy cannot grant a pill');
+  const saved = JSON.parse((await api('export')).game);
+  assert.equal(saved.player.stones, state.player.stones);
+  saved.player.stones = offer.price;
+  const funded = (await api('import', { game: JSON.stringify(saved) })).state;
+  const currentOffer = funded.market.find(item => item.kind === offer.kind && item.id === offer.id);
+  assert.equal(currentOffer?.price, offer.price, 'funding preserves the authoritative price');
+  assert.equal(funded.player.stage, state.player.stage, 'funding never bypasses realm eligibility');
+  assert.equal(funded.player.stones, offer.price, 'fixture receives only the exact purchase price');
+  purchaseFunding.push({ kind: offer.kind, id: offer.id, openingStones: state.player.stones, price: offer.price });
+  return funded;
 }
 
 function freeze(value) {
@@ -182,9 +209,16 @@ try {
   assert.ok(renderArts(withSource, { artsTab: 'spells', spellFilter: 'learnable' }, data).includes('data-command="library/spell"'));
 
   // Buy a real pill in the disposable game and use authoritative current-player data.
-  const potion = state.market.find(item => item.kind === 'potion' && item.price <= state.player.stones);
-  assert.ok(potion);
+  const potion = state.market.filter(item => item.kind === 'potion').sort((a, b) => a.price - b.price)[0];
+  assert.ok(potion, 'server market offers a pill at the opening realm');
+  if (potion.price > state.player.stones) {
+    const openingMarket = renderInventory(state, { inventoryTab: 'market', marketItem: 'potion:' + potion.id }, data);
+    assert.ok(disabled(button(openingMarket, 'data-command', 'buy')), 'real opening funds disable an unaffordable pill');
+  }
+  const purchaseState = await fundPurchase(state, potion);
   const potionState = (await api('buy', { kind: 'potion', id: potion.id, count: 1 })).state;
+  assert.equal(potionState.player.stones, purchaseState.player.stones - potion.price, 'real purchase deducts the full server quote');
+  assert.equal(potionState.arts.potions[potion.id], (purchaseState.arts.potions[potion.id] || 0) + 1, 'real purchase adds exactly one pill');
   const potionHTML = valid(renderInventory(potionState, { inventoryTab: 'bag', inventoryKind: 'potions' }, data), 'purchased potion');
   const actualPill = potionState.pillCatalog.find(item => item.id === potion.id);
   assert.ok(potionHTML.includes(potion.name) && potionHTML.includes(esc(actualPill.effect)));
@@ -277,8 +311,8 @@ try {
   assert.ok(!renderArts(state, { artsTab: 'spells', spellSearch: hostile }, data).includes('<img'));
   assert.equal(renderCases, 54);
   console.log(JSON.stringify({
-    suite: 'v2-inventory-check', passed: true, renderCases, httpRequests: requests,
-    coverage: ['owned item grouping', 'search and filters', 'focused Dao', 'learned spell default', 'source-based learning', 'authoritative pills and quotes', 'gear confirmation boundary', 'stable equipped item selection', 'job/dungeon locks', 'HTML escaping', 'pure frozen-state rendering', 'single selected detail', 'stable eligibility changes', 'local job continuation', 'depleted item retention', 'market affordability retention', 'receipt isolation', 'unquoted supply recovery'],
+    suite: 'v2-inventory-check', passed: true, renderCases, httpRequests: requests, purchaseFunding,
+    coverage: ['owned item grouping', 'search and filters', 'focused Dao', 'learned spell default', 'source-based learning', 'authoritative pills and quotes', 'real affordability rejection and exact quoted payment', 'gear confirmation boundary', 'stable equipped item selection', 'job/dungeon locks', 'HTML escaping', 'pure frozen-state rendering', 'single selected detail', 'stable eligibility changes', 'local job continuation', 'depleted item retention', 'market affordability retention', 'receipt isolation', 'unquoted supply recovery'],
     isolation: 'fresh disposable server/account; no existing server or browser used',
   }));
 } catch (error) {

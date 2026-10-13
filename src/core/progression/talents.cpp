@@ -8,6 +8,10 @@
 
 namespace nz {
 
+int talentAffinityBonus(const Player& player) {
+    return hasTalent(player, "luck") ? 2 : 0;
+}
+
 // 用途：查询先天道体的修炼速度乘数。
 // 参与流程：基础修炼速度汇总。
 // 使用方式：传角色只读状态。

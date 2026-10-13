@@ -93,5 +93,8 @@ void runCombatFixTests();
 void runPlayerFixTests();
 void runCraftingFixTests();
 void runCatalogDisplayTests();
+void runCharacterBuildTests();
+void runAlchemyEconomyTests();
+void runStudyNpcTests();
 
 } // namespace nztest

@@ -12,6 +12,7 @@ import {renderHome} from './views/home.mjs';
 import {renderMap,renderMapPicker} from './views/map.mjs';
 import {renderBattle,renderDungeon,renderBattleDetail} from './views/battle.mjs';
 import {renderCreate} from './views/create.mjs';
+import {buildRequest,buildKey,defaultBuildPortrait,lockBuildPlan,matchesBuildPlan} from '../build-preview.mjs';
 import {renderInventory} from './views/inventory.mjs';
 import {renderArts} from './views/arts.mjs';
 import {renderSocial,renderFriendPicker} from './views/social.mjs';
@@ -95,7 +96,7 @@ async function mutate(path,body={},opts={}){if(api.busy)return;if(store.get().ui
   if(!opts.quiet||result.checkpointWarning)toast(result.checkpointWarning||(path==='craft'?store.get().outcome?.text:'')||result.text||(result.report?`已推进 ${result.report.daysPassed} 天`:path==='save'?`已保存到存档位 ${body.slot}`:'进度已更新'));
   return result;
 }catch(e){if(e.uncertain&&!path.startsWith('tianji/')&&!opts.retry)store.ui({reconciling:true});await handleError(e);if(e.status!==401){if(path.startsWith('tianji/')||opts.retry)await loadData('tianji','tianji/status',{},'GET',true);else if(e.uncertain||e.status===409)await refreshState();}return null;}}
-async function loadData(key,path,body={},method='POST',force=false){const {revision,ui}=store.get(),who=account(),id=`${revision}:${who}:${key}:${loadSerial}:${JSON.stringify(body)}`;if(!force&&store.get().data[key]!=null)return store.get().data[key];if(loading.has(id))return loading.get(id);const serial=loadSerial,ticket=Symbol(key);latestRead.set(key,ticket);
+async function loadData(key,path,body={},method='POST',force=false){const {revision}=store.get(),who=account(),id=`${revision}:${who}:${key}:${loadSerial}:${JSON.stringify(body)}`;if(!force&&store.get().data[key]!=null)return store.get().data[key];if(loading.has(id))return loading.get(id);const serial=loadSerial,ticket=Symbol(key);latestRead.set(key,ticket);
   const isCurrent=()=>store.get().revision===revision&&account()===who&&serial===loadSerial&&latestRead.get(key)===ticket&&(!body.npc||store.get().ui.friend===body.npc);
   const work=(async()=>{try{const result=await api.read(path,body,method);if(!isCurrent())return null;
     const patch={[key]:result};if(body.npc)patch[key+'Npc']=body.npc;
@@ -109,8 +110,76 @@ async function ensureViewData(){const {state:s,ui}=store.get();if(!s||ui.build||
   if(ui.route==='social'){if(ui.social==='tianji'){await loadData('tianji','tianji/status',{},'GET');if(ui.tianjiTab==='board')await loadData('tianjiBoard','tianji/board',{},'GET');}else if(ui.social==='sects')await Promise.all([loadData('sects','sects'),loadData('economy','eco-options')]);else{await loadData('roster','roster',{sort:'relation',strangers:false});let npc=store.get().ui.friend;if(!s.nearby?.some(x=>x.id===npc)){npc=[...(s.nearby||[])].sort((a,b)=>Number(b.relation||0)-Number(a.relation||0))[0]?.id;if(npc)store.ui({friend:npc});}if(npc)await Promise.all([loadData('friendActions','social-actions',{npc}),loadData('friendBag','npc-bag',{npc})]);}}
 }
 async function refreshForge(){const forge=store.get().ui.forge;if(forge)await loadData('forgePreview','forge-preview',forge,'POST',true);}
-async function openBuild(){closeSheet();const build={name:store.get().state?.player?.name||account()||'沈知微',gender:'女',traits:[],allocation:{},seed:0};store.ui({build,buildChecking:true});const opts=await loadData('buildOptions','build-options',{seed:0},'POST',true);if(opts?.innate&&store.get().ui.build){store.ui({build:{...store.get().ui.build,seed:opts.innate.seed}});await checkBuild();}}
-async function checkBuild(){clearTimeout(buildTimer);const serial=++buildSerial,b=store.get().ui.build;if(!b)return;store.ui({buildChecking:true});try{const result=await api.read('build-check',{traits:b.traits,allocation:b.allocation});if(serial!==buildSerial||!store.get().ui.build)return;store.patch({data:{...store.get().data,buildCheck:result},ui:{...store.get().ui,buildChecking:false}});}catch(e){if(serial===buildSerial){store.ui({buildChecking:false});await handleError(e);}}}
+function nextBuildSeed(previous = 0) {
+  const seed = Math.floor(Math.random() * 2000000000) + 1;
+  return seed === previous ? seed % 2000000000 + 1 : seed;
+}
+
+async function loadBuildOptions(seed) {
+  const serial = ++buildSerial, who = account();
+  if (!store.get().ui.build) return;
+  const isCurrent = () => serial === buildSerial && who === account() && !!store.get().ui.build;
+  store.ui({ buildChecking: true, buildOptionsLoading: true, buildOptionsError: '' });
+  try {
+    const options = await api.read('build-options', { seed });
+    if (!isCurrent()) return;
+    if (!options?.innate || options.innate.seed !== seed || !Array.isArray(options.portraits))
+      throw new Error('建角选项未完整返回，请重试。');
+    const build = store.get().ui.build;
+    const portraitId = options.portraits.some(p => p.id === build.portraitId && p.gender === build.gender)
+      ? build.portraitId : defaultBuildPortrait(options, build.gender);
+    store.patch({ data: { ...store.get().data, buildOptions: options, buildCheck: null },
+      ui: { ...store.get().ui, build: { ...build, seed, portraitId }, buildOptionsLoading: false } });
+    await checkBuild();
+  } catch (error) {
+    if (!isCurrent()) return;
+    store.ui({ buildChecking: false, buildOptionsLoading: false, buildOptionsError: error.message });
+    await handleError(error);
+  }
+}
+
+async function openBuild() {
+  closeSheet();
+  clearTimeout(buildTimer);
+  const build = { name: store.get().state?.player?.name || account() || '沈知微', gender: '女',
+    portraitId: '', traits: [], allocation: {}, seed: nextBuildSeed() };
+  store.patch({ ui: { ...store.get().ui, build, buildPlan: null, buildChecking: true,
+      buildOptionsLoading: true, buildOptionsError: '' },
+    data: { ...store.get().data, buildCheck: null, buildOptions: null } });
+  await loadBuildOptions(build.seed);
+}
+
+async function checkBuild() {
+  clearTimeout(buildTimer);
+  const serial = ++buildSerial;
+  const build = store.get().ui.build;
+  if (!build) return null;
+  const key = buildKey(build);
+  store.ui({ buildChecking: true });
+  try {
+    const result = await api.read('build-check', buildRequest(build));
+    if (serial !== buildSerial || !store.get().ui.build || key !== buildKey(store.get().ui.build)) return null;
+    store.patch({ data: { ...store.get().data, buildCheck: result },
+      ui: { ...store.get().ui, buildChecking: false, ...(result.valid ? {} : { buildPlan: null }) } });
+    return result;
+  } catch (error) {
+    if (serial === buildSerial && store.get().ui.build) {
+      store.patch({ data: { ...store.get().data, buildCheck: { valid: false, error: error.message } },
+        ui: { ...store.get().ui, buildChecking: false, buildPlan: null } });
+      await handleError(error);
+    }
+    return null;
+  }
+}
+
+function editBuild(patch, notify = true) {
+  const current = store.get();
+  if (!current.ui.build || current.ui.buildPlan || current.ui.buildOptionsLoading || api.busy) return false;
+  buildSerial++;
+  store.patch({ data: { ...current.data, buildCheck: null },
+    ui: { ...current.ui, build: { ...current.ui.build, ...patch }, buildPlan: null, buildChecking: true } }, notify);
+  return true;
+}
 async function openSettings(){showSheet('存档与设置',empty('正在读取存档位……'),'settings');const result=await api.read('slots').catch(handleError);if(!result||sheet.dataset.kind!=='settings')return;const s=store.get().state;showSheet('存档与设置',`<p class="meta account-name">当前道号：${esc(account())}</p><p class="notice">保存会覆盖所选位置；读取会替换当前人生。自动位仅供读取。</p><div class="list">${(result.slots||[]).map(x=>`<article class="list-item"><div><h3>${x.automatic?'十年自动存档':'存档位 '+esc(x.slot)}</h3><p class="meta">${x.exists?`${esc(x.name)} · ${esc(x.realm)} · ${fmt(x.age)} 岁`:'空存档位'}</p></div><div class="row">${!x.automatic?(x.exists?uiButton('覆盖保存','confirm-save',x.slot):action('保存','save',{slot:x.slot},{disabled:!s})):''}${x.exists?uiButton('读取','confirm-load',x.slot):''}</div></article>`).join('')}</div><div class="divider"></div><div class="stack">${uiButton('导出行卷备份','export')}${uiButton('导入行卷','import')}${uiButton('修改密码','password')}${uiButton('切换道号','logout')}${legacyLink('经典界面 · 全部功能')}</div><p class="meta">经典界面与新版共用服务器存档，无须迁移。离开此页不会自动认输。</p>`,'settings');}
 function confirmAction(title,text,path,body){showSheet(title,`<p>${esc(text)}</p><div class="row">${uiButton('取消','close-sheet')}${action('确认',''+path,body,{className:'primary'})}</div>`,'confirm');}
 function openMenu(){showSheet('行囊之外',`<div class="stack">${uiButton('身世与状态','character')}${uiButton('存档与设置','settings')}${uiButton('刷新服务器进度','refresh')}${uiButton('再开一世','new-life')}${uiButton('当前功能范围','coverage')}${legacyLink('经典界面 · 全部功能')}</div>`,'menu');}
@@ -137,10 +206,38 @@ async function onUI(id,value,target){const {ui,state:s}=store.get();
   if(id==='gear-confirm-salvage'||id==='gear-confirm-sell'){const gear=s?.gears?.find(x=>x.id===value);if(!gear)return;const quote=gear.actions?.[id==='gear-confirm-salvage'?'salvage':'sell'];confirmAction(id==='gear-confirm-salvage'?'分解法器':'出售法器',`将永久失去「${gear.name}」。${Number.isFinite(quote?.returnStones)?`回收 ${quote.returnStones} 灵石。`:'回收金额待核心结算，当前接口未提供报价。'}`,id==='gear-confirm-salvage'?'gear/salvage':'sell',{...(id==='gear-confirm-sell'?{kind:'gear'}:{}),id:gear.id});return;}
   if(id==='close-sheet'){closeSheet();return;}if(id==='menu'){openMenu();return;}if(id==='settings'){await openSettings();return;}if(id==='character'){openCharacter();return;}if(id==='plans'){openPlans();return;}
   if(id==='new-life'){if(s?.ended&&!endingSettled(s,store.get().data,store.get().settlement)){showSheet('先结算这一世',`<p>本世收获尚未确认结算，直接新建会替换当前人生。</p><div class="stack">${action('先结算本世收获','legacy/settle',{}, {className:'primary'})}${uiButton('确认放弃收获，继续建号','open-build')}</div>`,'new-confirm');}else if(s&&!s.ended){showSheet('另写一世',`<p>新人生会替换当前进度。请选择存档位置保存，或导出备份，再开始下一世。</p><div class="stack">${uiButton('选择存档位置 / 导出','settings')}${uiButton('已备份，继续建号','open-build','','primary')}</div>`,'new-confirm');}else await openBuild();return;}
-  if(id==='open-build'){await openBuild();return;}if(id==='cancel-build'){buildSerial++;store.ui({build:null,buildChecking:false});return;}
-  if(id==='build-trait'){const traits=ui.build.traits.includes(value)?ui.build.traits.filter(x=>x!==value):[...ui.build.traits,value];store.ui({build:{...ui.build,traits}});await checkBuild();return;}
-  if(id==='build-alloc'){const allocation={...ui.build.allocation,[value]:Math.max(0,(ui.build.allocation[value]||0)+Number(target.dataset.delta))};store.ui({build:{...ui.build,allocation}});await checkBuild();return;}
-  if(id==='start-life'){if(ui.buildChecking||store.get().data.buildCheck?.valid!==true||!ui.build?.name.trim())return;const result=await mutate('new',ui.build);if(result){router.go('home');window.scrollTo({top:0,behavior:'instant'});document.querySelector('#main')?.focus({preventScroll:true});}return;}
+  if(id==='open-build'){if(!api.busy)await openBuild();return;}if(id==='cancel-build'){if(api.busy)return;clearTimeout(buildTimer);buildSerial++;store.ui({build:null,buildPlan:null,buildChecking:false,buildOptionsLoading:false});return;}
+  if (id === 'build-unlock') { if(api.busy)return; buildSerial++; store.ui({ buildPlan: null, buildChecking: false }); return; }
+  if (id === 'build-lock') {
+    if (!ui.build || ui.buildChecking || ui.buildOptionsLoading || api.busy) return;
+    const result = await checkBuild();
+    if (!result || !store.get().ui.build) return;
+    const plan = lockBuildPlan(store.get().ui.build, result);
+    store.ui({ buildPlan: plan });
+    if (plan) root.querySelector('.opening-preview')?.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (id.startsWith('build-') && ui.buildPlan) return;
+  if(id==='build-trait'){if(!ui.build)return;const traits=ui.build.traits.includes(value)?ui.build.traits.filter(x=>x!==value):[...ui.build.traits,value];if(editBuild({traits}))await checkBuild();return;}
+  if(id==='build-alloc'){if(!ui.build)return;const allocation={...ui.build.allocation,[value]:Math.max(0,(ui.build.allocation[value]||0)+Number(target.dataset.delta))};if(editBuild({allocation}))await checkBuild();return;}
+  if(id==='build-portrait'){if(editBuild({portraitId:value}))await checkBuild();return;}
+  if (id === 'build-reroll' || id === 'build-options-retry') {
+    if (!ui.build || ui.buildChecking || ui.buildOptionsLoading || api.busy) return;
+    await loadBuildOptions(id === 'build-reroll' ? nextBuildSeed(ui.build.seed) : ui.build.seed);
+    return;
+  }
+  if (id === 'start-life') {
+    const plan = ui.buildPlan;
+    if (api.busy || ui.buildChecking || !ui.build || !matchesBuildPlan(plan, ui.build)) return;
+    const result = await checkBuild();
+    if (!result?.valid || store.get().ui.buildPlan !== plan || !store.get().ui.build
+        || !matchesBuildPlan(plan, store.get().ui.build)) return;
+    if (await mutate('new', plan.request)) {
+      router.go('home'); window.scrollTo({ top: 0, behavior: 'instant' });
+      document.querySelector('#main')?.focus({ preventScroll: true });
+    }
+    return;
+  }
   if(id==='friend-picker'){showSheet('查找道友',renderFriendPicker(s,ui),'friend-picker');return;}
   if(id==='friend-filter-tab'&&sheet.dataset.kind==='friend-picker'){store.patch({ui:{...ui,friendFilter:value}},false);showSheet('查找道友',renderFriendPicker(s,store.get().ui),'friend-picker');return;}
   if(id==='map-picker'){showSheet('选择目的地',renderMapPicker(s,ui),'map-picker');return;}
@@ -167,9 +264,18 @@ async function onUI(id,value,target){const {ui,state:s}=store.get();
   if(id==='coverage'){showSheet('v2 功能范围',`<p>新版独立入口与经典界面共用 C++ 引擎和存档。</p><p>已接入：建号、日常推进、旅行、物品、炼丹炼器、道法、斗法、秘境、道友、宗门、天机大比、存档。</p><p class="notice">尚未完整迁入：后山探访的资格与费用预览、冲突掠夺、声望与成就总览、完整人物名册筛选及传承档案。请从经典界面进入这些功能。</p>${legacyLink()}`,'coverage');return;}
 }
 
-document.addEventListener('click',event=>{const button=event.target.closest('[data-command],[data-ui]');if(!button||button.disabled||button.tagName==='SELECT')return;if(button.dataset.command){let body;try{body=JSON.parse(button.dataset.body||'{}');}catch{toast('操作参数无法读取。',true);return;}mutate(button.dataset.command,body);}else onUI(button.dataset.ui,button.dataset.value||'',button).catch(handleError);});
+document.addEventListener('click',event=>{const button=event.target.closest('[data-command],[data-ui],[data-build-portrait]');if(!button||button.disabled||button.tagName==='SELECT')return;if(button.dataset.buildPortrait){onUI('build-portrait',button.dataset.buildPortrait,button).catch(handleError);}else if(button.dataset.command){let body;try{body=JSON.parse(button.dataset.body||'{}');}catch{toast('操作参数无法读取。',true);return;}mutate(button.dataset.command,body);}else onUI(button.dataset.ui,button.dataset.value||'',button).catch(handleError);});
 document.addEventListener('change',async event=>{const el=event.target;if(el.matches('select[data-ui]')){await onUI(el.dataset.ui,el.value,el);return;}if(el.id==='import-file'){const file=el.files?.[0];if(!file)return;const preview=document.querySelector('#import-preview');try{if(file.size>8*1024*1024)throw new Error('行卷超过 8 MB，无法导入。');const raw=await file.text(),parsed=JSON.parse(raw);const body=typeof parsed.game==='string'?{game:parsed.game,...(typeof parsed.legacy==='string'?{legacy:parsed.legacy}:{})}:{game:raw};preview.innerHTML=`<p>${esc(file.name)} · 已读取，确认后替换。</p>${action('确认导入并替换','import',body,{className:'primary wide'})}`;}catch(e){preview.textContent=e.message||'不是有效的 JSON 行卷。';}}});
-document.addEventListener('input',event=>{const el=event.target,key=el.dataset.input;if(!key)return;const {ui}=store.get();if(key==='build-name'||key==='build-gender'){store.patch({ui:{...ui,build:{...ui.build,[key==='build-name'?'name':'gender']:el.value}}},false);const start=document.querySelector('[data-ui="start-life"]');if(start)start.disabled=!store.get().ui.build.name.trim()||ui.buildChecking||store.get().data.buildCheck?.valid!==true;}else if(['map-search','market-search','friend-search','inventory-search','brew-search','manual-search','spell-search'].includes(key)){store.patch({ui:{...ui,[{'map-search':'mapSearch','market-search':'marketSearch','friend-search':'friendSearch','inventory-search':'inventorySearch','brew-search':'brewSearch','manual-search':'manualSearch','spell-search':'spellSearch'}[key]]:el.value}},false);clearTimeout(buildTimer);buildTimer=setTimeout(()=>{if(sheet.dataset.kind==='map-picker'){const pos=el.selectionStart;sheet.querySelector('.sheet-inner').innerHTML=`<header class="sheet-header"><h2 id="sheet-title">选择目的地</h2><button data-ui="close-sheet">关闭</button></header>${renderMapPicker(store.get().state,store.get().ui)}`;const next=sheet.querySelector('[data-input="map-search"]');next?.focus();if(next&&pos!=null)next.setSelectionRange(pos,pos);}else if(sheet.dataset.kind==='friend-picker'){const pos=el.selectionStart;sheet.querySelector('.sheet-inner').innerHTML=`<header class="sheet-header"><h2 id="sheet-title">查找道友</h2><button data-ui="close-sheet">关闭</button></header>${renderFriendPicker(store.get().state,store.get().ui)}`;const next=sheet.querySelector('[data-input="friend-search"]');next?.focus();if(next&&pos!=null)next.setSelectionRange(pos,pos);}else render();},120);}});
+document.addEventListener('input',event=>{const el=event.target,key=el.dataset.input;if(!key)return;const {ui}=store.get();if (key === 'build-name' || key === 'build-gender') {
+  if (!ui.build || ui.buildPlan) return;
+  const patch = key === 'build-name' ? { name: el.value } : {
+    gender: el.value, portraitId: defaultBuildPortrait(store.get().data.buildOptions, el.value),
+  };
+  if (!editBuild(patch, false)) return;
+  root.querySelectorAll('[data-ui="start-life"],[data-ui="build-lock"]').forEach(button => { button.disabled = true; });
+  clearTimeout(buildTimer);
+  buildTimer = setTimeout(checkBuild, 120);
+}else if(['map-search','market-search','friend-search','inventory-search','brew-search','manual-search','spell-search'].includes(key)){store.patch({ui:{...ui,[{'map-search':'mapSearch','market-search':'marketSearch','friend-search':'friendSearch','inventory-search':'inventorySearch','brew-search':'brewSearch','manual-search':'manualSearch','spell-search':'spellSearch'}[key]]:el.value}},false);clearTimeout(buildTimer);buildTimer=setTimeout(()=>{if(sheet.dataset.kind==='map-picker'){const pos=el.selectionStart;sheet.querySelector('.sheet-inner').innerHTML=`<header class="sheet-header"><h2 id="sheet-title">选择目的地</h2><button data-ui="close-sheet">关闭</button></header>${renderMapPicker(store.get().state,store.get().ui)}`;const next=sheet.querySelector('[data-input="map-search"]');next?.focus();if(next&&pos!=null)next.setSelectionRange(pos,pos);}else if(sheet.dataset.kind==='friend-picker'){const pos=el.selectionStart;sheet.querySelector('.sheet-inner').innerHTML=`<header class="sheet-header"><h2 id="sheet-title">查找道友</h2><button data-ui="close-sheet">关闭</button></header>${renderFriendPicker(store.get().state,store.get().ui)}`;const next=sheet.querySelector('[data-input="friend-search"]');next?.focus();if(next&&pos!=null)next.setSelectionRange(pos,pos);}else render();},120);}});
 document.addEventListener('submit',async event=>{if(event.target.id==='login-form'){event.preventDefault();if(authBusy)return;const form=event.target,values=new FormData(form),nickname=String(values.get('nickname')).trim(),password=String(values.get('password'));const err=document.querySelector('#login-error');if(!/^[A-Za-z0-9_\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]{1,16}$/u.test(nickname)){err.hidden=false;err.textContent='道号需为 1～16 个汉字、字母、数字或下划线。';return;}authBusy=true;form.querySelector('button').disabled=true;try{const result=await api.read('login',{nickname,password});form.reset();loginRequired=false;loginMessage='';store.reset(result);await refreshState();router.start();}catch(e){err.hidden=false;err.textContent=e.message;}finally{authBusy=false;form.querySelector('button')?.removeAttribute('disabled');}}
   if(event.target.id==='password-form'){event.preventDefault();const form=event.target,d=new FormData(form);if(d.get('new')!==d.get('repeat')){toast('两次新密码不一致。',true);return;}const button=form.querySelector('button');button.disabled=true;try{await api.read('password',{old:d.get('old'),new:d.get('new')});form.reset();closeSheet();toast('密码已更新。');}catch(e){await handleError(e);}finally{button.disabled=false;}}});
 window.addEventListener('online',()=>toast('网络已恢复，可以刷新进度。'));

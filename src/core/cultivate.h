@@ -161,7 +161,7 @@ double breakthroughBonus(const Player& p);
 // 参与流程：学习功法行动报价。
 // 使用方式：传角色与要学层数。
 // 返回值：至少三天的修习耗时。
-int learnDays(const Player& p, int level);
+int learnDays(const Player& p, int level, int tier = 1);
 
 // ------------------------------------------------------------
 // 体魄提供的气血上限

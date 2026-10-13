@@ -1,4 +1,5 @@
 #include "core/npc_learning.h"
+#include "core/talents.h"
 #include "core/content/game_ids.h"
 #include <algorithm>
 #include <cstdint>
@@ -265,7 +266,7 @@ void npcLearnComplete(Game& g, const Job& job) {
         if (std::find(g.economy.books.begin(), g.economy.books.end(), job.plan) == g.economy.books.end()) g.economy.books.push_back(job.plan);
         if (std::find(g.player.arts.bookList.begin(), g.player.arts.bookList.end(), job.plan) == g.player.arts.bookList.end()) g.player.arts.bookList.push_back(job.plan);
     }
-    addRelation(g, job.npcId, 2);
+    addRelation(g, job.npcId, 2 + talentAffinityBonus(g.player));
     artGain(g.player, lesson->dao, 4);
     logEvent(g, "npc", "从" + n->name + "处领悟了「" + lesson->name + "」。可在功法或神通面板配置。", true, job.npcId);
 }

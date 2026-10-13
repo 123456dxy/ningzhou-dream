@@ -2,6 +2,7 @@
 #include "core/persistence/internal.h"
 #include "core/persistence/json_helpers.h"
 #include "core/artifact.h"
+#include "core/arts.h"
 
 namespace nz::persistence {
 
@@ -50,6 +51,25 @@ Value npcToJson(const Npc& npc) {
     npcObject.set("equipped", strMapToJson(npc.equipped));
     { json::Array arr; for (const auto& id : npc.pillsUsed) arr.push_back(str(id));
       npcObject.set("pillsUsed", Value(std::move(arr))); }
+    {
+        const auto& state = npc.pillState;
+        Value pills(json::Object{});
+        pills.set("used", mapToJson(state.used));
+        pills.set("daoExp", mapToJson(state.daoExp));
+        pills.set("nodes", stringVectorToJson(state.nodes));
+        pills.set("poison", num(state.poison));
+        pills.set("aptPills", num(state.aptPills));
+        pills.set("hpBonus", num(state.hpBonus));
+        pills.set("heart", num(state.heart));
+        pills.set("mind", num(state.mind));
+        pills.set("speed", num(state.speed));
+        pills.set("points", num(state.points));
+        pills.set("repel", num(state.repel));
+        pills.set("breakBuff", str(state.breakBuff));
+        pills.set("combatPrep", mapToJson(state.combatPrep));
+        pills.set("combatBuff", num(state.combatBuff));
+        npcObject.set("pillState", std::move(pills));
+    }
     // 功法与流派
     npcObject.set("dao", str(npc.dao));
     npcObject.set("beast", Value(npc.beast));
@@ -96,6 +116,31 @@ Npc npcFromJson(const Value& npcObject) {
     }
     npc.equipped = jsonToStrMap(npcObject["equipped"]);
     npc.pillsUsed = jsonToStringVec(npcObject["pillsUsed"]);
+    const auto& pills = npcObject["pillState"];
+    auto& state = npc.pillState;
+    state.used = jsonToMap<int>(pills["used"]);
+    state.daoExp = jsonToMap<int>(pills["daoExp"]);
+    state.nodes = jsonToStringVec(pills["nodes"]);
+    state.poison = pills["poison"].asInt();
+    state.aptPills = pills["aptPills"].asInt();
+    state.hpBonus = pills["hpBonus"].asInt();
+    state.heart = pills["heart"].asInt();
+    state.mind = pills["mind"].asInt();
+    state.speed = pills["speed"].asInt();
+    state.points = pills["points"].asInt();
+    state.repel = pills["repel"].asInt();
+    state.breakBuff = pills["breakBuff"].asString();
+    state.combatPrep = jsonToMap<double>(pills["combatPrep"]);
+    state.combatBuff = pills["combatBuff"].asNumber();
+    if (pills.isNull()) {
+        // 老服药记录已结算过属性；只迁移次数和资质额度，绝不重放收益。
+        for (const auto& id : npc.pillsUsed) {
+            const auto* recipe = findRecipe(id);
+            if (!recipe || state.used.count(id)) continue;
+            state.used[id] = 1;
+            if (recipe->kind == "apt") state.aptPills = std::min(10, state.aptPills + recipe->value);
+        }
+    }
     npc.dao = npcObject["dao"].asString();
     npc.beast = npcObject["beast"].asBool();
     npc.spells = jsonToStringVec(npcObject["spells"]);

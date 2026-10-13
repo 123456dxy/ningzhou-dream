@@ -86,13 +86,6 @@ std::string urlDecode(const std::string& s) {
     return out;
 }
 
-// 防止 ../ 穿越到静态目录之外
-bool isSafePath(const std::string& p) {
-    if (p.find("..") != std::string::npos) return false;
-    if (p.find('\0') != std::string::npos) return false;
-    return true;
-}
-
 // 直接接收 path：Windows 下 path::string() 会转成 ANSI 代码页，含中文的安装路径会读不到文件
 bool readFile(const std::filesystem::path& path, std::string& out) {
     std::ifstream f(path, std::ios::binary);

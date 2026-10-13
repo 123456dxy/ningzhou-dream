@@ -112,7 +112,7 @@ bool saveShapesValid(const Value& root) {
     for (const char* field : {"age", "lifespan", "stage", "xp", "apt", "health", "stones", "herbs"})
         if (!playerObject[field].isNumber()) return false;
     if (!playerObject["location"].isString()) return false;
-    if (!saveObjectFieldTypes(playerObject, {{"arts", Type::Object}, {"traits", Type::Array},
+    if (!saveObjectFieldTypes(playerObject, {{"portraitId", Type::String}, {"arts", Type::Object}, {"traits", Type::Array},
             {"relations", Type::Object}, {"build", Type::Object}, {"npcBonds", Type::Object},
             {"caveTier", Type::Number}, {"stoneSupply", Type::Number}, {"qiSupply", Type::Number}})) return false;
     if (!saveObjectFieldTypes(playerObject["arts"], {{"battle", Type::Object}, {"exp", Type::Object},
@@ -174,6 +174,19 @@ bool saveShapesValid(const Value& root) {
     for (const auto& npc : root["npcs"].asArray()) {
         if (!npc.isObject() || !npc["id"].isString() || !npc["name"].isString() ||
             !npc["stage"].isNumber() || !npc["location"].isString()) return false;
+        if (!saveObjectFieldTypes(npc, {{"pillState", Type::Object}})) return false;
+        const auto& pills = npc["pillState"];
+        if (!pills.isNull()) {
+            if (!saveObjectFieldTypes(pills, {{"used", Type::Object}, {"daoExp", Type::Object},
+                    {"nodes", Type::Array}, {"poison", Type::Number}, {"aptPills", Type::Number},
+                    {"hpBonus", Type::Number}, {"heart", Type::Number}, {"mind", Type::Number},
+                    {"speed", Type::Number}, {"points", Type::Number}, {"repel", Type::Number},
+                    {"breakBuff", Type::String}, {"combatPrep", Type::Object}, {"combatBuff", Type::Number}})) return false;
+            for (const char* key : {"used", "daoExp"})
+                for (const auto& [id, value] : pills[key].asObject())
+                    if (!saveInteger(value, 0, 10000)) return false;
+            for (const auto& node : pills["nodes"].asArray()) if (!node.isString()) return false;
+        }
         for (const auto& gear : npc["gear"].asArray())
             if (!gear.isObject() || !saveObjectFieldTypes(gear, {{"crafted", Type::Bool}, {"shape", Type::String}})) return false;
     }

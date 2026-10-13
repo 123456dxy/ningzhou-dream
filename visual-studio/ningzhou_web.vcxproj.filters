@@ -10,6 +10,8 @@
 <None Include="..\web\artifacts.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\arts.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\build-panel.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\build-preview.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\build-preview.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\build.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\cards.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\cave-ui.mjs"><Filter>Web UI</Filter></None>
