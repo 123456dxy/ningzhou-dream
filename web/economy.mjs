@@ -1,4 +1,4 @@
-﻿// 宁州一梦 · C++ 版 — 任务与工坊页
+// 宁州一梦 · C++ 版 — 任务与工坊页
 //
 // JS 版有独立的 economy 页签（ecoRender + ecoJobHTML），C++ 之前完全没有。
 // 结果商会委托、猎妖、寻矿、演武、机缘这些功能规则层都写好了，
@@ -95,6 +95,12 @@ export function brewRequirements(state, recipe, batch = 1) {
     reason: [...new Set(blockers)].join('；'), enabled: recipe.enabled === true && !state.job && !blockers.length };
 }
 
+// 用途：显示后端单炉成功产量、收购价和期望毛收入，不推算利润或整批保底收益。
+export function renderBrewIncome(recipe = {}) {
+  const quoted = value => Number.isFinite(value) ? esc(Number(value.toFixed(2))) : '待报价';
+  return `<div class="craft-cost">成功每炉 ${quoted(recipe.output)} 枚 · 收购 ${quoted(recipe.sellPrice)} 灵石/枚 · 每炉期望毛收入 ${quoted(recipe.expectedSaleIncome)} 灵石</div>`
+    + '<p class="panel-note">期望不是保底；未扣材料与炉费，出售受本月剩余收购资金限制。</p>';
+}
 // 用途：展示炼成丹药在当前角色身上的真实服用效果。
 // 流程：按丹方编号读取服务端 pillCatalog，依次显示实际效果、使用限制和丹毒变化。
 // 调用方式：炼丹卡片、进行中的炼丹安排或丹药行囊调用此纯渲染函数。
@@ -190,8 +196,6 @@ function renderForgeRequirements(requirements) {
 // 调用方式：桌面传入state、行动目录、材料目录、配料与预览。
 // 返回值：含body、quests、forge、job的HTML片段对象。
 export function renderEconomy(state, opts, forge, selected = {}, preview = null) {
-  const p = state.player;
-
   // 按类型分组
   const groups = {};
   for (const o of (opts || [])) (groups[o.type] ||= []).push(o);

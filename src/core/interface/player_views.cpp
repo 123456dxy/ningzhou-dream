@@ -1,4 +1,5 @@
 #include "core/npc_learning.h"
+#include "core/character_build.h"
 #include "core/society.h"
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
@@ -51,7 +52,8 @@ void appendPlayerState(const Game& game, Value& state) {
         entry.set("insight", num(player.insight));
         entry.set("sword", num(player.sword));
         entry.set("escapeSpeed", num(artEscapeSpeed(player)));
-        entry.set("portrait", str(personPortrait(player.gender, player.sect, true)));
+        entry.set("portraitId", str(player.portraitId.empty() ? defaultPlayerPortraitId(player.gender) : player.portraitId));
+        entry.set("portrait", str(playerPortrait(player)));
         entry.set("alchemy", num(player.alchemy));
         entry.set("body", num(player.body));
         // 体魄带来的气血加成（带软上限，界面上要说明为什么不再线性）

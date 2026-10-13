@@ -80,6 +80,10 @@ if(UNIX AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 if(WIN32)
     target_link_libraries(ningzhou_web PRIVATE ws2_32)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # Web 服务使用 wmain 接收 Unicode 路径；MinGW 需选择宽字符 CRT 入口。
+        target_link_options(ningzhou_web PRIVATE -municode)
+    endif()
 endif()
 
 # 把前端文件拷到可执行文件旁边的 web/ 目录，
@@ -110,6 +114,7 @@ if(NZ_TEST_SOURCES)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test-temp-path.ps1
                 -Path ${NZ_TEST_TEMP_PATH}
                 RESULT_VARIABLE NZ_TEST_TEMP_STATUS OUTPUT_VARIABLE NZ_TEST_TEMP_SHORT
+                ENCODING UTF-8
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
             if(NZ_TEST_TEMP_STATUS EQUAL 0 AND NOT NZ_TEST_TEMP_SHORT STREQUAL "")
                 file(TO_CMAKE_PATH "${NZ_TEST_TEMP_SHORT}" NZ_TEST_TEMP_PATH)

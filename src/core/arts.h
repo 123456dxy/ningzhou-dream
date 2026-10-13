@@ -179,6 +179,8 @@ struct ArtMods : CombatHooks, LifeHooks {
 // 使用方式：传只读 Arts，每次重算；需长期保留结果时复制该值。
 // 返回值：受既有上限约束的线程局部引用；同线程下一次调用会覆盖它。
 const ArtMods& artModsOf(const Arts& a);
+// 玩家与 NPC 共用的丹毒修炼减速；超过20开始衰减，最低五折。
+double artPoisonCultivationMultiplier(int poison);
 // 用途：汇总境界、额外遁速、功法与天赋速度。
 // 参与流程：赶路和斗法先手/撤离共享。
 // 使用方式：传角色，使用真实属性与上限。
@@ -310,6 +312,9 @@ struct PillUseInfo {
 // 使用方式：传角色和丹方，只读计算不复制整个角色或消耗 RNG。
 // 返回值：PillUseInfo，含实际变化、耐药和拒绝原因。
 PillUseInfo artPillUseInfo(const Player& p, const data::RecipeDef& r);
+// 应用同一服丹计划，不写日志；NPC 使用临时角色视图复用耐药、丹毒与属性上限。
+// 成功为空，失败不改变角色；调用方负责记录动作日志。
+string artApplyPill(Player& player, const string& id);
 // 空字符串表示成功；失败不修改任何资源，成功保留原有服药日志。
 // 用途：验证并应用同一服药计划。
 // 参与流程：场外服药动作入口。

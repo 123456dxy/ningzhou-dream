@@ -106,7 +106,6 @@ export function spellKindLabel(sp) {
 // 返回值：道法卡片HTML字符串。
 export function renderDaos(state, nodes) {
   const a = state.arts;
-  const p = state.player;
   const byDao = {};
   for (const n of (nodes || [])) (byDao[n.dao] ||= []).push(n);
 

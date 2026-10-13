@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 #include "core/arts.h"
 #include "core/calendar.h"
@@ -261,6 +262,9 @@ BuildCheck checkBuild(const vector<string>& traits,
     }
 
     c.remain = budget - c.spent - c.allocSpent;
+    // Reuse the authoritative validator, including unknown keys and budget bounds.
+    try { (void)buildCharacter(traits, allocation, budget); }
+    catch (const std::invalid_argument& error) { c.error = error.what(); return c; }
     c.ok = (c.remain >= 0);
     if (!c.ok) {
         c.error = "点数超支 " + std::to_string(-c.remain) + " 点。";

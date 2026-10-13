@@ -10,6 +10,7 @@
 #include "core/economy.h"
 #include "core/reward_receipt.h"
 #include "core/sim.h"
+#include "core/talents.h"
 #include "data/reference_tables.h"
 
 namespace nz {
@@ -460,7 +461,8 @@ BondActionInfo bondActionInfo(const Game& g, const string& kind) {
         info.cost = 10;
     } else if (kind == "together") {
         info.name = "相伴共修";
-        info.desc = "与道侣相伴十日，大道经验 +6、心境 +2、气血 +4，每月一次。";
+        info.desc = "与道侣相伴十日，大道经验 +6、心境 +2、气血 +4、好感 +" +
+                    std::to_string(3 + talentAffinityBonus(g.player)) + "，每月一次。";
         info.days = 10;
         info.npcId = g.bonds.partner;
     } else if (kind == "part") {
@@ -595,7 +597,7 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
 
     if (kind == "master" && npc) {
         b.master = npc->id;
-        addRelation(g, npc->id, 10);
+        addRelation(g, npc->id, 10 + talentAffinityBonus(p));
         logEvent(g, "sect",
                  "你行过拜师礼，" + npc->name + "收下你的拜帖。往后可在山门受业。",
                  true);
@@ -609,7 +611,7 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
         logEvent(g, "self", "受师尊指点：" + receipt.changes(g) + "。");
     } else if (kind == "disciple" && npc) {
         b.disciples.push_back(npc->id);
-        addRelation(g, npc->id, 10);
+        addRelation(g, npc->id, 10 + talentAffinityBonus(p));
         logEvent(g, "sect",
                  npc->name + "拜入门下。可在山门授业，培养其修为与悟性。", true);
     } else if (kind == "teach") {
@@ -628,7 +630,7 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
     } else if (kind == "partner" && npc) {
         b.partner = npc->id;
         b.bondDays = 0;
-        addRelation(g, npc->id, 20);
+        addRelation(g, npc->id, 20 + talentAffinityBonus(p));
         logEvent(g, "self", "你与" + npc->name + "结为道侣。往后可相伴共修。", true);
     } else if (kind == "together") {
         b.partnerMonth = month;
@@ -636,7 +638,7 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
         artGain(p, a.focus, 6);
         a.heart += 2;
         p.health = std::min(100, p.health + 4);
-        if (!b.partner.empty()) addRelation(g, b.partner, 3);
+        if (!b.partner.empty()) addRelation(g, b.partner, 3 + talentAffinityBonus(p));
         logEvent(g, "self",
                  "与道侣相伴共修10天：" + receipt.changes(g) + "。");
     } else if (kind == "part") {

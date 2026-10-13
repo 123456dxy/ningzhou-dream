@@ -13,6 +13,10 @@ namespace nztest {
 namespace {
 using namespace nz;
 using json::Value;
+std::string utf8Path(const std::filesystem::path& path) {
+    const auto utf8 = path.u8string();
+    return std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+}
 Value payload(const std::string& requestId) { Value v(json::Object{}); v.set("requestId", requestId); return v; }
 Game fixture(const std::string& name, int year = 50) {
     Game g = createGame(); g.player.name = name; g.player.stage = 3; g.player.lifespan = 200;
@@ -63,7 +67,7 @@ Value retryAndReload(tianji::Store& store, const std::filesystem::path& dir, con
     checkEq(call(store, "61", &game, route, body).status, 200, label + "：成功后重复请求幂等");
     check(store.status("61", &game).dump() == state && readStore(dir).dump() == persisted,
           label + "：重复请求不改变内存或已存数据");
-    tianji::Store restarted(dir.string());
+    tianji::Store restarted(utf8Path(dir));
     check(restarted.healthy(), label + "：成功后重启记录健康");
     check(restarted.status("61", &game).dump() == state, label + "：重启完整恢复成功状态");
     checkEq(call(restarted, "61", &game, route, body).status, 200, label + "：重启后仍识别原请求ID");
@@ -73,7 +77,7 @@ Value retryAndReload(tianji::Store& store, const std::filesystem::path& dir, con
 }
 void runJoinIdCollisionTest(const std::filesystem::path& dir) {
     Game game = fixture("ID冲突测试");
-    tianji::Store initial(dir.string());
+    tianji::Store initial(utf8Path(dir));
     checkEq(call(initial, "61", &game, "join", payload("collision-a")).status, 200, "准备冲突留影甲");
     checkEq(call(initial, "62", &game, "join", payload("collision-b")).status, 200, "准备冲突留影乙");
     auto challenge = payload("collision-challenge");
@@ -82,7 +86,7 @@ void runJoinIdCollisionTest(const std::filesystem::path& dir) {
     auto before = readStore(dir); before.set("nextId", 1);
     { std::ofstream file(dir / "store.json", std::ios::trunc); file << before.dump(2); }
     const auto originalBytes = readStoreText(dir);
-    tianji::Store collision(dir.string());
+    tianji::Store collision(utf8Path(dir));
     check(collision.healthy(), "当前读取契约允许指向已有留影的nextId");
     const auto stateA = collision.status("61", &game).dump(), stateB = collision.status("62", &game).dump();
     // Cover both an available destination and the failed-write path that must never
@@ -118,7 +122,7 @@ void runTransactionRollbackTests(const std::filesystem::path& dir) {
     opponent.player.name = "回滚对手";
     // Keep end-turn probes nonterminal independently of the initial random deck.
     challenger.player.arts.hpBonus = opponent.player.arts.hpBonus = 5000;
-    tianji::Store store(dir.string());
+    tianji::Store store(utf8Path(dir));
     for (const std::string owner : {"62", "63", "64"})
         checkEq(call(store, owner, &opponent, "join", payload("setup-" + owner)).status, 200, "准备回滚测试真人留影");
     const auto targetB = store.status("62", &opponent)["entry"]["id"].asString();
@@ -190,7 +194,7 @@ void runTransactionRollbackTests(const std::filesystem::path& dir) {
         battle.asObject().at("enemyCards").set("turns", 23);
     }
     { std::ofstream file(dir / "store.json", std::ios::trunc); file << terminalData.dump(); }
-    tianji::Store terminal(dir.string());
+    tianji::Store terminal(utf8Path(dir));
     check(terminal.healthy() && terminal.active("61"), "平局边界测试存档可恢复且仍在进行中");
     auto finish = actionPayload("failed-terminal", terminal.status("61", &challenger)["encounter"], "end");
     failedWrite(terminal, "action", finish, "75", "有积分终局行动回滚");
@@ -223,15 +227,19 @@ void runTianjiTests() {
     using namespace nz;
     std::printf("\n--- 天机大比服务端真人留影与持久化 ---\n");
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
-    const auto dir = std::filesystem::temp_directory_path() / ("nz-tianji-core-" + std::to_string(unique));
-    const auto corruptDir = dir.string() + "-corrupt";
+    // Exercise persistence, reload, rollback and corruption through a Unicode
+    // directory even when TEMP itself contains only ASCII characters.
+    const auto dir = std::filesystem::temp_directory_path() /
+        std::filesystem::u8path("nz-tianji-中文-" + std::to_string(unique));
+    auto corruptDir = dir;
+    corruptDir += "-corrupt";
     Game a = fixture("真人甲"), b = fixture("真人乙");
     for (int year : {49,50,59,60,99,100,109,110}) {
         auto g = fixture("窗口", year); const auto w = tianji::windowFor(g);
         checkEq(w.year, year, "按界面显示的入道年计算");
         check(w.open == (year == 50 || year == 59 || year == 100 || year == 109), "十年窗口边界准确");
     }
-    tianji::Store store(dir.string());
+    tianji::Store store(utf8Path(dir));
     check(store.healthy(), "新目录创建空天机大比");
     checkEq(store.board(1000)["total"].asInt(), 0, "空榜没有伪装NPC");
     checkEq(call(store, "", &a, "join", payload("anon")).status, 401, "禁止未认证报名");
@@ -266,7 +274,7 @@ void runTianjiTests() {
     b.player.body = 999; b.player.arts.spells.clear();
     checkStr(store.status("61", &a)["encounter"]["target"]["build"].dump(), joinedB["entry"]["build"].dump(), "离线对手本体变化不影响已存留影");
     const auto stateBeforeReload = store.status("61", &a)["encounter"].dump();
-    tianji::Store reloaded(dir.string());
+    tianji::Store reloaded(utf8Path(dir));
     check(reloaded.healthy(), "进行中挑战可从磁盘恢复");
     checkStr(reloaded.status("61", &a)["encounter"].dump(), stateBeforeReload, "恢复不改战斗随机状态、先手计划或手牌视图");
     auto turn = payload("turn-a"); turn.set("encounterId", encounterId); turn.set("expectedRevision", 0); turn.set("id", "end");
@@ -292,7 +300,7 @@ void runTianjiTests() {
     checkEq(finished["entry"]["losses"].asInt(), 1, "认输只结算一次败场");
     checkEq(call(reloaded, "61", &a, "action", forfeit).status, 200, "重复终局请求不会重复计分");
     challenge.set("requestId", "farm"); checkEq(call(reloaded, "61", &a, "challenge", challenge).status, 409, "同对手不能刷荣誉");
-    tianji::Store settledReload(dir.string()); check(settledReload.healthy(), "终局包含气血和日志可恢复");
+    tianji::Store settledReload(utf8Path(dir)); check(settledReload.healthy(), "终局包含气血和日志可恢复");
     checkEq(settledReload.status("61", &a)["entry"]["losses"].asInt(), 1, "重启不重复加败场");
     checkEq(settledReload.board(1031)["total"].asInt(), 2, "全服榜只有两位真人报名者");
     auto a60 = fixture("真人甲", 60); check(settledReload.observe("61", &a60), "越过截止年持久关闭本届");
@@ -304,7 +312,7 @@ void runTianjiTests() {
     // Compare unmodified source games separately: store must not mutate either source object.
     Game untouchedA = fixture("隔离甲"), untouchedB = fixture("隔离乙");
     const auto beforeA = saveToJson(untouchedA), beforeB = saveToJson(untouchedB);
-    tianji::Store isolated((dir / "isolated").string());
+    tianji::Store isolated(utf8Path(dir / "isolated"));
     call(isolated, "63", &untouchedA, "join", payload("iso-a")); call(isolated, "64", &untouchedB, "join", payload("iso-b"));
     checkStr(saveToJson(untouchedA), beforeA, "生成留影不改挑战者世界"); checkStr(saveToJson(untouchedB), beforeB, "生成留影不改防守者世界");
     auto capacityChallenge = payload("capacity-start");
@@ -319,15 +327,15 @@ void runTianjiTests() {
         battle.set("log", oversizedLog);
         std::ofstream write(isolatedFile, std::ios::trunc); write << data.dump();
     }
-    tianji::Store nearCapacity((dir / "isolated").string());
+    tianji::Store nearCapacity(utf8Path(dir / "isolated"));
     check(nearCapacity.healthy(), "安全上限内的长战报可以恢复");
     auto capacityForfeit = payload("capacity-forfeit"); capacityForfeit.set("encounterId", capacityStart["encounter"]["id"]);
     capacityForfeit.set("expectedRevision", 0); capacityForfeit.set("id", "forfeit");
     const auto capacityEnd = Value::parse(call(nearCapacity, "63", &untouchedA, "action", capacityForfeit).body);
     check(capacityEnd["ok"].asBool() && !nearCapacity.active("63"), "接近大小上限仍可认输解锁人物");
     check(capacityEnd["encounter"]["log"].asArray().size() <= 64, "终局压缩最近战报为保存留出空间");
-    std::filesystem::create_directories(corruptDir); { std::ofstream f(std::filesystem::path(corruptDir) / "store.json"); f << "broken"; }
-    tianji::Store corrupt(corruptDir); check(!corrupt.healthy(), "损坏记录失败关闭而不是重置空榜");
+    std::filesystem::create_directories(corruptDir); { std::ofstream f(corruptDir / "store.json"); f << "broken"; }
+    tianji::Store corrupt(utf8Path(corruptDir)); check(!corrupt.healthy(), "损坏记录失败关闭而不是重置空榜");
     checkEq(call(corrupt, "61", &a, "join", payload("reset")).status, 503, "损坏时禁止重复报名");
     runTransactionRollbackTests(dir / "rollback");
     runJoinIdCollisionTest(dir / "id-collision");

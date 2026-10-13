@@ -517,6 +517,17 @@ struct Person {
     map<string, int> relations;
 };
 
+// NPC 只持久化服丹产生的增量，不复制玩家库存或战斗。
+struct NpcPillState {
+    map<string, int> used, daoExp;
+    vector<string> nodes;
+    int poison = 0, aptPills = 0, hpBonus = 0;
+    int heart = 0, mind = 0, speed = 0, points = 0, repel = 0;
+    string breakBuff;
+    map<string, double> combatPrep;
+    double combatBuff = 0;
+};
+
 // NPC
 struct Npc : Person {
     string id;
@@ -535,7 +546,8 @@ struct Npc : Person {
     map<string, int> bag;           // 物品 id -> 数量（丹药/药材/材料）
     vector<Gear> gear;              // 身上带的法器
     map<string, string> equipped;   // 槽位 -> 法器 id
-    vector<string> pillsUsed;       // 服过的丹药（避免重复算效果）
+    vector<string> pillsUsed;       // 旧档兼容：服过的丹药 ID（新次数见 pillState.used）
+    NpcPillState pillState;
 
     // ---- 功法与流派 ----
     // 人类修士的功法要和流派契合：有本命神通、有主修大道，
@@ -548,6 +560,7 @@ struct Npc : Person {
 
 // 玩家
 struct Player : Person {
+    string portraitId; // Empty in older saves: resolve the gender-specific default portrait.
     string talent = "sword";
     vector<string> traits;
     Build build;

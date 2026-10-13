@@ -9,6 +9,7 @@ namespace nz::persistence {
 Value playerToJson(const Player& player) {
     Value playerObject = personToJson(player);
     playerObject.set("talent", str(player.talent));
+    playerObject.set("portraitId", str(player.portraitId));
     {
         const Build& build = player.build;
         Value buildObject(json::Object{});
@@ -68,6 +69,7 @@ Value playerToJson(const Player& player) {
 
 void playerFromJson(const Value& playerObject, Player& player, uint32_t seed) {
     personFromJson(playerObject, player);
+    player.portraitId = playerObject["portraitId"].asString();
     // 洞府与配给
     // 道友往来（旧档没有这个字段，缺了就是空）
     player.npcBonds.clear();

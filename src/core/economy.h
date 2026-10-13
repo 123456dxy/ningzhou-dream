@@ -8,6 +8,11 @@ namespace nz {
 // 五座城池
 extern const char* const ECO_CITIES[5];
 
+// 角色对应的丹药市场层级；化神终局覆盖五、六品，不改变材料来源或炉具门槛。
+int ecoMarketTier(const Player& player);
+// 当前条件下下一次换月的收购预算；当前月剩余现金仍读取 economy.marketCash。
+int ecoMarketBudget(const Game& game);
+
 // 每月的资源与任务刷新（对应 ecoRefresh）
 // 用途：刷新当月城市需求与任务上限。
 // 参与流程：人生推进、成长与世界模拟。

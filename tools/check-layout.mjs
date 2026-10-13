@@ -47,13 +47,17 @@ if (concatPattern.test(src)) {
 console.log('\n3) 每页是否都有 heading()');
 const views = ['viewChronicle', 'viewMap', 'viewArts', 'viewSociety',
                'viewQuests', 'viewMarket'];
+// 这些页面均为顶层函数；按下一条顶层函数声明截断，既覆盖长页面，
+// 也不会把下一页的 heading() 算到缺标题的页面上。
+const declarations = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([\w$]+)\s*\(/gm)];
 for (const v of views) {
-  const i = src.indexOf(`function ${v}(`);
-  if (i < 0) { fail(`${v} 找不到`); continue; }
-  const seg = src.slice(i, i + 9000);
-  // 页面拆成子页签后，标题常先存进变量（const head = heading(...)）
-  // 再按子页签拼不同正文，所以两种写法都要认。
-  const has = /return\s+heading\(/.test(seg) || /=\s*heading\(/.test(seg);
+  const index = declarations.findIndex(match => match[1] === v);
+  if (index < 0) { fail(`${v} 找不到`); continue; }
+  const start = declarations[index].index;
+  const end = declarations[index + 1]?.index ?? src.length;
+  const seg = src.slice(start, end);
+  // 标题可直接返回、先存变量，或接在兽潮等置顶横幅之后拼入返回值。
+  const has = /return\s+heading\(/.test(seg) || /[=+]\s*heading\(/.test(seg);
   if (has) ok(`${v} 有 heading()`);
   else fail(`${v} 没有 heading()，页面会缺少标题块`);
 }

@@ -1,5 +1,7 @@
 // 宁州一梦 · C++ 版 — 营生与坊市实现（对应 JS 版 economy.mjs）
 #include "core/economy.h"
+#include "core/shop.h"
+#include "core/progression/manual_study.h"
 #include "core/crafting/material_supply.h"
 #include "core/renown.h"
 
@@ -79,6 +81,25 @@ static bool lookupManual(const string& id, ManualView& out) {
     return false;
 }
 
+// 用途：确定角色可接触的丹药收购市场层级。
+// 流程：月度坊市资金配置；炼气/筑基/金丹/元婴依次对应一至四品，最终化神覆盖五六品。
+// 返回值：一至六品；不改变炼制、丹炉或药材采购资格。
+int ecoMarketTier(const Player& player) {
+    return player.stage >= 12 ? 6 : clampInt(1 + player.stage / 3, 1, 4);
+}
+
+// 用途：计算有限的月度收购预算，避免高阶成品永远无法整枚售出。
+// 流程：初始化或换月时取声望基础预算与本层级最高单枚丹价的较高值。
+// 返回值：当期行情下的月预算；只读，不给本月已花掉的资金充值。
+int ecoMarketBudget(const Game& game) {
+    int budget = renown::marketCashCap(game.player.renown);
+    const int tier = ecoMarketTier(game.player);
+    for (const auto& recipe : data::RecipeDef_TABLE()) {
+        if (recipe.grade <= tier)
+            budget = std::max(budget, shop::salePrice(game, "potion", recipe.id));
+    }
+    return budget;
+}
 // ------------------------------------------------------------
 // 初始化与每月刷新
 // ------------------------------------------------------------
@@ -100,9 +121,7 @@ void ensureEconomy(Game& g) {
     g.economy.month = g.clock.days / 30;
     g.economy.orders.clear();
     g.economy.sold.clear();
-    g.economy.marketCash =
-        std::min(renown::marketCashCap(g.player.renown),
-                 400 + (g.player.stage / 3) * 250 + g.player.renown * 8);
+    g.economy.marketCash = ecoMarketBudget(g);
     g.economy.seq = 0;
 }
 
@@ -118,9 +137,7 @@ void ecoRefresh(Game& g) {
     e.orders.clear();
     e.taskCounts.clear();
     e.sold.clear();
-    e.marketCash = std::min(renown::marketCashCap(g.player.renown),
-                               400 + (g.player.stage / 3) * 250 +
-                                   g.player.renown * 8);
+    e.marketCash = ecoMarketBudget(g);
 }
 
 // 用途：把已得功法抄本同步到学习书单。
@@ -200,32 +217,8 @@ static const data::RecipeDef* findRecipeEco(const string& id) {
 // 返回值：说明所述数值结果；不额外消耗资源。
 int ecoSalePrice(const Game& g, const string& type, const string& id) {
     const Player& p = g.player;
-    if (type == "potion") {
-        const data::RecipeDef* r = findRecipeEco(id);
-        if (!r) return 0;
-        // 材料成本 = 各药材基础价 × 用量
-        double materials = 0;
-        size_t pos = 0;
-        const string& ing = r->ingredients;
-        while (pos < ing.size()) {
-            const size_t semi = ing.find(';', pos);
-            const string item = ing.substr(
-                pos, semi == string::npos ? string::npos : semi - pos);
-            const size_t colon = item.find(':');
-            if (colon != string::npos) {
-                const string herbId = item.substr(0, colon);
-                const int n = std::stoi(item.substr(colon + 1));
-                for (const auto& h : data::HerbDef_TABLE())
-                    if (h.id == herbId) materials += h.sourcePrice * n;
-            }
-            if (semi == string::npos) break;
-            pos = semi + 1;
-        }
-        // JS 用 r.price，这里用 tolerance 之外的字段：丹方表里没有 price，
-        // 所以按 (材料 + 8 + 品阶*6) × 1.6 计算
-        const double v = std::max(0.0, (materials + 8 + r->grade * 6) * 1.6);
-        return jsRound(v * g.world.market);
-    }
+    // 丹药报价与真实出售共用规则，避免名称/ID和材料价口径分叉。
+    if (type == "potion") return shop::salePrice(g, type, id);
     // 法器
     for (const auto& gear : p.arts.gear) {
         if (gear.id != id) continue;
@@ -339,18 +332,15 @@ EcoActionInfo ecoActionInfo(const Game& g, const string& type,
                             const string& id, int batch) {
     EcoActionInfo info;
     const Player& p = g.player;
-    const Arts& a = p.arts;
 
     if (type == "learn") {
         ManualView m;
         if (!lookupManual(id, m)) return info;
-        auto it = a.manuals.find(m.id);
-        const int lv = it == a.manuals.end() ? 0 : it->second;
+        const auto study = manualStudyInfo(p, id);
         info.valid = true;
         info.name = "修习" + m.name;
-        // 悟性高的人读功法更快：20+10×层数 再按悟性打折
-        info.days = cultivate::learnDays(p, lv);
-        info.cost = 8 + (lv + 1) * 4;
+        info.days = study.days;
+        info.cost = study.stones;
         return info;
     }
     if (type == "brew") {
@@ -750,9 +740,10 @@ void ecoComplete(Game& g, const Job& job) {
                  job.name + (win ? "成功" : "失败，投入资材耗尽") + "，用时" +
                      std::to_string(job.total) + "天。");
     } else if (type == "learn") {
-        a.manuals[id] = a.manuals[id] + 1;
         ManualView m;
-        if (lookupManual(id, m)) artGain(p, m.dao, 5);
+        if (!lookupManual(id, m)) return;
+        a.manuals[id] = std::min(5, std::max(0, a.manuals[id]) + 1);
+        artGain(p, m.dao, 5);
         logEvent(g, "self",
                  job.name + "至第" + std::to_string(a.manuals[id]) + "层，用时" +
                      std::to_string(job.total) + "天。");

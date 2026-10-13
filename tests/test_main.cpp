@@ -52,6 +52,9 @@ int main() {
     nztest::runPlayerFixTests();
     nztest::runCraftingFixTests();
     nztest::runCatalogDisplayTests();
+    nztest::runCharacterBuildTests();
+    nztest::runAlchemyEconomyTests();
+    nztest::runStudyNpcTests();
 
     const int f = nztest::failures();
     std::printf("\n===== 结果: %s（%d 项失败）=====\n",

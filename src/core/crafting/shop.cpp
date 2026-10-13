@@ -28,7 +28,7 @@ namespace {
 // 返回值：说明所述数值结果；不额外消耗资源。
 double market(const Game& g) { return g.world.market; }
 
-// 丹方的材料成本（按药材基础价 price，不是 sourcePrice）
+// 丹方按普通坊市采购基价核算；不能使用较低的药材回收价值。
 // 用途：合计丹方药材基础成本。
 // 参与流程：工坊、坊市、藏经阁和洞府操作。
 // 使用方式：传入const data::RecipeDef& r，按本模块入口调用。
@@ -38,7 +38,7 @@ double materialCost(const data::RecipeDef& r) {
     for (const auto& [herbName, n] : parseIngredients(r.ingredients)) {
         const data::HerbDef* h = findHerbByName(herbName);
         if (!h) continue;
-        sum += (h->price > 0 ? h->price : h->sourcePrice) * n;
+        sum += (h->sourcePrice > 0 ? h->sourcePrice : 20 + h->grade * 15) * n;
     }
     return sum;
 }
@@ -99,9 +99,9 @@ int salePrice(const Game& g, const string& kind, const string& id) {
         const data::RecipeDef* r = findRecipe(id);
         if (!r) return 0;
         const double mats = materialCost(*r);
-        // JS: Math.round(Math.max(r.price, (materials+8+r.grade*6)*1.6) * market)
+        // 采购基价与开炉费乘2.2覆盖失败风险；保留既有疗效数值形成的价格下限。
         const double base = std::max(static_cast<double>(r->value),
-                                     (mats + 8 + r->grade * 6) * 1.6);
+                                     (mats + 8 + r->grade * 6) * 2.2);
         return jsRound(base * market(g));
     }
     if (kind == "gear") {

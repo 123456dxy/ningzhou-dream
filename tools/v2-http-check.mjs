@@ -15,6 +15,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApi, ApiError } from '../web/v2/api.mjs';
 import { renderCreate } from '../web/v2/views/create.mjs';
+import { lockBuildPlan } from '../web/build-preview.mjs';
 import { renderHome } from '../web/v2/views/home.mjs';
 import { renderBattle } from '../web/v2/views/battle.mjs';
 import { renderTianji } from '../web/v2/views/tianji.mjs';
@@ -182,7 +183,9 @@ try {
     const options = await c.read('build-options', { seed: 1100 + index }, 'POST');
     const build = { name: `前端验收${index + 1}`, gender: '女', seed: options.innate.seed, traits: [], allocation: {} };
     const valid = await c.read('build-check', build, 'POST');
-    check(valid.valid === true && !startButtonDisabled(renderCreate({ build }, { buildOptions: options, buildCheck: valid })), 'server-valid build enables real create view');
+    check(valid.valid === true && startButtonDisabled(renderCreate({ build }, { buildOptions: options, buildCheck: valid })), 'valid draft requires a locked preview before creation');
+    const buildPlan = lockBuildPlan(build, valid);
+    check(!!buildPlan && !startButtonDisabled(renderCreate({ build, buildPlan }, { buildOptions: options, buildCheck: valid })), 'locked server-validated build enables real create view');
     const invalid = await c.read('build-check', { traits: [], allocation: Object.fromEntries(options.stats.map(stat => [stat.id, options.maxPoints])) }, 'POST');
     check(invalid.valid === false && startButtonDisabled(renderCreate({ build }, { buildOptions: options, buildCheck: invalid })), 'server-invalid build disables real create view');
     const created = await c.mutate('new', build);

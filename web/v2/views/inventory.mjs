@@ -9,7 +9,6 @@ const note = text => text ? `<p class="meta">${esc(text)}</p>` : '';
 const unavailable = state => Boolean(state.ended || state.pending || state.battle || state.job || state.dungeons?.run);
 const slotName = slot => ({ weapon: '武器', armor: '防具', accessory: '佩饰' }[slot] || slot || '法器');
 const inventoryTabs = [['bag', '我的物品'], ['gear', '装备'], ['market', '坊市'], ['workshop', '工坊'], ['jobs', '差事']];
-const itemRows = (items, render, text) => items.length ? `<div class="stack">${items.map(render).join('')}</div>` : empty(text);
 const confirmGear = (label, kind, id, disabled) => `<button type="button" class="btn" data-ui="gear-confirm-${esc(kind)}" data-value="${esc(id)}"${disabled ? ' disabled' : ''}>${esc(label)}</button>`;
 const owned = collection => Object.entries(collection || {}).filter(([, amount]) => Number(amount) > 0);
 
@@ -203,9 +202,10 @@ function brewView(state, ui) {
   const controls = `<div class="player-controls">${selectControl('brew-batch', '炉数', [1,3,5,10].map(value => [value, value + ' 炉']), batch)}${selectControl('brew-select', '丹方', recipes.length ? recipes.map(item => [item.id, `${item.name}${item.enabled ? ' · 可炼' : ''}`]) : [['', '暂无丹方']], item?.id || '')}</div>`;
   if (!item) return card('', controls + empty('没有符合条件的丹方。') + searchField('brew-search', ui.brewSearch, '搜索丹方'), 'player-workspace');
   return card('', controls + `<section class="player-detail" data-selected-recipe="${esc(item.id)}"><div class="player-title"><strong>${esc(item.name)}</strong>${tag(`成丹 ${fmt(Number(item.chance || 0) * 100)}%`)}</div>`
-    + `<p class="player-context">每炉 ${count(item.stoneCost)} 灵石 · ${count(item.days)} 天 · 产出 ${count(item.output)}</p>`
+    + `<p class="player-context">每炉 ${count(item.stoneCost)} 灵石 · ${count(item.days)} 天 · 成功产出 ${Number.isFinite(item.output) ? count(item.output) + ' 枚' : '待报价'}</p>`
+    + `<p class="player-context">收购 ${Number.isFinite(item.sellPrice) ? fmt(item.sellPrice) + ' 灵石/枚' : '待报价'} · 每炉期望毛收入 ${Number.isFinite(item.expectedSaleIncome) ? fmt(item.expectedSaleIncome) + ' 灵石' : '待报价'}</p>`
     + `<p class="player-effect">${esc(item.desc || '药效说明尚未提供。')}</p>`
-    + `<p class="player-risk">现有 ${count(state.player?.stones)} 灵石 · ${batch} 炉逐炉扣料结算，事件会暂停。</p>`
+    + `<p class="player-risk">期望不是保底，未扣材料与炉费；出售受本月收购资金限制。现有 ${count(state.player?.stones)} 灵石。</p>`
     + `<p class="player-condition">${esc(item.reason || (item.enabled ? '当前这一炉材料与条件齐备。' : '当前无法炼制。'))}</p>`
     + `<div class="player-actions">${continuation(state) || action(`炼制 ${batch} 炉`, 'craft', { kind: 'brew', id: item.id, batch }, { className: 'primary', disabled: item.enabled !== true || unavailable(state), title: item.reason || '' })}</div>`
     + outcome(ui, item.id, ['craft'])

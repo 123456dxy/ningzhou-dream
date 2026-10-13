@@ -6,6 +6,7 @@
 // 设计原则：这一层只做「翻译」，不写任何规则。
 // 所有数值都来自 core，保证和自测覆盖的是同一套代码。
 #include "core/api.h"
+#include "core/character_build.h"
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
 #include "core/interface/view_policy.h"
@@ -24,6 +25,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -161,6 +163,40 @@ uint32_t seedOf(const Value& input, uint32_t def = 20261004) {
 }
 
 
+
+// The preview and commit endpoints must accept exactly the same character draft.
+CreateOptions createOptionsFromInput(const Value& input, int budget) {
+    CreateOptions options;
+    options.budget = budget;
+    for (const char* key : {"name", "gender", "portraitId", "talent"})
+        if (input.asObject().count(key) && !input[key].isString())
+            throw std::invalid_argument(std::string("参数 ") + key + " 必须是文字。");
+    options.name = strOf(input, "name", options.name);
+    options.gender = strOf(input, "gender", options.gender);
+    options.portraitId = strOf(input, "portraitId");
+    options.talent = strOf(input, "talent", options.talent);
+    options.seed = seedOf(input);
+    if (input.asObject().count("traits")) {
+        if (!input["traits"].isArray()) throw std::invalid_argument("天赋列表格式无效。");
+        options.traitsExplicit = true;
+        for (const auto& trait : input["traits"].asArray()) {
+            if (!trait.isString()) throw std::invalid_argument("天赋 ID 必须是文字。");
+            options.traits.push_back(trait.asString());
+        }
+    }
+    if (input.asObject().count("allocation")) {
+        if (!input["allocation"].isObject()) throw std::invalid_argument("属性分配格式无效。");
+        options.allocationExplicit = true;
+        for (const auto& [id, value] : input["allocation"].asObject()) {
+            if (!value.isNumber() || !std::isfinite(value.asNumber()) ||
+                std::floor(value.asNumber()) != value.asNumber() ||
+                value.asNumber() < 0 || value.asNumber() > MAX_POINTS)
+                throw std::invalid_argument("属性分配必须是有效的非负整数。");
+            options.allocation[id] = value.asInt();
+        }
+    }
+    return resolveCreateOptions(options);
+}
 
 // 统一响应
 // 用途：编码成功JSON响应。
@@ -480,32 +516,11 @@ http::Response handle(const http::Request& req) {
 
     // ---- 新游戏 ----
     if (route == RouteId::NewGame) {
-        CreateOptions opts;
-        opts.name = strOf(in, "name", "沈知微");
-        opts.gender = strOf(in, "gender", "女");
-        opts.seed = seedOf(in);
-
-        // 天赋：支持多选（traits 数组）；兼容旧的单个 talent 字段
-        if (in["traits"].isArray()) {
-            for (const auto& argumentValue : in["traits"].asArray())
-                if (argumentValue.isString()) opts.traits.push_back(argumentValue.asString());
-            // 明确给了数组（哪怕是空的）就按它来，不再补默认天赋
-            opts.traitsExplicit = true;
-        } else {
-            opts.traits.push_back(strOf(in, "talent", "sword"));
-        }
-
-        // 属性点分配
-        if (in["allocation"].isObject())
-            for (const auto& [k, v] : in["allocation"].asObject())
-                if (v.isNumber()) opts.allocation[k] = v.asInt();
-
-        // 建号方案非法时给出具体原因，而不是直接把角色建坏
         const RestartLegacy inheritance = restartLegacy(gameState);
         const int budget = legacy::talentBudget(inheritance.archive);
-        const play::BuildCheck c = play::checkBuild(opts.traits, opts.allocation, budget);
-        if (!c.ok) return jsonError(c.error.empty() ? "建号方案不合法。" : c.error);
-        opts.budget = budget;
+        CreateOptions opts;
+        try { opts = createOptionsFromInput(in, budget); }
+        catch (const std::invalid_argument& error) { return jsonError(error.what()); }
         opts.lifeId = legacy::newLifeId(opts.seed);
 
         Game next = createGame(opts);
@@ -1937,6 +1952,14 @@ http::Response handle(const http::Request& req) {
             ts.push_back(std::move(to));
         }
         o.set("talents", Value(std::move(ts)));
+        json::Array portraits;
+        for (const auto& portrait : playerPortraits()) {
+            Value entry(json::Object{});
+            entry.set("id", str(portrait.id)); entry.set("name", str(portrait.name));
+            entry.set("gender", str(portrait.gender)); entry.set("src", str(portrait.src));
+            portraits.push_back(std::move(entry));
+        }
+        o.set("portraits", Value(std::move(portraits)));
         json::Array as;
         for (const auto& allocationOption : play::allocOptions({})) {
             Value ao(json::Object{});
@@ -1952,7 +1975,7 @@ http::Response handle(const http::Request& req) {
         {
             const uint32_t seedIn = seedOf(in, 0);
             const unsigned seed =
-                seedIn > 0 ? static_cast<unsigned>(seedIn)
+                in["seed"].isNumber() ? static_cast<unsigned>(seedIn)
                            : (static_cast<unsigned>(gameState.seed) ^
                               (static_cast<unsigned>(gameState.eventSeq + 1) * 2654435761u));
             const InnateRoll inn = rollInnate(seed);
@@ -1976,18 +1999,15 @@ http::Response handle(const http::Request& req) {
 
     // ---- 校验建号方案 ----
     if (route == RouteId::BuildCheck) {
-        std::vector<std::string> traits;
-        if (in["traits"].isArray())
-            for (const auto& argumentValue : in["traits"].asArray())
-                if (argumentValue.isString()) traits.push_back(argumentValue.asString());
-        std::map<std::string, int> alloc;
-        if (in["allocation"].isObject())
-            for (const auto& [k, v] : in["allocation"].asObject())
-                if (v.isNumber()) alloc[k] = v.asInt();
         const RestartLegacy inheritance = restartLegacy(gameState);
         const int budget = legacy::talentBudget(inheritance.archive);
-
-        const play::BuildCheck c = play::checkBuild(traits, alloc, budget);
+        CreateOptions options;
+        play::BuildCheck c;
+        c.budget = budget;
+        try {
+            options = createOptionsFromInput(in, budget);
+            c = play::checkBuild(options.traits, options.allocation, budget);
+        } catch (const std::invalid_argument& error) { c.error = error.what(); }
         Value o(json::Object{});
         o.set("ok", Value(true));       // 接口本身成功
         o.set("valid", Value(c.ok));    // 方案是否合法
@@ -1998,6 +2018,22 @@ http::Response handle(const http::Request& req) {
         o.set("allocSpent", num(c.allocSpent));
         o.set("remain", num(c.remain));
         o.set("traitCount", num(c.traitCount));
+        if (c.ok) {
+            // Build a detached temporary game through the real initialization path.
+            // No session binding, account writes, life ID allocation or checkpoint tick.
+            const Game previewGame = createGame(options);
+            Value state(json::Object{});
+            view::appendPlayerState(previewGame, state);
+            view::appendArtsState(previewGame, state);
+            view::appendEquipmentState(previewGame, state);
+            Value preview(json::Object{});
+            for (const char* key : {"player", "arts", "gears"}) preview.set(key, state[key]);
+            preview.set("seed", num(static_cast<long long>(options.seed)));
+            Value allocation(json::Object{});
+            for (const auto& [id, count] : options.allocation) allocation.set(id, num(count));
+            preview.set("allocation", std::move(allocation));
+            o.set("preview", std::move(preview));
+        }
         return jsonOk(o);
     }
 

@@ -18,10 +18,10 @@ import { loadRoster, invalidateRoster, renderRoster, bindRoster } from './roster
 import { heading, panel, layout, asideBlock, timeline, yearControls, hintBox } from './shell.mjs';
 import { renderDaos, renderArtsAside, loadNodes, invalidateNodes,
          loadSpells, invalidateSpells, renderSpellPicker, renderArtBuilds } from './arts.mjs';
-import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect, marketGrade } from './economy.mjs';
+import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionRow, TYPE_LABEL, brewRequirements, renderPillEffect, renderBrewIncome, marketGrade } from './economy.mjs';
 import { loadLegacy, invalidateLegacy, draftTalents, renderEnding, renderLegacyPanel, renderDraftPanel } from './legacy.mjs';
 import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks, renderAchievements } from './sects.mjs';
-import { renderRenownPanel, renderRenownBar, renownChip } from './renown.mjs';
+import { renderRenownBar, renownChip } from './renown.mjs';
 import { cardKind, cardRule, cardNumbers, battleStatusRows } from './cards.mjs';
 import { renderNumericPreview } from './numeric-preview.mjs';
 import { renderAtlas, selectedTravelMode, travelFeedback, isTravelJob } from './map.mjs';
@@ -29,7 +29,7 @@ import { renderLocationArt } from './location-art.mjs';
 import { renderPortrait, battleImpacts, animateBattleImpacts } from './portraits.mjs';
 import { renderDungeons } from './dungeons.mjs';
 import { caveSupplyAccess, renderCaveUpgrade, renderCaveSupplyLimits } from './cave-ui.mjs';
-import { renderArtifactAbility, renderEquippedArtifacts, renderBattleArtifacts, renderForgePreview } from './artifacts.mjs';
+import { renderEquippedArtifacts, renderBattleArtifacts, renderForgePreview } from './artifacts.mjs';
 import { renderInventoryPanel } from './inventory-panel.mjs';
 import { renderTaskPanel } from './task-panel.mjs';
 import { renderCraftSupply, renderSalvageQuote } from './workshop.mjs';
@@ -872,7 +872,6 @@ function renderSupplyPanel(st) {
 // 调用方式：主渲染选择society时调用。
 // 返回值：页面HTML字符串。
 function viewSociety() {
-  const b = S.bonds;
   // 宗门页只列本宗门的人 —— 当地仙友属于「地点」，已挪到地图页
   const all = S.nearby || [];
   const people = S.player.sect ? all.filter(n => n.sect === S.player.sect) : [];
@@ -901,20 +900,6 @@ function viewSociety() {
   const sel = selectedNpc ? people.find(n => n.id === selectedNpc) : null;
 
   // 原创支线与野外悬赏已挪到「机缘成就」—— 它们和宗门无关，散修一样能做。
-
-  const aside =
-    `<h3>宗门与俸禄</h3>`
-  + `<div class="detail-list" style="border-top:0;padding-top:0">`
-  + `<div><label>宗门</label><strong>${escape(S.player.sectName || '散修')}</strong></div>`
-  + `<div><label>身份</label><strong>${escape(S.player.rank || '—')}</strong></div>`
-  + `<div><label>待领俸禄</label><strong>${b.stipendBalance}</strong></div>`
-  + `<div><label>恶名</label><strong>${b.notoriety}</strong></div>`
-  + `</div>`
-  + `<div class="year-controls">`
-  + `<button class="primary" data-action="stipend">领取俸禄</button>`
-  + `<button data-action="expedition">探访后山</button></div>`
-  + hintBox(['好感度决定能做什么：', '30 解锁彻夜论道，40 可拜师，',
-             '60 可结为道侣。拜师条件与不足项可在「拜师与受业」查看。']);
 
   // 五宗一览：拜入山门后可做差事、以贡献兑换藏经阁功法
   const sectPanel = `<div class="chronicle-layout" style="margin-top:22px">`
@@ -1133,22 +1118,7 @@ function viewQuests() {
     </div>
     <p class="panel-note">遁速影响赶路耗时、斗法先手和逃脱机会。学习遁法、修行境界与装备带来的变化，以当前实际遁速为准。</p></div>`);
 
-  const filePanel = panel('本世档案', '', `<div style="padding:16px 22px 20px">
-    <div class="detail-list" style="border-top:0;padding-top:0">
-      <div><label>出身天赋</label><strong>${escape(p.traits.join('、'))}</strong></div>
-      <div><label>灵根资质</label><strong>${p.apt}</strong></div>
-      <div><label>福缘</label><strong>${p.luck}</strong></div>
-      <div><label>悟性</label><strong>${p.insight}</strong></div>
-      <div><label>体魄</label><strong>${p.body}</strong></div>
-      <div><label>丹术</label><strong>${p.alchemy}</strong></div>
-      <div><label>声望</label><strong>${p.renown}</strong></div>
-    </div></div>`);
-
   // 成就（14 项）：规则层一直有，之前既没面板也从不发放
-  // 声望：把「有什么用」直接摊开给玩家看
-  const renownPanel = panel('宁州声望', '名声是你在宁州的信誉资本',
-    `<div style="padding:16px 22px 20px">${renderRenownPanel(S.renownInfo)}</div>`);
-
   const achPanel = panel('成就', '达成后计入传承点',
                          `<div style="padding:16px 22px 20px">${renderAchievements(achData)}</div>`);
 
@@ -1373,6 +1343,7 @@ function viewMarket() {
   + `<span class="rate ${o.chance < 0.4 ? 'low' : ''}">成丹 ${pct(o.chance)}</span></div>`
   + `<div class="craft-cost">开炉 ${o.stoneCost} 灵石 · ${o.days} 天</div>`
   + `<div class="craft-cost">整批 ${brewBatch} 炉：${o.batchQuote.cost} 灵石 · ${o.batchQuote.days} 天 · 每炉成丹 ${o.output} 枚</div>`
+  + renderBrewIncome(o)
   + renderPillEffect(S, o.id, { catalog: true })
   + (o.batchQuote.rows.length ? `<p class="craft-materials">${o.batchQuote.rows.map(item => `${escape(item.name)}：需 ${item.required}，有 ${item.owned}${item.missing ? `，缺 ${item.missing}` : ''}`).join('；')}</p>` : '')
   + (o.batchQuote.reason ? `<p class="card-why">${escape(o.batchQuote.reason)}</p>` : '')
@@ -1396,22 +1367,6 @@ function viewMarket() {
       <button data-action="sell" data-kind="potion" data-id="${id}" ${S.inCity ? '' : 'disabled'}>${S.inCity ? '出售' : '城中可售'}</button>
       </span></div>`;
   }).join('') || `<div class="empty">还没有炼成丹药。</div>`;
-
-  // ---- 法器（装备 / 卸下 / 分解 / 铭刻 / 出售）----
-  const gearRows = (S.gears || []).map(g =>
-    `<div class="pill-row">
-      <span>${escape(g.name)}
-      <span class="item-sub">${escape({ weapon: '武器', armor: '防具', accessory: '佩饰' }[g.slot] || g.slot)} · 加成 +${pct(g.bonus)}`
-    + `${g.inscribed ? ' · 已铭刻' : ''}${g.shapeName ? ` · ${escape(g.shapeName)}` : ''}${g.element ? ` · ${escape(g.element)}${escape(g.polarity || '')}` : ''}</span>${renderArtifactAbility(g.ability)}</span>
-      <span style="display:flex;gap:5px;flex-wrap:wrap">
-      ${g.equipped
-        ? `<button data-action="gear/unequip" data-id="${g.id}">卸下</button>`
-        : `<button data-action="equip" data-id="${g.id}">装备</button>`}
-      ${g.inscribed ? '' : `<button data-action="gear/inscribe" data-id="${g.id}">铭刻</button>`}
-      <button data-action="gear/salvage" data-id="${g.id}">分解</button>
-      ${g.equipped ? '' : `<button data-action="sell" data-kind="gear" data-id="${g.id}" ${S.inCity ? '' : 'disabled'}>${S.inCity ? '出售' : '城中可售'}</button>`}
-      </span></div>`).join('')
-    || `<div class="empty">还没有法器。</div>`;
 
   // ---- 丹炉 ----
   const furnaces = (S.furnaces || []).map(f =>
@@ -1746,8 +1701,8 @@ function openBuildPanel(opts = {}) {
   host.innerHTML = '';
 
   buildPanel = createBuildPanel({
-    onStart: async ({ name, gender, traits, allocation, budget, seed }) => {
-      const r = await call('new', { name, gender, traits, allocation, budget, seed });
+    onStart: async (plan) => {
+      const r = await call('new', plan);
       if (r && !r.error) closeBuildPanel();
       return !!(r && !r.error);
     },

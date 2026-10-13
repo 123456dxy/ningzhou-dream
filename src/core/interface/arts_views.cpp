@@ -120,8 +120,9 @@ void appendArtsState(const Game& game, Value& state) {
                 mo.set("isAux",
                        Value(std::find(arts.aux.begin(), arts.aux.end(), mid) !=
                              arts.aux.end()));
-                mo.set("nextDays", num(cultivate::learnDays(game.player, lv)));
-                mo.set("nextCost", num(8 + (lv + 1) * 4));
+                const auto study = ecoActionInfo(game, "learn", mid);
+                mo.set("nextDays", num(study.days));
+                mo.set("nextCost", num(study.cost));
                 mo.set("maxed", Value(lv >= 5));
                 arr.push_back(std::move(mo));
             }

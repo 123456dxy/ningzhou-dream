@@ -168,8 +168,9 @@ void runSocialIntegrityTests() {
         checkEq(g.player.arts.potions["5001"], 1, "赠丹真实扣玩家一枚");
         check(std::find(n.pillsUsed.begin(), n.pillsUsed.end(), "5001") != n.pillsUsed.end(),
               "NPC记录已经服用的丹药");
+        n.health = 100;
         check(friendship::giftItem(g, n.id, "potion", "5001").ok && n.bag["potion:5001"] == 1,
-              "重复赠予的丹药留下NPC背包，不重复永久结算");
+              "满血后赠予的疗伤丹留在NPC背包，不浪费药效");
     }
     {
         Game g = socialGame(); Npc& n = g.npcs[0];

@@ -13,6 +13,7 @@
 #include "core/shop.h"
 #include "core/source_limits.h"
 #include "core/sim.h"
+#include "core/talents.h"
 #include "core/sect_trial.h"
 #include "core/sword.h"
 #include "data/reference_tables.h"
@@ -339,6 +340,16 @@ string relationLabel(int v) {
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, const string& npcId，按本模块入口调用。
 // 返回值：对应目录或计算结果列表。
+static int socialAffinityGain(const Player& player, const string& action) {
+    int base = 0;
+    if (action == "chat") base = 3 + player.luck / 25;
+    else if (action == "study") base = 3;
+    else if (action == "travel") base = 12;
+    else if (action == "deep" || action == "partner") base = 15;
+    else if (action == "master" || action == "disciple") base = 10;
+    return base > 0 ? base + talentAffinityBonus(player) : 0;
+}
+
 vector<SocialAction> socialActions(const Game& g, const string& npcId) {
     vector<SocialAction> out;
     const Npc* n = findPerson(g, npcId);
@@ -354,6 +365,9 @@ vector<SocialAction> socialActions(const Game& g, const string& npcId) {
         a.id = id;
         a.name = name;
         a.desc = desc;
+        const int affinity = socialAffinityGain(p, id);
+        if (affinity > 0) a.desc += "；好感 +" + std::to_string(affinity) +
+            (talentAffinityBonus(p) ? "（含福缘深厚 +2）" : "");
         a.days = days;
         a.cost = cost;
         out.push_back(a);
@@ -362,10 +376,11 @@ vector<SocialAction> socialActions(const Game& g, const string& npcId) {
     add("chat", "闲谈叙话", "聊上几句，增进了解；同一道友每月一次", 1, 0);
     add("gift", "赠送灵药", "赠送背包中的一份药材；好感按价值与偏好折算，交情按价值累积", 1, 0);
     add("spar", "切磋剑艺", "以真实神通卡牌进行非致命斗法；同一道友每月一次，用时3天", 3, 0);
+    out.back().desc += "；完成切磋好感 +" + std::to_string(4 + talentAffinityBonus(p)) + "，撤离时 +4";
     add("study", "请教修行", "讨论修行，悟性 +2；与彻夜论道共用每人每月两次限额", 2, 5);
-    add("travel", "结伴游历", "一同出门 10 天，好感 +12；同一道友每月一次", 10, 10);
+    add("travel", "结伴游历", "一同出门 10 天；同一道友每月一次", 10, 10);
     if (rel >= 30)
-        add("deep", "彻夜论道", "深谈一场，好感 +15、心境 +2", 5, 0);
+        add("deep", "彻夜论道", "深谈一场，心境 +2", 5, 0);
     if (rel >= 60 && b.partner.empty())
         add("partner", "结为道侣", "确认道侣名分", 7, 0);
     // 条件不满足时仍显示入口与准确原因，避免玩家误以为没有拜师系统。
@@ -487,7 +502,7 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
 
     if (actionId == "chat") {
         p.npcBonds[npcId].talkMonth = month;
-        const int gain = 3 + p.luck / 25;
+        const int gain = socialAffinityGain(p, actionId);
         addRelation(g, npcId, gain);
         p.insight = std::min(INSIGHT_MAX, p.insight + 1);
         r.relationDelta = gain;
@@ -513,8 +528,8 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         const int gain = 8 + p.insight / 20;
         artGain(p, a.focus, gain);
         p.insight = std::min(INSIGHT_MAX, p.insight + 2);
-        addRelation(g, npcId, 3);
-        r.relationDelta = 3;
+        r.relationDelta = socialAffinityGain(p, actionId);
+        addRelation(g, npcId, r.relationDelta);
         r.text = "你向" + who + "请教修行疑难，受益良多。";
         logEvent(g, "npc", r.text + "（悟性 +2 · 大道经验 +" +
                                 std::to_string(gain) + "）", false, npcId,
@@ -522,7 +537,7 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
     } else if (actionId == "travel") {
         p.npcBonds[npcId].travelMonth = month;
         p.stones -= act->cost;
-        const int gain = 12;
+        const int gain = socialAffinityGain(p, actionId);
         addRelation(g, npcId, gain);
         p.insight = std::min(INSIGHT_MAX, p.insight + 4);
         artGain(p, a.focus, 5);
@@ -530,10 +545,10 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         g.adventure.since += 10;
         r.relationDelta = gain;
         r.text = "你与" + who + "结伴游历十日，见闻与情谊都有增长。";
-        logEvent(g, "npc", r.text + "（好感 +12 · 悟性 +4）", true, npcId,
+        logEvent(g, "npc", r.text + "（好感 +" + std::to_string(gain) + " · 悟性 +4）", true, npcId,
                  "灵石 −" + std::to_string(act->cost));
     } else if (actionId == "deep") {
-        const int gain = 15;
+        const int gain = socialAffinityGain(p, actionId);
         addRelation(g, npcId, gain);
         a.heart += 2;
         // 星河剑派「观水悟剑，论道收益提高」：论道给的大道经验 +50%。
@@ -544,27 +559,27 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         r.relationDelta = gain;
         r.text = "你与" + who + "彻夜论道，彼此心意更近了一层。";
         logEvent(g, "npc",
-                 r.text + "（好感 +15 · 心境 +2 · 大道经验 +" +
+                 r.text + "（好感 +" + std::to_string(gain) + " · 心境 +2 · 大道经验 +" +
                      std::to_string(dao) + "）",
                  true, npcId);
     } else if (actionId == "partner") {
         b.partner = npcId;
         b.bondDays = 0;
-        addRelation(g, npcId, 15);
-        r.relationDelta = 15;
+        r.relationDelta = socialAffinityGain(p, actionId);
+        addRelation(g, npcId, r.relationDelta);
         r.text = "你与" + who + "结为道侣。往后可相伴共修。";
         logEvent(g, "self", r.text, true, npcId);
     } else if (actionId == "master") {
         p.stones -= 20;
         b.master = npcId;
-        addRelation(g, npcId, 10);
-        r.relationDelta = 10;
+        r.relationDelta = socialAffinityGain(p, actionId);
+        addRelation(g, npcId, r.relationDelta);
         r.text = "你行拜师礼，" + who + "收下你的拜帖。";
         logEvent(g, "sect", r.text, true, npcId, "灵石 −20");
     } else if (actionId == "disciple") {
         b.disciples.push_back(npcId);
-        addRelation(g, npcId, 10);
-        r.relationDelta = 10;
+        r.relationDelta = socialAffinityGain(p, actionId);
+        addRelation(g, npcId, r.relationDelta);
         r.text = who + "拜入门下。";
         logEvent(g, "sect", r.text, true, npcId);
     } else {

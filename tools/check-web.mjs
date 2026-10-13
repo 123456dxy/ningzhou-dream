@@ -21,7 +21,7 @@ import { renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSect
 import * as artifacts from '../web/artifacts.mjs';
 import { renderNumericPreview } from '../web/numeric-preview.mjs';
 import { renderRenownSources } from '../web/renown.mjs';
-import { renderEconomy, forgeRequirements, brewRequirements, renderPillEffect, marketGrade } from '../web/economy.mjs';
+import { renderEconomy, forgeRequirements, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade } from '../web/economy.mjs';
 import { renderInventoryPanel } from '../web/inventory-panel.mjs';
 import { renderTaskPanel } from '../web/task-panel.mjs';
 import { renderCraftSupply, renderSalvageQuote } from '../web/workshop.mjs';
@@ -231,7 +231,7 @@ const document = { querySelector: element, getElementById(id) { return element('
   body: { setAttribute() {}, removeAttribute() {} } };
 const requests = [];
 const context = { ...tianji, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
-  renderSectMentors, renderSectTasks, brewRequirements, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
+  renderSectMentors, renderSectTasks, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
   fetch: async (path, options) => { requests.push({ path, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ ok: true }) }; } };

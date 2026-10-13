@@ -16,6 +16,8 @@
 <None Include="..\web\artifacts.mjs"/>
 <None Include="..\web\arts.mjs"/>
 <None Include="..\web\build-panel.mjs"/>
+<None Include="..\web\build-preview.css"/>
+<None Include="..\web\build-preview.mjs"/>
 <None Include="..\web\build.css"/>
 <None Include="..\web\cards.mjs"/>
 <None Include="..\web\cave-ui.mjs"/>
