@@ -14,16 +14,6 @@
 namespace nz::api::view {
 
 namespace {
-// 用途：生成未受当前库存、属性与耐药截断的目录效果；流程：坊市/工坊展示；用法：传角色境界和配方；返回：完整能力说明，不改变实际服药规则。
-string catalogEffect(const Player& player, const data::RecipeDef& recipe) {
-    Player reference;
-    reference.stage = player.stage;
-    reference.apt = 0;
-    reference.arts.aptPills = 0;
-    reference.traits.clear();
-    return artPillEffect(reference, recipe).text;
-}
-
 // 用途：由稳定物品定义查询品阶；流程：坊市分类；用法：传目录条目类型和ID；返回：真实品阶，未知条目返回0，不从展示名称推断。
 int marketGrade(const play::MarketItem& item) {
     static const auto grades = [] {
@@ -58,21 +48,27 @@ Value actionQuote(const Game& game, const std::string& path, const shop::ActionQ
 // 使用方式：传入const Game& game, Value& state，按本模块入口调用。
 // 返回值：无；完成说明所述写入或展示操作。
 void appendEconomyState(const Game& game, Value& state) {
+    mfAppendEconomyState(game, state, shop::mfMarketSaleContext(game));
+}
+
+void mfAppendEconomyState(const Game& GameState, Value& State, const shop::MarketSaleContext& MarketContext) {
 
     // Full current-player catalog, including unowned and high-grade pills.
     // enabled/reason describe using one pill, not buying or brewing it.
     {
         json::Array catalog;
-        const string blocked = actionBlockReason(game, routePath(RouteId::UsePill));
+        const string blocked = actionBlockReason(GameState, routePath(RouteId::UsePill));
         for (const auto& recipe : data::RecipeDef_TABLE()) {
-            const PillUseInfo info = artPillUseInfo(game.player, recipe);
+            const PillUseInfo info = artPillUseInfo(GameState.player, recipe);
             Value item(json::Object{});
             item.set("id", str(recipe.id)); item.set("name", str(recipe.name));
-            item.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(game, recipe.id)));
+            item.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(GameState, recipe.id), GameState, "potion", recipe.id, MarketContext));
             item.set("kind", str(recipe.kind)); item.set("grade", num(recipe.grade)); item.set("dao", str(recipe.dao));
             item.set("owned", num(info.owned)); item.set("effect", str(info.effect));
             item.set("effectValue", num(info.effectValue)); item.set("baseEffect", str(info.baseEffect.text));
-            item.set("catalogEffect", str(catalogEffect(game.player, recipe)));
+            const auto CompleteEffect = mfCompletePillEffect(recipe);
+            item.set("catalogEffect", str(CompleteEffect.text));
+            if (recipe.kind == "xp") item.set("catalogEffectValue", num(CompleteEffect.value));
             item.set("usage", str(info.usage)); item.set("used", num(info.used));
             item.set("toleranceLimit", num(info.toleranceLimit)); item.set("toleranceRemaining", num(info.toleranceRemaining));
             item.set("toleranceUnlimited", Value(info.toleranceUnlimited)); item.set("overTier", Value(info.overTier));
@@ -84,7 +80,7 @@ void appendEconomyState(const Game& game, Value& state) {
             item.set("enabled", Value(reason.empty())); item.set("reason", str(reason));
             catalog.push_back(std::move(item));
         }
-        state.set("pillCatalog", Value(std::move(catalog)));
+        State.set("pillCatalog", Value(std::move(catalog)));
     }
 
     // 全量物品词表供野外行囊筛选；不表示当前位置可购买。
@@ -98,13 +94,13 @@ void appendEconomyState(const Game& game, Value& state) {
             Value item(json::Object{}); item.set("id",str(material.id)); item.set("name",str(material.name)); item.set("grade",num(material.grade));
             item.set("desc",str(std::to_string(material.grade)+"阶材料 · "+material.element+" · "+material.polarity)); materials.push_back(std::move(item));
         }
-        state.set("herbCatalog",Value(std::move(herbs))); state.set("materialCatalog",Value(std::move(materials)));
+        State.set("herbCatalog",Value(std::move(herbs))); State.set("materialCatalog",Value(std::move(materials)));
     }
 
     // ---- 坊市（只在城池有货）----
     {
         json::Array arr;
-        for (const auto& m : play::marketList(game)) {
+        for (const auto& m : play::marketList(GameState)) {
             Value entry(json::Object{});
             entry.set("kind", str(m.kind));
             entry.set("id", str(m.id));
@@ -115,14 +111,14 @@ void appendEconomyState(const Game& game, Value& state) {
             entry.set("owned", num(m.owned));
             entry.set("grade", num(marketGrade(m)));
             if (m.kind == "potion") {
-                entry.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(game, m.id)));
-                if (const auto* recipe = findRecipe(m.id)) entry.set("catalogEffect", str(catalogEffect(game.player, *recipe)));
+                entry.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(GameState, m.id), GameState, "potion", m.id, MarketContext));
+                if (const auto* recipe = findRecipe(m.id)) entry.set("catalogEffect", str(mfCompletePillEffect(*recipe).text));
             }
             arr.push_back(std::move(entry));
         }
-        for (const auto& m : play::gearList(game)) {
+        for (const auto& m : play::gearList(GameState)) {
             Value entry(json::Object{});
-            entry.set("pricing", mfCraftPriceView(crafting::mfQuoteStandardGearPrice(game, marketGrade(m))));
+            entry.set("pricing", mfCraftPriceView(crafting::mfQuoteStandardGearPrice(GameState, marketGrade(m)), GameState, "gear", m.id, MarketContext));
             entry.set("kind", str(m.kind));
             entry.set("id", str(m.id));
             entry.set("name", str(m.name));
@@ -133,25 +129,25 @@ void appendEconomyState(const Game& game, Value& state) {
             entry.set("grade", num(marketGrade(m)));
             arr.push_back(std::move(entry));
         }
-        state.set("market", Value(std::move(arr)));
-        state.set("inCity", Value(ecoIsCity(game.player.location)));
-        const bool AtHome = !game.player.cave.empty() && game.player.cave == game.player.location;
-        state.set("workshopAvailable", Value(ecoIsCity(game.player.location) || AtHome));
+        State.set("market", Value(std::move(arr)));
+        State.set("inCity", Value(ecoIsCity(GameState.player.location)));
+        const bool AtHome = !GameState.player.cave.empty() && GameState.player.cave == GameState.player.location;
+        State.set("workshopAvailable", Value(ecoIsCity(GameState.player.location) || AtHome));
     }
 
     // ---- 炼丹选项（带成丹率和缺料原因）----
     {
         json::Array arr;
-        for (const auto& c : play::craftOptions(game, "brew")) {
+        for (const auto& c : play::craftOptions(GameState, "brew")) {
             Value entry(json::Object{});
-            entry.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(game, c.id)));
+            entry.set("pricing", mfCraftPriceView(crafting::mfQuotePotionPrice(GameState, c.id), GameState, "potion", c.id, MarketContext));
             entry.set("id", str(c.id));
             entry.set("name", str(c.name));
             entry.set("desc", str(c.desc));
             entry.set("chance", num(c.chance));
             entry.set("output", num(c.output));
             // 数量和收益仅由后端报价；期望收入不承诺成功或即时售出。
-            const int salePrice = shop::salePrice(game, "potion", c.id);
+            const int salePrice = shop::salePrice(GameState, "potion", c.id);
             entry.set("sellPrice", num(salePrice));
             entry.set("expectedOutput", num(c.chance * c.output));
             entry.set("expectedSaleIncome", num(c.chance * c.output * salePrice));
@@ -160,31 +156,31 @@ void appendEconomyState(const Game& game, Value& state) {
             entry.set("enabled", Value(c.enabled));
             entry.set("reason", str(c.reason));
             if (const auto* recipe = findRecipe(c.id)) {
-                const PillUseInfo pill = artPillUseInfo(game.player, *recipe);
+                const PillUseInfo pill = artPillUseInfo(GameState.player, *recipe);
                 entry.set("grade", num(recipe->grade)); entry.set("baseEffect", str(pill.baseEffect.text));
-                entry.set("catalogEffect", str(catalogEffect(game.player, *recipe)));
+                entry.set("catalogEffect", str(mfCompletePillEffect(*recipe).text));
                 entry.set("effect", str(pill.effect)); entry.set("usage", str(pill.usage));
                 entry.set("poison", num(pill.poison)); entry.set("poisonAfter", num(pill.poisonAfter));
-                const auto* furnace = findFurnace(game.player.arts.furnace);
-                entry.set("durabilityCost", num(artHas(game.player.arts, "丹", 4) && furnace && furnace->grade > recipe->grade ? 0 : 1));
+                const auto* furnace = findFurnace(GameState.player.arts.furnace);
+                entry.set("durabilityCost", num(artHas(GameState.player.arts, "丹", 4) && furnace && furnace->grade > recipe->grade ? 0 : 1));
                 json::Array ingredients;
                 for (const auto& [name, required] : parseIngredients(recipe->ingredients)) {
                     const auto* herb = findHerbByName(name); if (!herb) continue;
-                    const auto owned = game.player.arts.herbs.find(name);
+                    const auto owned = GameState.player.arts.herbs.find(name);
                     Value material(json::Object{}); material.set("id", str(herb->id)); material.set("name", str(name));
-                    material.set("required", num(required)); material.set("owned", num(owned == game.player.arts.herbs.end() ? 0 : owned->second));
+                    material.set("required", num(required)); material.set("owned", num(owned == GameState.player.arts.herbs.end() ? 0 : owned->second));
                     ingredients.push_back(std::move(material));
                 }
                 entry.set("ingredients", Value(std::move(ingredients)));
             }
             arr.push_back(std::move(entry));
         }
-        state.set("brewOptions", Value(std::move(arr)));
+        State.set("brewOptions", Value(std::move(arr)));
     }
 
     // ---- 丹毒明细（让玩家看得见）----
     {
-        const play::PoisonInfo pi = play::poisonInfo(game);
+        const play::PoisonInfo pi = play::poisonInfo(GameState);
         Value entry(json::Object{});
         entry.set("current", num(pi.current));
         entry.set("threshold", num(pi.threshold));
@@ -193,29 +189,29 @@ void appendEconomyState(const Game& game, Value& state) {
         entry.set("daysToClear", num(pi.daysToClear));
         entry.set("affecting", Value(pi.affecting));
         entry.set("summary", str(pi.summary));
-        state.set("poison", std::move(entry));
+        State.set("poison", std::move(entry));
     }
-    state.set("marketCash", num(game.economy.marketCash));
-    state.set("marketBudget", num(ecoMarketBudget(game)));
-    state.set("marketTier", num(ecoMarketTier(game.player)));
-    state.set("marketRealmMultiplier", num(mfMarketRealmMultiplier(game.player)));
-    state.set("marketBudgetRule", str(mfMarketBudgetRule()));
-    state.set("coreBuyPrice", num(shop::corePrice(game, true)));
-    state.set("pillBuyPrice", num(shop::pillPrice(game, true)));
+    State.set("marketCash", num(GameState.economy.marketCash));
+    State.set("marketBudget", num(MarketContext.NextMonthBudget));
+    State.set("marketTier", num(ecoMarketTier(GameState.player)));
+    State.set("marketRealmMultiplier", num(mfMarketRealmMultiplier(GameState.player)));
+    State.set("marketBudgetRule", str(mfMarketBudgetRule()));
+    State.set("coreBuyPrice", num(shop::corePrice(GameState, true)));
+    State.set("pillBuyPrice", num(shop::pillPrice(GameState, true)));
     {
         json::Array arr;
-        for (const auto* f : shop::buyableFurnaces(game)) {
+        for (const auto* f : shop::buyableFurnaces(GameState)) {
             Value entry(json::Object{});
             entry.set("id", str(f->id));
             entry.set("name", str(f->name));
             entry.set("grade", num(f->grade));
             entry.set("capacity", num(f->capacity));
             entry.set("price", num(f->price > 0 ? f->price : 100 * f->grade * f->grade));
-            entry.set("current", Value(game.player.arts.furnace == f->id));
+            entry.set("current", Value(GameState.player.arts.furnace == f->id));
             arr.push_back(std::move(entry));
         }
-        state.set("furnaces", Value(std::move(arr)));
-        state.set("furnaceRepair", actionQuote(game, routePath(RouteId::FurnaceRepair), shop::furnaceRepairQuote(game)));
+        State.set("furnaces", Value(std::move(arr)));
+        State.set("furnaceRepair", actionQuote(GameState, routePath(RouteId::FurnaceRepair), shop::furnaceRepairQuote(GameState)));
     }
 }
 

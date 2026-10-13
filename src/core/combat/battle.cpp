@@ -1954,7 +1954,14 @@ static void battleEndTurn(Game& g) {
     const ArtMods m = talentMods(p);
 
     // 1) 弃掉所有手牌
+    const int DiscardedCardCount = static_cast<int>(b.hand.size());
+    const int ShieldBeforeDiscard = b.shield;
     battleDiscard(p, b, static_cast<int>(b.hand.size()));
+    const int DiscardShieldGain = b.shield - ShieldBeforeDiscard;
+    if (DiscardShieldGain > 0) {
+        b.log.push_back("回合末弃置" + std::to_string(DiscardedCardCount) + "张手牌：弃牌凝盾+" +
+                        std::to_string(DiscardShieldGain) + "，用于抵挡本回合敌方攻击，下一回合清零。");
+    }
     b.discard.insert(b.discard.end(), b.hand.begin(), b.hand.end());
     b.hand.clear();
 

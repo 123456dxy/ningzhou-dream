@@ -91,6 +91,21 @@ std::string_view text(TextId id) {
     case TextId::ArtifactWard: return "提高本场战斗减伤，法宝与神通的额外减伤共用20%上限。";
     case TextId::ArtifactEmpower: return "提高本场伤害，法宝与神通的伤害加成共用30%上限。";
     case TextId::ArtifactSuffix: return " 品阶与铭刻强化威力；冷却{count}个回合。装备后常驻斗法侧栏，无需抽牌、不占额外神通槽。";
+    case TextId::AchievementBrewCondition: return "本世累计成功炼丹 {Target} 炉。";
+    case TextId::AchievementForgeCondition: return "本世累计成功炼器 {Target} 次。";
+    case TextId::AchievementWinsCondition: return "本世累计斗法获胜 {Target} 场。";
+    case TextId::AchievementNodesCondition: return "本世解锁 {Target} 个悟道节点。";
+    case TextId::AchievementManualsCondition: return "本世习得 {Target} 部不同功法。";
+    case TextId::AchievementQuestsCondition: return "本世累计完成 {Target} 次机缘。";
+    case TextId::AchievementWealthCondition: return "本世灵石持有量的历史最高记录达到 {Target} 枚。";
+    case TextId::AchievementReward: return "首次达成可获 {Points} 传承点，用于下一世天赋预算；人生结算或实际重开时领取。";
+    case TextId::AchievementClaimedReward: return "首次奖励 {Points} 传承点；已结算，跨世不再重复领取。";
+    case TextId::AchievementRewardNote: return "达成成就不会立即增加本世悟道点。传承奖励在本世结算或实际重开时领取；同一成就跨世只领取一次，累计传承上限 {PointLimit} 点，实际新增以结算回执为准。";
+    case TextId::GardenReserveRequiresBottle: return "持有小绿瓶后才可存入灵田加速储备。";
+    case TextId::GardenBottleGrowthRule: return "每格同药材最多99份；每份成熟收获3份。天然每天100成长点，洞府每档+10；格内储备全额负担时灵气每档+30、绿瓶额外+200。日费=尚需加速种苗数×品阶×(灵气档位+绿瓶1)，储备不足自然生长且不扣费。外出照常生长，不自动扣主背包灵石。";
+    case TextId::GardenNoBottleGrowthRule: return "每格同药材最多99份；每份成熟收获3份。天然每天100成长点，洞府每档+10；外出照常自然生长。灵气配给沿用原修炼规则，不额外加速灵田。";
+    case TextId::PillCultivationCompleteEffect: return "标称修为 +{NominalValue}；实际吸收受本小境25%及距圆满余量限制。";
+    case TextId::PillCultivationUseLimit: return "；修为增量不超过标称药效（{NominalValue}）、本小境25%（{StageLimit}）及距圆满余量（{RemainingValue}）";
     }
     throw std::invalid_argument("Invalid text ID");
 }

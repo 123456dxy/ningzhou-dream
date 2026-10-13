@@ -42,11 +42,41 @@ struct ActionQuote {
     // Preserve legacy failed-sale map insertion order in the mutating action.
     bool demandChecked = false, potionChecked = false;
 };
+
+// 类型：有限坊市收购能力，只负责当前资金/同类需求与地点，不依赖持有量或开炉资格。
+// 临时炼器预览和现有物品出售共用；报价无时间/RNG/存档副作用，不充值旧档当月余额。
+struct MarketSaleQuote {
+    bool InCity = false;
+    int RemainingCash = 0;
+    int NextMonthBudget = 0;
+    int AffordableCount = 0;
+    std::string Reason;
+};
+// 类型：同一只读响应内的收购参数快照；只存数值，不借用Game，不跨请求或动作复用。
+struct MarketSaleContext {
+    bool InCity = false;
+    int RemainingCash = 0;
+    int NextMonthBudget = 0;
+    int DemandLimit = 0;
+};
+// 用途：一次计算月预算并在本次目录视图中复用；返回：纯数值快照，无状态/RNG/文件副作用。
+[[nodiscard]] MarketSaleContext mfMarketSaleContext(const Game& State);
+// 用途：按后端单位售值查询资金和同类月需求；参数：potion/gear、稳定物品ID（临时法器可为空）、正价。
+// 返回：与真实saleQuote共用的收购能力；不检查拥有量，未炼成的报价也能显示可收数量。
+[[nodiscard]] MarketSaleQuote mfQuoteMarketSale(const Game& State, const std::string& Kind,
+                                               const std::string& ItemId, int UnitSalePrice);
+// 用途：批量只读报价共享本次响应快照；真实出售不接受外部上下文，始终重新校验活动状态。
+[[nodiscard]] MarketSaleQuote mfQuoteMarketSale(const Game& State, const std::string& Kind,
+                                               const std::string& ItemId, int UnitSalePrice,
+                                               const MarketSaleContext& Context);
 // 用途：预览出售资格需求与收益。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, const std::string& kind, const std::string& id，按本模块入口调用。
 // 返回值：ActionQuote结果，包含说明所述状态或计算数据。
 ActionQuote saleQuote(const Game& g, const std::string& kind, const std::string& id);
+// 用途：同次行囊响应共享收购上下文；真实sell仍调用三参接口重新检查，不接收请求提供的上下文。
+ActionQuote saleQuote(const Game& State, const std::string& Kind, const std::string& ItemId,
+                      const MarketSaleContext& Context);
 // 用途：预览法器装备出售铭刻与拆解资格。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g, const std::string& action, const std::string& id，按本模块入口调用。

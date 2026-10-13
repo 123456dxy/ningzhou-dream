@@ -11,6 +11,16 @@ inline constexpr int InventoryLimit = 1000000000;
 inline constexpr int MaximumStock = 60;
 inline constexpr int PointsPerStock = 3000;
 inline constexpr int MinimumPayablePercent = 50;
+// 类型：兽潮NPC出战节奏的不可变规则值；负责日出战概率、日击杀与本期上限，无资源或持久字段。
+// BattleChanceDenominator表示每日仅有1/该值概率出战；未出战不抽击杀，已达本期上限不再投骰。
+struct NpcBattlePace {
+    int BattleChanceDenominator = 1;
+    int MaximumDailyKills = 0;
+    int MaximumEventKills = 0;
+};
+inline constexpr NpcBattlePace NormalNpcBattlePace{15, 1, 9};
+inline constexpr NpcBattlePace EliteNpcBattlePace{10, 2, 12};
+static_assert(NormalNpcBattlePace.BattleChanceDenominator > 0 && EliteNpcBattlePace.BattleChanceDenominator > 0);
 struct RankBand { int maxRank, rewardYears, payablePercent; };
 // 同分使用同一名次；maxRank=0是全部其余有效参战者，零分没有奖励资格。
 inline constexpr std::array<RankBand,4> RankBands{{

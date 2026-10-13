@@ -1021,6 +1021,19 @@ namespace {
 // 本地六类战斗准备；不把原游戏的源文案当作本地已实现规则。
 enum class PillPreparationKind { Attack, Shield, Reduction, SwordQi, Mana, Speed };
 
+constexpr double CultivationPillValueScale = 4.0;
+constexpr double CultivationPillStageRatio = 0.25;
+
+// 用途：将参考修为换算为本地标称药效；流程：完整目录与真实服丹共用；返回：按既有 JS 四舍五入得到的本地修为点。
+int mfPillCultivationNominalValue(const data::RecipeDef& Recipe) {
+    return jsRound(jsSqrt(static_cast<double>(Recipe.value)) * CultivationPillValueScale);
+}
+
+// 用途：查询角色小境单次吸收上限；流程：当前服丹预览与结算限制；返回：本小境修为需求的25%，沿用既有四舍五入。
+int mfPillCultivationStageLimit(const Player& Player) {
+    return jsRound(realmOf(Player.stage).need * CultivationPillStageRatio);
+}
+
 // 用途：以稳定丹方 ID 确定既有战斗准备；流程：玩家/NPC服丹；用法：传目录 RecipeId；返回：现有六类准备之一。
 PillPreparationKind mfCombatPreparationKind(const string& RecipeId) {
     static const map<string, PillPreparationKind> Rules = {
@@ -1079,15 +1092,11 @@ CombatPill artCombatPill(const data::RecipeDef& r) {
 // 使用方式：传角色与丹方，套用原有属性上限和天赋条件。
 // 返回值：基础效果值及说明，不消耗丹药。
 PillEffect artPillEffect(const Player& p, const data::RecipeDef& r) {
-    // 各境界所需修为
-    static const int needs[13] = {110, 190, 320, 900, 1600, 2800, 3600,
-                                  5400, 8000, 18000, 30000, 46000, 0};
     PillEffect e;
-    const int stage = clampInt(p.stage, 0, 12);
 
     if (r.kind == "xp") {
         e.value = hasTalent(p, "oddMeridian") ? 0 :
-            std::min(jsRound(needs[stage] * 0.25), jsRound(jsSqrt(static_cast<double>(r.value)) * 4));
+            std::min(mfPillCultivationStageLimit(p), mfPillCultivationNominalValue(r));
     } else if (r.kind == "dao") {
         e.value = jsRound(r.value / 10.0);
     } else if (r.kind == "body") {
@@ -1134,6 +1143,22 @@ PillEffect artPillEffect(const Player& p, const data::RecipeDef& r) {
     else
         e.text = "斗法伤害 +10%";
     return e;
+}
+
+// 用途：生成角色无关的本地完整药效；流程：坊市/炼丹目录；返回：标称值与实际吸收限制说明，不改变服用结算。
+PillEffect mfCompletePillEffect(const data::RecipeDef& Recipe) {
+    if (Recipe.kind == "xp") {
+        PillEffect Effect;
+        Effect.value = mfPillCultivationNominalValue(Recipe);
+        Effect.text = content::formatText(TextId::PillCultivationCompleteEffect,
+            {{"NominalValue", std::to_string(Effect.value)}});
+        return Effect;
+    }
+    Player Reference;
+    Reference.apt = 0;
+    Reference.arts.aptPills = 0;
+    Reference.traits.clear();
+    return artPillEffect(Reference, Recipe);
 }
 
 namespace {
@@ -1209,6 +1234,11 @@ PillPlan pillPlan(const Player& p, const data::RecipeDef& r) {
             info.reason = "该丹只用于对应的大境界准备。";
     } else if (kind == "xp") {
         personValue(&Person::xp, std::min(realmOf(p.stage).need, p.xp + value), "修为");
+        info.usage += content::formatText(TextId::PillCultivationUseLimit, {
+            {"NominalValue", std::to_string(mfPillCultivationNominalValue(r))},
+            {"StageLimit", std::to_string(mfPillCultivationStageLimit(p))},
+            {"RemainingValue", std::to_string(std::max(0, realmOf(p.stage).need - p.xp))}
+        });
         if (hasTalent(p, "oddMeridian")) info.effect = info.baseEffect.text;
     } else if (kind == "heal") {
         personValue(&Person::health, std::min(100, p.health + value), "健康度", "个百分点");

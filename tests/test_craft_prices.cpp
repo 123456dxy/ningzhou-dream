@@ -1,5 +1,6 @@
 #include "harness.h"
 #include "core/arts.h"
+#include "core/api.h"
 #include "core/crafting/material_supply.h"
 #include "core/crafting/craft_prices.h"
 #include "core/economy.h"
@@ -46,16 +47,94 @@ Game mfPriceGame() {
 // 用途：验证材料市价驱动的成品报价；流程：报价、购买、出售、旧法器与拒绝路径；返回：无，断言真实资源变化。
 void mfRunCraftPriceTests() {
     std::printf("\n--- 成品统一材料市价回归 ---\n");
+    // 用途：锁定本地药材价格口径及高品成品收购；流程：数值修正定向回归；仅用独立角色。
+    {
+        struct PriceSample { const char* Id; int Grade; int MaterialCost; int Sale; int Purchase; };
+        const PriceSample Samples[] = {{"5001", 1, 21, 32, 63}, {"5101", 2, 112, 168, 336},
+            {"5202", 3, 616, 924, 1848}, {"5302", 4, 672, 1008, 2016},
+            {"5402", 5, 812, 1218, 2436}, {"5502", 6, 1183, 1775, 3549},
+            {"5504", 6, 490, 735, 1470}, {"5505", 6, 1512, 2268, 4536},
+            {"5512", 6, 2520, 3780, 7560}};
+        for (const auto& Sample : Samples) {
+            Game State = mfPriceGame();
+            State.player.stage = std::max(0, (Sample.Grade - 2) * 3);
+            const auto Quote = crafting::mfQuotePotionPrice(State, Sample.Id);
+            check(Quote.Valid && Quote.MaterialCost == Sample.MaterialCost &&
+                  Quote.BaseSellPrice == Sample.Sale && Quote.BuyPrice == Sample.Purchase,
+                  "逐品丹方采用本地price完整材料价值且保留一点五/三倍：" + string(Sample.Id));
+            State.economy.month = -1;
+            ensureEconomy(State);
+            State.player.arts.potions[Sample.Id] = 1;
+            check(shop::saleQuote(State, "potion", Sample.Id).enabled,
+                  "实际可炼品阶的代表丹药在新月城中可足额出售：" + string(Sample.Id));
+            const int BeforeCash = State.economy.marketCash;
+            const auto Sold = shop::sell(State, "potion", Sample.Id);
+            check(Sold.ok && Sold.gain == Sample.Sale && State.economy.marketCash == BeforeCash - Sample.Sale,
+                  "逐品丹药真实出售按完整价格扣收购资金：" + string(Sample.Id));
+        }
+        Game State = mfPriceGame();
+        for (const int Stage : {0, 2, 3, 5, 6, 8, 9, 11, 12}) {
+            State.player.stage = Stage;
+            checkEq(ecoMarketTier(State.player), artTier(State.player), "月资金保障覆盖实际炼制品阶及突破准备阶段");
+            check(ecoMarketBudget(State) >= crafting::mfQuoteStandardGearPrice(State, artTier(State.player)).SellPrice,
+                  "月资金同样保障本层级标准法器完整售值");
+        }
+        State.player.stage = 12;
+        State.economy.month = State.clock.days / 30;
+        State.economy.marketCash = 0;
+        State.player.arts.potions["5505"] = 2;
+        const auto Before = saveToJson(State);
+        check(!shop::sell(State, "potion", "5505").ok, "零资金不能销售高品丹药");
+        check(saveToJson(State) == Before, "零资金拒售不改变库存余额及需求账");
+        ecoRefresh(State);
+        checkEq(State.economy.marketCash, 0, "更新价格规则后同月零余额不得充值");
+        Game Restored; string Error;
+        check(loadFromJson(saveToJson(State), Restored, &Error), "已耗尽预算的旧档可读回：" + Error);
+        checkEq(Restored.economy.marketCash, 0, "旧档读取保留当月已经用尽的预算");
+        Restored.clock.days += 30; ecoRefresh(Restored);
+        check(shop::saleQuote(Restored, "potion", "5505").enabled, "旧档进入下月后可按新曲线足额收购");
+        Restored.player.location = "yishan";
+        const auto Outside = saveToJson(Restored);
+        check(!shop::sell(Restored, "potion", "5505").ok, "高品收购不能绕过五城地点限制");
+        check(saveToJson(Restored) == Outside, "非城地点拒售保持全部交易状态");
+    }
+    {
+        struct SessionScope {
+            api::Session Session;
+            SessionScope() { api::bindSession(&Session); }
+            ~SessionScope() { api::bindSession(nullptr); }
+        } Scope;
+        Scope.Session.g = mfPriceGame();
+        Scope.Session.started = true;
+        auto& State = Scope.Session.g;
+        State.economy.marketCash = 199;
+        State.economy.sold["potion:5001"] = 3;
+        const auto Before = saveToJson(State);
+        const auto Response = api::handle({"POST", "/api/state", "{}", ""});
+        const auto View = json::Value::parse(Response.body)["state"];
+        bool Found = false;
+        for (const auto& Entry : View["brewOptions"].asArray()) if (Entry["id"].asString() == "5001") {
+            Found = true;
+            const auto Market = Entry["pricing"]["market"];
+            checkEq(Market["remainingCash"].asInt(), 199, "真实状态报价显示本月已花费后的剩余资金");
+            checkEq(Market["affordableCount"].asInt(), 5, "可售量按资金与剩余同类需求计算且不依赖现有库存");
+            check(Market["locations"].asArray().size() == 5 && Market["inCity"].asBool(),
+                  "价格报价公布实际五城收购渠道");
+        }
+        check(Found, "真实工坊报价包含待炼丹方");
+        check(saveToJson(State) == Before, "定价与产销渠道报价不修改余额时间随机数或库存");
+    }
     {
         Game GameState = mfPriceGame();
         const auto Before = saveToJson(GameState);
-        checkEq(shop::salePrice(GameState, "potion", "5001"), 41, "化淤丹完整原料27的基础收购价为41");
+        checkEq(shop::salePrice(GameState, "potion", "5001"), 32, "化淤丹完整本地原料21的基础收购价为32");
         const auto Market = play::marketList(GameState);
         const auto Pill = std::find_if(Market.begin(), Market.end(), [](const auto& Item) { return Item.kind == "potion" && Item.id == "5001"; });
-        check(Pill != Market.end() && Pill->price == 81 && Pill->sellPrice == 41, "化淤丹买价为原料价值三倍且列表收购价一致");
+        check(Pill != Market.end() && Pill->price == 63 && Pill->sellPrice == 32, "化淤丹买价为原料价值三倍且列表收购价一致");
         const auto GearMarket = play::gearList(GameState);
-        const auto Sword = std::find_if(GearMarket.begin(), GearMarket.end(), [](const auto& Item) { return Item.id == "sword-1"; });
-        check(Sword != GearMarket.end() && Sword->price == 240 && Sword->sellPrice == 120, "标准一阶法器十份8灵石原料给出240购入和120收购报价");
+        check(GearMarket.empty(), "普通坊市不列没有真实能力的标准法器商品");
+        const auto StandardValue = crafting::mfQuoteStandardGearPrice(GameState, 1);
+        check(StandardValue.Valid && StandardValue.BuyPrice == 240 && StandardValue.SellPrice == 120, "标准法器预算估值保留但不代表上架商品");
         check(saveToJson(GameState) == Before, "成品报价不改变库存、随机数、日历和存档状态");
     }
     for (const double MarketRate : {0.88, 1.0, 1.16}) {
@@ -65,18 +144,11 @@ void mfRunCraftPriceTests() {
                 GameState.world.market = MarketRate;
                 GameState.player.renown = Renown;
                 if (HasMerchant) GameState.player.traits = {"merchant"};
-                const int BeforeStones = GameState.player.stones;
-                const auto List = play::gearList(GameState);
-                const auto Offer = std::find_if(List.begin(), List.end(), [](const auto& Item) { return Item.id == "sword-1"; });
-                check(Offer != List.end(), "标准一阶法器在普通坊市有报价");
-                if (Offer == List.end()) continue;
-                check(play::marketBuy(GameState, "gear", "sword-1", 1).empty(), "真实购买一阶法器成功");
-                const auto& Purchased = GameState.player.arts.gear.back();
-                const string GearId = Purchased.id;
-                checkEq(shop::salePrice(GameState, "gear", GearId), Offer->sellPrice, "真实买入后法器收购价等于购前列表报价");
-                const auto Result = shop::sell(GameState, "gear", GearId);
-                check(Result.ok && GameState.player.stones < BeforeStones, "所有行情声望商贾组合下买入立即卖出不能套利");
-                checkEq(Result.gain, Offer->sellPrice, "法器实际收购金额与统一预览一致");
+                const auto Before = saveToJson(GameState);
+                check(play::gearList(GameState).empty(), "所有行情声望商贾组合下普通坊市都无标准法器商品");
+                const auto Error = play::marketBuy(GameState, "gear", "sword-1", 1);
+                check(Error.find("成品法器未上架") != string::npos, "旧法器购买请求明确拒绝并指引自行炼制");
+                check(saveToJson(GameState) == Before, "所有行情声望商贾组合下拒绝旧法器购买保持整档原子不变");
             }
         }
     }

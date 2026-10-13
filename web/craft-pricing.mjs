@@ -6,6 +6,20 @@ function quoteNumber(value) {
     ? esc(value) : '待报价';
 }
 
+// 用途：展示权威收购渠道与有限资金；流程：工坊、坊市和行囊共用报价；返回：安全HTML，缺字段时不臆造可售数量。
+function renderMarketAvailability(market, isGear) {
+  if (!market || typeof market.inCity !== 'boolean') return '';
+  const cities = Array.isArray(market.locations)
+    ? market.locations.filter(city => typeof city?.name === 'string').map(city => esc(city.name)).join('、') : '';
+  const unit = isGear ? '件' : '枚';
+  return `<div class="craft-sale-availability" data-craft-sale-availability>`
+    + `<p class="panel-note">收购地点：${cities || '渠道待报价'}${market.inCity ? '（当前在城中）' : '；请携成品前往城中'}</p>`
+    + `<p class="panel-note">本月剩余收购资金 ${quoteNumber(market.remainingCash)} 灵石 · 当前可收 ${quoteNumber(market.affordableCount)} ${unit}</p>`
+    + (market.reason ? `<p class="panel-note">${esc(market.reason)}</p>` : '')
+    + `<details class="craft-sale-budget"><summary>查看下月收购额度</summary><p class="panel-note">按当前境界、声望与行情预计下月 ${quoteNumber(market.nextMonthBudget)} 灵石；只在进入新月时刷新，已用资金不会因切页、读档或晋阶重置。</p></details>`
+    + `</div>`;
+}
+
 // 用途：展示制作成品的权威材料定价及法器额外加成；流程：工坊、坊市和行囊共用。
 // 使用：传服务端pricing对象及potion/gear类别；返回：默认折叠HTML，无资源变化或价格重算。
 // 缺报价/失败报价不把后端默认零当成交价，材料价值与缺料采购支出分别解释。
@@ -29,7 +43,8 @@ export function renderCraftPricing(pricing, { kind = 'potion', compact = false }
   const outputText = !isGear ? ` · 标准产量 ${quoteNumber(pricing.standardOutput)} 枚` : '';
   const estimatedText = pricing.estimatedMaterials
     ? '<p class="panel-note craft-price-estimate">标准材料估价：没有完整配料账，按同品阶十份原料估算。</p>' : '';
-  return `<details class="craft-pricing${compact ? ' compact' : ''}" data-craft-pricing="${isGear ? 'gear' : 'potion'}">`
+  return renderMarketAvailability(pricing.market, isGear)
+    + `<details class="craft-pricing${compact ? ' compact' : ''}" data-craft-pricing="${isGear ? 'gear' : 'potion'}">`
     + `<summary>定价 · 最终出售价 ${quoteNumber(pricing.sellPrice)} 灵石</summary>`
     + `<div class="craft-pricing-detail"><p class="panel-note">完整配方材料市价 ${quoteNumber(pricing.materialCost)} 灵石${outputText}</p>`
     + `<div class="craft-cost">基础出售价 ${quoteNumber(pricing.baseSellPrice)} 灵石（材料市价 1.5 倍）<br>`

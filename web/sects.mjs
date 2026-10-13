@@ -173,6 +173,7 @@ export function renderAchievements(data) {
   const done = list.filter(a => a.done).length;
 
   return `<div class="ach-head">已达成 <b>${done}</b> / ${list.length}</div>`
+    + (data?.rewardNote ? `<p class="ach-reward-note">${esc(data.rewardNote)}</p>` : '')
     + list.map(a => {
         const pct = a.target > 0
           ? Math.max(0, Math.min(100, Math.round(a.progress / a.target * 100))) : 0;
@@ -180,6 +181,8 @@ export function renderAchievements(data) {
           <div class="ach-top"><strong>${esc(a.name)}</strong>
             <span>${a.done ? '已达成' : `${a.progress} / ${a.target}`}</span></div>
           <div class="ach-bar"><i style="width:${pct}%"></i></div>
+          <p class="ach-condition">达成条件：${esc(a.condition || '正在读取条件。')}</p>
+          <p class="ach-reward">奖励：${esc(a.reward || '正在读取奖励。')}</p>
         </div>`;
       }).join('');
 }

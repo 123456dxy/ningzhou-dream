@@ -819,6 +819,8 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 .ach-row.done .ach-top strong { color: var(--jade); }
 .ach-bar { height: 5px; border-radius: 3px; background: rgba(0,0,0,.07); overflow: hidden; }
 .ach-bar i { display: block; height: 100%; background: var(--jade); }
+.ach-condition, .ach-reward, .ach-reward-note { font-size: 12px; line-height: 1.6; color: var(--ink-2); margin: 5px 0 0; overflow-wrap: anywhere; }
+.ach-reward-note { margin-bottom: 12px; }
 
 .dead-tag { font-size: 11px; color: #8a4436; margin-left: 6px; }
 
@@ -1603,3 +1605,11 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 .tide-market-rule{line-height:1.9;font-size:13px;color:var(--muted)}.tide-market-rule strong{color:var(--green)}.tide-market-controls{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0}.tide-market-controls label{font-size:12px}.tide-market-controls select{padding:7px 10px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:5px}.tide-market-controls .shop-tabs{flex-wrap:wrap}
 .tide-market-list{display:grid;gap:12px}.tide-market-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:14px;border:1px solid var(--line);border-radius:8px;padding:16px}.tide-market-row p{margin:5px 0 0}.tide-market-price{display:flex;flex-direction:column;gap:5px;font-size:12px}.tide-market-price span,.tide-market-price small{color:var(--muted)}.tide-market-price strong{color:var(--green)}.tide-market-quantity{font-size:12px;white-space:nowrap}.tide-market-quantity input{width:57px;margin-left:5px;padding:7px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)}
 @media (min-width:761px) and (max-width:1200px){.tide-battlefields{grid-template-columns:repeat(2,minmax(0,1fr))}.tide-market-row{grid-template-columns:minmax(0,1fr) auto}.tide-market-quantity{justify-self:start}.tide-market-row>.buy{justify-self:end}}
+@media (max-width:760px){
+  .tide-market-row{grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:14px}
+  .tide-market-row>:first-child{grid-column:1/-1;min-width:0}
+  .tide-market-price{min-width:0}
+  .tide-market-quantity{justify-self:end}
+  .tide-market-quantity input{min-height:44px}
+  .tide-market-row>.buy{grid-column:1/-1;width:100%;min-height:44px}
+}

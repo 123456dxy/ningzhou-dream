@@ -43,6 +43,13 @@ void mfRunCaveApiTests() {
     check(View["cave"]["access"]["atHome"].asBool(), "洞府访问条件表明已返府");
     checkEq(View["cave"]["garden"]["plots"][0]["remainingCapacity"].asInt(), 99, "空格报价容量99");
     check(View["cave"]["garden"]["plots"][0]["plantEnabled"].asBool(), "播种按钮来自领域报价");
+    State.player.traits.clear();
+    const auto NoBottleView = api::view::state(State);
+    check(!NoBottleView["cave"]["garden"]["hasGreenBottle"].asBool()
+          && !NoBottleView["cave"]["garden"]["plots"][0]["deposit"]["enabled"].asBool(),
+          "无小绿瓶完整视图明确禁用存入");
+    mfCheckCaveReject("cave/garden/reserve/deposit", mfGardenInput("plot-1", 1, 500), "无小绿瓶存入");
+    State.player.traits = {"greenBottle"};
     for (const auto& Pill : View["pillCatalog"].asArray()) {
         const auto Quote = crafting::mfQuotePotionPrice(State, Pill["id"].asString());
         checkEq(Pill["pricing"]["materialCost"].asInt(), Quote.MaterialCost, "目录原料价值权威一致");

@@ -5,6 +5,22 @@
 
 namespace nz::crafting {
 
+// 类型：制作经济的只读平衡配置；材料目录price为本地基价，不采用原游戏sourcePrice。
+// 比例和有限月预算集中于此契约，所有报价/真实结算共用；无持久字段或可变全局状态。
+struct CraftEconomyRules {
+    int BaseSellNumerator = 3;
+    int BaseSellDenominator = 2;
+    int BaseBuyMultiplier = 3;
+    int MonthlyBudgetMultiplier = 3;
+    int MaximumMonthlyBudget = 1000000000;
+    int MaximumBudgetRenown = 250;
+    int MinorStagesPerMajorRealm = 3;
+    int MaximumMajorRealmIndex = 4;
+};
+
+// 用途：取得唯一制作经济平衡参数；返回：静态不可变配置借用，无时间/RNG/资源副作用。
+[[nodiscard]] const CraftEconomyRules& mfCraftEconomyRules();
+
 // 封闭的材料报价类别，仅在兼容HTTP/C++字符串边界转换；不使用显示文本判断业务。
 enum class MaterialPriceKind { Herb, ForgeMaterial };
 

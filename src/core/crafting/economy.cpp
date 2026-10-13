@@ -4,6 +4,7 @@
 #include "core/progression/manual_study.h"
 #include "core/crafting/material_supply.h"
 #include "core/crafting/craft_timing.h"
+#include "core/crafting/craft_prices.h"
 #include "core/crafting/cave_garden.h"
 #include "core/renown.h"
 
@@ -85,40 +86,46 @@ static bool lookupManual(const string& id, ManualView& out) {
 }
 
 // 用途：确定角色可接触的丹药收购市场层级。
-// 流程：月度坊市资金配置；炼气/筑基/金丹/元婴依次对应一至四品，最终化神覆盖五六品。
+// 流程：月度坊市资金配置；与真实炼制品阶共用artTier，包含末小境的突破准备阶段。
 // 返回值：一至六品；不改变炼制、丹炉或药材采购资格。
 int ecoMarketTier(const Player& player) {
-    return player.stage >= 12 ? 6 : clampInt(1 + player.stage / 3, 1, 4);
+    return clampInt(artTier(player), 1, 6);
 }
 
 // 用途：计算有限的月度收购预算，避免高阶成品永远无法整枚售出。
-// 流程：初始化或换月时取声望基础预算与本层级最高单枚丹价的较高值，再乘基础三倍与大境界倍率。
+// 流程：初始化或换月时取声望额度、本层级最高单枚丹价及标准法器售值的较高值，再乘基础三倍与大境界倍率。
 // 返回值：当期行情下的月预算；只读，不给本月已花掉的资金充值。
 int ecoMarketBudget(const Game& game) {
-    constexpr std::int64_t MaximumMarketBudget = 1000000000;
-    constexpr int BaseMarketBudgetMultiplier = 3;
-    constexpr int MaximumBudgetRenown = 250;
-    int BaseBudget = renown::marketCashCap(clampInt(game.player.renown, 0, MaximumBudgetRenown));
+    const auto& Rules = crafting::mfCraftEconomyRules();
+    int BaseBudget = renown::marketCashCap(clampInt(game.player.renown, 0, Rules.MaximumBudgetRenown));
     const int MarketTier = ecoMarketTier(game.player);
     for (const auto& Recipe : data::RecipeDef_TABLE()) {
         if (Recipe.grade <= MarketTier)
             BaseBudget = std::max(BaseBudget, shop::salePrice(game, "potion", Recipe.id));
     }
-    const std::int64_t Budget = static_cast<std::int64_t>(BaseBudget) * BaseMarketBudgetMultiplier * mfMarketRealmMultiplier(game.player);
-    return static_cast<int>(std::min(Budget, MaximumMarketBudget));
+    for (int Grade = 1; Grade <= MarketTier; ++Grade) {
+        const auto Quote = crafting::mfQuoteStandardGearPrice(game, Grade);
+        if (Quote.Valid) BaseBudget = std::max(BaseBudget, Quote.SellPrice);
+    }
+    const std::int64_t Budget = static_cast<std::int64_t>(BaseBudget) * Rules.MonthlyBudgetMultiplier * mfMarketRealmMultiplier(game.player);
+    return static_cast<int>(std::min<std::int64_t>(Budget, Rules.MaximumMonthlyBudget));
 }
 
 // 用途：查询月度收购预算的境界乘区；流程：资金预览/换月；用法：传只读角色，小境界不改变倍率；返回：炼气至化神1/2/4/8/16，越界饱和，无状态写入。
 int mfMarketRealmMultiplier(const Player& PlayerState) {
-    constexpr int MaximumMajorRealmIndex = 4;
-    constexpr int MinorStagesPerMajorRealm = 3;
-    const int MajorRealmIndex = clampInt(PlayerState.stage / MinorStagesPerMajorRealm, 0, MaximumMajorRealmIndex);
+    const auto& Rules = crafting::mfCraftEconomyRules();
+    const int MajorRealmIndex = clampInt(PlayerState.stage / Rules.MinorStagesPerMajorRealm, 0, Rules.MaximumMajorRealmIndex);
     return 1 << MajorRealmIndex;
 }
 
 // 用途：返回统一预算解释；流程：坊市和声望视图；用法：无参数；返回：与后端完整底座乘区相同的中文规则，无状态写入。
 string mfMarketBudgetRule() {
-    return "声望基础额度与当前市场层级最高单枚丹药收购价取较高值，基础翻三倍，再乘大境界倍率（炼气1、筑基2、金丹4、元婴8、化神16），总预算最高十亿灵石；每月刷新，同月交易只扣减剩余资金。";
+    const auto& Rules = crafting::mfCraftEconomyRules();
+    return "声望基础额度、当前可炼品阶最高单枚丹药和同阶标准法器收购价取较高值，基础乘 " +
+        std::to_string(Rules.MonthlyBudgetMultiplier) + "，再按大境界翻倍（最高 " +
+        std::to_string(1 << Rules.MaximumMajorRealmIndex) + " 倍），总预算上限 " +
+        std::to_string(Rules.MaximumMonthlyBudget) +
+        " 灵石；五城收购且同类有月需求上限。旧档和同月晋阶不充值，新预算下月生效。";
 }
 // ------------------------------------------------------------
 // 初始化与每月刷新

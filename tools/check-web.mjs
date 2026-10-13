@@ -278,9 +278,65 @@ verify(context.api.viewMarket().includes('功法13'), '完整书坊可访问，�
 context.api.setShopKind('stock');
 verify(context.api.viewMarket().includes('data-action="trade-stock"') && !context.api.viewMarket().includes('功法13'), '突破物品集中在独立坊市分类');
 context.api.setShopKind('herb');
+const tideBeforeMarketCheck = sidebarState.tide;
+sidebarState.tide = { eventId: 'ui-market-scope', market: { open: true, daysLeft: 20, items: [
+  { kind: 'herb', id: '6201', name: '兽潮高阶药材', grade: 3, stock: 5, basePrice: 20, unitPrice: 10, enabled: true },
+  { kind: 'material', id: 'gold', name: '兽潮高阶器材', grade: 3, stock: 5, basePrice: 40, unitPrice: 20, enabled: true },
+  { kind: 'gear', id: 'scope-gear', name: '不应出现的法器', grade: 3, stock: 5, unitPrice: 20, enabled: true },
+  { kind: 'manual', id: 'scope-manual', name: '不应出现的功法', grade: 3, stock: 5, unitPrice: 20, enabled: true },
+  { kind: 'sect', id: 'scope-sect', name: '不应出现的贡献兑换', grade: 3, stock: 5, unitPrice: 20, enabled: true },
+] } };
+context.api.setShopKind('tide');
+const isolatedTideMarketHTML = context.api.viewMarket();
+verify(isolatedTideMarketHTML.includes('兽潮坊市') && isolatedTideMarketHTML.includes('返回普通坊市')
+  && isolatedTideMarketHTML.includes('兽潮高阶药材') && isolatedTideMarketHTML.includes('兽潮高阶器材'),
+  '兽潮坊市有明确标题、返回普通市场入口及高阶材料');
+verify(!/data-shop="(?:gear|book|stock|potion)"/.test(isolatedTideMarketHTML)
+  && !/data-action="(?:buy|book-buy|library|trade-stock|craft)"/.test(isolatedTideMarketHTML)
+  && !isolatedTideMarketHTML.includes('宗门贡献'), '兽潮坊市不渲染普通法器书坊突破物品或贡献兑换按钮');
+verify(!isolatedTideMarketHTML.includes('不应出现的'), '兽潮目录只展示合法高阶草药及器材');
+verify(shouldRenderTide({ active: true }) && shouldRenderTide({ active: false, settled: true, market: { open: true } }),
+  '兽潮战期与战后坊市开放期保留当前活动入口');
+verify(!shouldRenderTide({ active: false, settled: true, market: { open: false } }),
+  '兽潮及战后坊市都结束后移除长期驻留的活动面板');
+sidebarState.tide.market.open = false;
+const expiredTideMarketHTML = context.api.viewMarket();
+verify(expiredTideMarketHTML.includes('普通坊市') && !expiredTideMarketHTML.includes('战后高阶材料交易')
+  && !expiredTideMarketHTML.includes('data-action="tide-market-buy"'), '兽潮坊市到期后自动回普通坊市');
+sidebarState.tide.market.open = true;
+verify(context.api.viewMarket().includes('普通坊市') && !context.api.viewMarket().includes('战后高阶材料交易'),
+  '到期退出后新的兽潮坊市不会悄悄重开已关闭的选择');
+sidebarState.tide = tideBeforeMarketCheck;
+context.api.setShopKind('herb');
+const ordinaryMarketHTML = context.api.viewMarket();
+verify(!ordinaryMarketHTML.includes('data-shop="gear"'), '普通坊市不再提供无神通成品法器分类');
+context.api.setShopKind('gear');
+const obsoleteGearMarketHTML = context.api.viewMarket();
+verify(!obsoleteGearMarketHTML.includes('data-kind="gear"') && !obsoleteGearMarketHTML.includes('剑·1阶'),
+  '旧法器分类偏好自动退回普通药材，旧目录数据也不展示可购法器');
+context.api.setShopKind('herb');
 const clippedPill = {pillCatalog:[{id:'5001',effect:'当前回复气血0点',baseEffect:'回复气血15点',catalogEffect:'回复气血20点',basePoison:3,poisonAfter:3,poisonDelta:3}]};
 verify(renderPillEffect(clippedPill,'5001',{catalog:true}).includes('回复气血20点') && !renderPillEffect(clippedPill,'5001',{catalog:true}).includes('回复气血0点'), '丹药目录优先完整catalogEffect，不用健康度截断的当前回复');
 verify(renderPillEffect(clippedPill,'5001').includes('当前回复气血0点'), '实际服用详情保留当前健康度对应的真实效果');
+
+const saleChannelQuote = {
+  valid: true, materialCost: 100, baseSellPrice: 150, buyPrice: 300, sellPrice: 150, standardOutput: 1,
+  market: { locations: [{ id: 'wuling', name: '武陵城' }], inCity: true,
+    remainingCash: 450, affordableCount: 3, nextMonthBudget: 1200, reason: '' },
+};
+const saleChannelHtml = renderCraftPricing(saleChannelQuote);
+verify(saleChannelHtml.includes('武陵城') && saleChannelHtml.includes('当前可收 3 枚')
+  && saleChannelHtml.includes('450 灵石'), '工坊报价显示后端收购地点、真实剩余资金和有限可售数量');
+const noCashSaleHtml = renderCraftPricing({ ...saleChannelQuote,
+  market: { ...saleChannelQuote.market, remainingCash: 0, affordableCount: 0, reason: '本月资金不足，请等待新月' } });
+verify(noCashSaleHtml.includes('当前可收 0 枚') && noCashSaleHtml.includes('请等待新月'), '零收购预算不虚构可售能力，并显示失败原因');
+verify(renderCraftPricing({ ...saleChannelQuote, market: { ...saleChannelQuote.market, inCity: false } })
+  .includes('请携成品前往城中'), '非城中报价明确收购渠道，不表示能原地出售');
+verify(!renderCraftPricing({ ...saleChannelQuote, market: undefined }).includes('data-craft-sale-availability'),
+  '旧响应缺渠道数据时不臆算可售数量');
+verify(!renderCraftPricing({ ...saleChannelQuote, market: { ...saleChannelQuote.market,
+  locations: [{ name: '<img src=x onerror=alert(1)>' }], reason: '<script>bad</script>' } }).includes('<script>bad'),
+  '收购渠道及拒绝原因展示转义外部文案');
 verify(['sword','seal','armor','bell','pearl'].every(shape=>marketGrade({gears:[]},{kind:'gear',id:shape+'-1'})===1), '旧接口未拥有的五种商城法器按稳定模型ID补齐一阶');
 verify(marketGrade({gears:[]},{kind:'gear',id:'forge-4143-1'})===0&&marketGrade({gears:[]},{kind:'gear',id:'unknown-1'})===0, '商城品阶回退不误判自炼ID或未知器型');
 verify(marketGrade({pillCatalog:[{id:'5001',grade:1}]},{kind:'potion',id:'5001'})===1&&marketGrade({gears:[]},{kind:'gear',id:'sword-1',grade:2})===2, '旧丹药接口使用权威目录，新grade字段优先于模型回退');

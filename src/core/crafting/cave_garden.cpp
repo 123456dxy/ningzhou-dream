@@ -3,6 +3,7 @@
 #include "core/arts.h"
 #include "core/cultivate.h"
 #include "core/sim.h"
+#include "core/content/text_table.h"
 
 #include <algorithm>
 #include <array>
@@ -106,14 +107,15 @@ GardenDayQuote mfDailyPlotInfo(const Game& State, std::size_t PlotIndex) {
     }
     const int QiLevel = clampInt(State.player.qiSupply, 0, 1 + clampInt(State.player.caveTier, 0, 2));
     const bool HasBottle = hasTalent(State.player, "greenBottle");
-    Info.SpiritUnitsPerDay += QiLevel * 30;
+    Info.SpiritUnitsPerDay += HasBottle ? QiLevel * 30 : 0;
     Info.BottleUnitsPerDay += HasBottle ? 200 : 0;
     Info.FullyAcceleratedUnitsPerDay = Info.SpiritUnitsPerDay + (HasBottle ? 200 : 0);
-    Info.SpiritDailyCostStones = ChargeableSeeds * Herb->grade * QiLevel;
+    Info.SpiritDailyCostStones = HasBottle ? ChargeableSeeds * Herb->grade * QiLevel : 0;
     Info.BottleDailyCostStones = ChargeableSeeds * Herb->grade * (HasBottle ? 1 : 0);
-    Quote.CostPerSeed = Herb->grade * (QiLevel + (HasBottle ? 1 : 0));
+    Quote.CostPerSeed = HasBottle ? Herb->grade * (QiLevel + 1) : 0;
     Info.DailyCostStones = Info.SpiritDailyCostStones + Info.BottleDailyCostStones;
-    Info.AccelerationFunded = Info.DailyCostStones > 0 && Plot->ReserveStones >= Info.DailyCostStones;
+    Info.AccelerationFunded = HasBottle && Info.DailyCostStones > 0 && Plot->ReserveStones >= Info.DailyCostStones;
+    // 未启用绿瓶组合加速时仅自然成长，配置灵气档位不能提供未付款的引灵增量。
     Info.EffectiveUnitsPerDay = Info.AccelerationFunded ? Info.FullyAcceleratedUnitsPerDay : Info.NaturalUnitsPerDay;
     return Quote;
 }
@@ -168,7 +170,8 @@ GardenInfo mfGardenInfo(const Game& State) {
     GardenInfo Info; Info.PlotCountUnlocked = mfUnlockedPlots(State);
     Info.HasGreenBottle = hasTalent(State.player, "greenBottle"); Info.AccessReason = mfGardenAccessError(State);
     if (const auto Error = mfGardenStateError(State); !Error.empty()) { Info.AccessReason = Error; return Info; }
-    Info.GrowthCostRule = "每格同药材最多99份；每份成熟收获3份。天然每天100成长点，洞府每档+10；格内储备全额负担时灵气每档+30、绿瓶额外+200。日费=尚需加速种苗数×品阶×(灵气档位+绿瓶1)，储备不足自然生长且不扣费。外出照常生长，不自动扣主背包灵石。";
+    Info.GrowthCostRule = content::text(Info.HasGreenBottle ? content::TextId::GardenBottleGrowthRule
+        : content::TextId::GardenNoBottleGrowthRule);
     for (int PlotIndex = 0; PlotIndex < Info.PlotCountUnlocked; ++PlotIndex) {
         auto PlotInfo = mfPlotInfo(State, static_cast<std::size_t>(PlotIndex));
         PlotInfo.Harvest = mfQuoteGardenHarvest(State, PlotInfo.PlotId);
@@ -217,6 +220,8 @@ GardenActionQuote mfQuoteGardenHarvest(const Game& State, const std::string& Plo
 GardenActionQuote mfQuoteGardenReserve(const Game& State, const std::string& PlotId, int Amount, bool IsDeposit) {
     GardenActionQuote Quote; Quote.PlotId = PlotId; Quote.TransferStones = Amount; Quote.Reason = mfManagementError(State, PlotId);
     if (Quote.Reason.empty() && (Amount < 1 || Amount > InventoryLimit)) Quote.Reason = "储备转账数量须为1至十亿灵石。";
+    if (Quote.Reason.empty() && IsDeposit && !hasTalent(State.player, "greenBottle"))
+        Quote.Reason = content::text(content::TextId::GardenReserveRequiresBottle);
     const auto Index = mfPlotIndex(PlotId); const auto* Plot = Index ? mfPlot(State, *Index) : nullptr;
     const int Reserve = Plot ? Plot->ReserveStones : 0;
     if (Quote.Reason.empty()) {

@@ -507,6 +507,7 @@ BrewInfo artBrewInfo(const Player& p, const string& recipeId);
 ForgeInfo artForgeInfo(const Player& p, const string& mainId, const string& auxId, const string& coreId, const string& shapeId);
 vector<ForgeMaterialCost> artForgeMaterials(const Player& p, const string& mainId, const string& auxId, const string& coreId);
 PillEffect artPillEffect(const Player& p, const data::RecipeDef& r);
+PillEffect mfCompletePillEffect(const data::RecipeDef& Recipe);
 PillUseInfo artPillUseInfo(const Player& p, const data::RecipeDef& r);
 string artUsePill(Game& g, const string& id);
 CombatPill artCombatPill(const data::RecipeDef& r);
@@ -978,12 +979,13 @@ template <typename T> T* pickOf(Game& g, vector<T*>& items) { /* 头文件内定
 
 以下 15 条显式自由函数声明用于视图实现之间共享，并不表示新增 HTTP API。调用方优先使用 `api.h` / `api_exploration.h`；视图不得推进时间、消耗 RNG、绑定会话或访问存档。
 
-### `interface/views.h` · 13 条内部声明
+### `interface/views.h` · 14 条内部声明
 
 namespace：`nz::api::view`。类型 `ViewContext` 定义于 views.h，用显式上下文传入账号拥有的展示事实。
 
 ```cpp
 json::Value state(const Game& game, const ViewContext& context = {});
+json::Value mfAchievementsView(const Game& GameState, const legacy::Archive& ArchiveState);
 json::Value battle(const Game& game);
 json::Value equipment(const Player& player, const Gear& gear);
 json::Value spellPreview(const Player& player, const SpellDef& spell);

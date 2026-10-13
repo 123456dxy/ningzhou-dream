@@ -96,31 +96,69 @@ int salePrice(const Game& g, const string& kind, const string& id) {
     return 0;
 }
 
+MarketSaleContext mfMarketSaleContext(const Game& State) {
+    return {ecoIsCity(State.player.location), std::max(0, State.economy.marketCash),
+        ecoMarketBudget(State), renown::sellLimit(State.player.renown)};
+}
+
+MarketSaleQuote mfQuoteMarketSale(const Game& State, const string& Kind, const string& ItemId, int UnitSalePrice) {
+    return mfQuoteMarketSale(State, Kind, ItemId, UnitSalePrice, mfMarketSaleContext(State));
+}
+
+MarketSaleQuote mfQuoteMarketSale(const Game& State, const string& Kind, const string& ItemId, int UnitSalePrice,
+                                const MarketSaleContext& Context) {
+    MarketSaleQuote Quote;
+    Quote.InCity = Context.InCity;
+    Quote.RemainingCash = Context.RemainingCash;
+    Quote.NextMonthBudget = Context.NextMonthBudget;
+    if ((Kind != "potion" && Kind != "gear") || UnitSalePrice <= 0) {
+        Quote.Reason = "此物无法出售。";
+        return Quote;
+    }
+    const int DemandLimit = Context.DemandLimit;
+    const auto Sold = State.economy.sold.find(Kind + ":" + ItemId);
+    const int SoldCount = Sold == State.economy.sold.end() ? 0 : std::max(0, Sold->second);
+    const int RemainingDemand = std::max(0, DemandLimit - SoldCount);
+    Quote.AffordableCount = std::min(RemainingDemand, Quote.RemainingCash / UnitSalePrice);
+    if (!Quote.InCity) {
+        Quote.AffordableCount = 0;
+        Quote.Reason = "此处没有坊市。请前往五城之一。";
+    } else if (Quote.RemainingCash < UnitSalePrice) {
+        Quote.Reason = "坊市收购资金不足（余 " + std::to_string(Quote.RemainingCash) + "，单价 " +
+            std::to_string(UnitSalePrice) + "）。";
+        if (UnitSalePrice > Quote.NextMonthBudget)
+            Quote.Reason += "此单价超过当前条件的下月额度 " + std::to_string(Quote.NextMonthBudget) +
+                "，需提高境界或声望；换城不另补资金。";
+        else Quote.Reason += "新规则额度 " + std::to_string(Quote.NextMonthBudget) + " 将在下月刷新，同月和读档不补资。";
+    } else if (RemainingDemand == 0) {
+        Quote.Reason = "本月此类货品需求已满（" + std::to_string(DemandLimit) + " 件），请下月出售。";
+    }
+    return Quote;
+}
+
 // 用途：预览出售资格需求与收益。
 // 参与流程：工坊、坊市、藏经阁和洞府操作。
 // 使用方式：传入const Game& g, const string& kind, const string& id，按本模块入口调用。
 // 返回值：ActionQuote结果，包含说明所述状态或计算数据。
 ActionQuote saleQuote(const Game& g, const string& kind, const string& id) {
+    return saleQuote(g, kind, id, mfMarketSaleContext(g));
+}
+
+ActionQuote saleQuote(const Game& g, const string& kind, const string& id, const MarketSaleContext& Context) {
     ActionQuote quote;
     quote.returnStones = salePrice(g, kind, id);
     const auto reject = [&](const string& error) { auto out = quote; out.reason = error; return out; };
     const auto& p = g.player;
     const auto& a = p.arts;
-    const auto& e = g.economy;
     if (g.ended) return reject("这一世已经结束。");
     if (g.pending.has_value()) return reject("请先完成当前事件。");
     if (a.battle.has_value()) return reject("斗法中无法交易。");
-    if (!ecoIsCity(p.location)) return reject("此处没有坊市。请前往五城之一。");
     if (quote.returnStones <= 0) return reject("此物无法出售。");
     if (static_cast<long long>(p.stones) + quote.returnStones > std::numeric_limits<int>::max())
         return reject("出售后灵石余额超过支持范围。");
-    if (e.marketCash < quote.returnStones)
-        return reject("坊市收购资金不足（余 " + std::to_string(e.marketCash) + "），请下月再来。");
-    const int limit = renown::sellLimit(p.renown);
-    const auto sold = e.sold.find(kind + ":" + id);
+    const auto MarketQuote = mfQuoteMarketSale(g, kind, id, quote.returnStones, Context);
     quote.demandChecked = true;
-    if (sold != e.sold.end() && sold->second >= limit)
-        return reject("本月此类货品需求已满（" + std::to_string(limit) + " 件），请下月出售。");
+    if (!MarketQuote.Reason.empty()) return reject(MarketQuote.Reason);
     if (kind == "potion") {
         quote.potionChecked = true;
         const auto owned = a.potions.find(id);

@@ -6,7 +6,10 @@
 #include "core/battle.h"
 #include "core/play.h"
 #include "core/save.h"
+#include "core/json.h"
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <limits>
 
 namespace nztest {
@@ -44,11 +47,143 @@ void rejectedPurchase(Game& game, const string& event, const string& kind, const
     check(!tide::buyMarket(game, event, kind, id, count, quotedPrice).ok, label + "拒绝");
     checkStr(saveToJson(game), before, label + "不改变余额库存背包时间或随机数");
 }
+
+// 用途：建立固定种子的全州参战样本；流程：六十天NPC节奏模拟；返回：32名普通与五宗各一名真实精英的独立游戏。
+Game mfNpcPaceGame(std::uint32_t Seed) {
+    auto State = tideGame(); State.seed = State.rng = Seed;
+    for (int NpcIndex = 0; NpcIndex < 32; ++NpcIndex) {
+        Npc Normal; Normal.id = "pace-normal-" + std::to_string(NpcIndex); Normal.name = Normal.id;
+        Normal.stage = 9; Normal.lifespan = 1000; State.npcs.push_back(std::move(Normal));
+    }
+    for (const auto& Profile : content::npcCombatProfiles()) {
+        Npc Elite; Elite.id = "pace-elite-" + Profile.id; Elite.name = Elite.id;
+        Elite.stage = 9; Elite.lifespan = 1000; Elite.sect = Profile.sect; Elite.combatProfileId = Profile.id;
+        State.npcs.push_back(std::move(Elite));
+    }
+    State.tide = BeastTide{}; State.tide.active = true; tide::ensureTide(State);
+    State.tide.playerJoined = true; State.tide.playerEntryStage = 9;
+    return State;
+}
+
+// 用途：用真实胜场入口登记13次元婴战场击杀；流程：稳定榜首策略v1；返回：无，不重写积分或排名公式。
+void mfScoreThirteenHighestKills(Game& State) {
+    Battle Victory; Victory.kind = "tide"; Victory.tideEventId = State.tide.eventId;
+    Victory.tideBattlefield = 3; Victory.enemyStage = 9;
+    for (int KillCount = 0; KillCount < 13; ++KillCount) tide::tideReward(State, true, &Victory);
+}
+
+// 用途：固定12种子测量普通/精英日节奏、战期上限和玩家13胜排名；流程：无渲染真实dayTick模拟v1；返回：断言与每种子JSON结果。
+void mfCheckNpcTidePace() {
+    constexpr std::array<std::uint32_t, 12> Seeds{{1, 7, 19, 37, 73, 127, 211, 337, 509, 997, 20261013, 314159}};
+    int NormalTotalKills = 0, EliteTotalKills = 0, NormalSampleCount = 0, EliteSampleCount = 0;
+    for (const auto Seed : Seeds) {
+        auto State = mfNpcPaceGame(Seed); mfScoreThirteenHighestKills(State);
+        auto Replay = State;
+        std::vector<int> PreviousScores(State.tide.participants.size(), 0);
+        bool DailyIncrementsValid = true, EventCapsValid = true;
+        for (int Day = 1; Day <= 60; ++Day) {
+            State.clock.days = State.tide.startDay + Day; tide::dayTick(State);
+            for (std::size_t ParticipantIndex = 0; ParticipantIndex < State.tide.participants.size(); ++ParticipantIndex) {
+                const auto& Participant = State.tide.participants[ParticipantIndex];
+                const int Gain = Participant.score - PreviousScores[ParticipantIndex];
+                DailyIncrementsValid &= Gain == 0 || Gain == 27 || (Participant.elite && Gain == 54);
+                EventCapsValid &= Participant.score <= (Participant.elite ? 12 : 9) * 27;
+                PreviousScores[ParticipantIndex] = Participant.score;
+            }
+        }
+        int NormalMin = 9, NormalMax = 0, EliteMin = 12, EliteMax = 0;
+        int SeedNormalKills = 0, SeedEliteKills = 0, SeedNormalCount = 0, SeedEliteCount = 0;
+        for (const auto& Participant : State.tide.participants) {
+            const int Kills = Participant.score / 27;
+            if (Participant.elite) {
+                EliteMin = std::min(EliteMin, Kills); EliteMax = std::max(EliteMax, Kills);
+                SeedEliteKills += Kills; ++SeedEliteCount;
+            } else {
+                NormalMin = std::min(NormalMin, Kills); NormalMax = std::max(NormalMax, Kills);
+                SeedNormalKills += Kills; ++SeedNormalCount;
+            }
+        }
+        const auto SeedLabel = std::to_string(Seed);
+        check(DailyIncrementsValid, "普通每天最多1杀、精英最多2杀且积分倍率不变：种子" + SeedLabel);
+        check(EventCapsValid, "60天普通最多9杀、精英最多12杀：种子" + SeedLabel);
+        check(State.tide.playerScore == 351 && State.tide.playerRank == 1,
+            "最高战场13次真实击杀稳定超过全州NPC：种子" + SeedLabel);
+        check(SeedNormalCount == 32 && SeedEliteCount == 5, "精英身份仍来自五宗真实构筑：种子" + SeedLabel);
+        Replay.clock.days = Replay.tide.endDay; tide::dayTick(Replay);
+        check(saveToJson(State) == saveToJson(Replay), "同种子逐日与批量推进60天确定一致：种子" + SeedLabel);
+        NormalTotalKills += SeedNormalKills; EliteTotalKills += SeedEliteKills;
+        NormalSampleCount += SeedNormalCount; EliteSampleCount += SeedEliteCount;
+        json::Value Summary(json::Object{});
+        Summary.set("balance", "npc-limited-v1"); Summary.set("policy", "thirteen-highest-kills-v1");
+        Summary.set("seed", static_cast<double>(Seed)); Summary.set("durationDays", 60);
+        Summary.set("win", State.tide.playerRank == 1); Summary.set("finalScore", State.tide.playerScore);
+        Summary.set("normalMinKills", NormalMin); Summary.set("normalMaxKills", NormalMax);
+        Summary.set("eliteMinKills", EliteMin); Summary.set("eliteMaxKills", EliteMax);
+        Summary.set("normalMeanKills", static_cast<double>(SeedNormalKills) / SeedNormalCount);
+        Summary.set("eliteMeanKills", static_cast<double>(SeedEliteKills) / SeedEliteCount);
+        Summary.set("failureReason", State.tide.playerRank == 1 ? "" : "player_not_first");
+        std::printf("%s\n", Summary.dump().c_str());
+    }
+    const double NormalMean = static_cast<double>(NormalTotalKills) / NormalSampleCount;
+    const double EliteMean = static_cast<double>(EliteTotalKills) / EliteSampleCount;
+    check(NormalMean >= 1.0 && NormalMean <= 3.0, "12固定种子普通NPC典型60天击杀均值在1至3之间");
+    check(EliteMean >= 4.0 && EliteMean <= 8.0, "12固定种子精英NPC典型60天击杀均值在4至8之间");
+    check(EliteMean > NormalMean, "完整构筑优势体现为跨样本更高平均击杀，不保证单次运气胜出");
+
+    auto Capped = mfNpcPaceGame(1);
+    for (auto& Participant : Capped.tide.participants) Participant.score = (Participant.elite ? 12 : 9) * 27;
+    Capped.tide.participants.front().score = 10000;
+    const auto CappedRng = Capped.rng;
+    ++Capped.clock.days; tide::dayTick(Capped);
+    checkEq(Capped.rng, CappedRng, "全部NPC达到战期上限后不消耗出战或击杀RNG");
+    checkEq(Capped.tide.participants.front().score, 10000, "既有大积分不削减且超过上限后不再增长");
+
+    auto Dead = mfNpcPaceGame(7);
+    for (auto& Npc : Dead.npcs) Npc.alive = false;
+    Npc Outsider; Outsider.id = "not-a-participant"; Outsider.stage = 9; Dead.npcs.push_back(Outsider);
+    const auto DeadRng = Dead.rng;
+    ++Dead.clock.days; tide::dayTick(Dead);
+    checkEq(Dead.rng, DeadRng, "死亡参战者与不在本期名单的活人不消耗NPC出战RNG");
+
+    auto Frozen = mfNpcPaceGame(19);
+    auto Promoted = Frozen;
+    for (auto& Participant : Frozen.tide.participants) Participant.entryStage = 0;
+    Promoted.tide.participants = Frozen.tide.participants;
+    for (auto& Npc : Frozen.npcs) Npc.stage = 0;
+    for (int Day = 1; Day <= 60; ++Day) {
+        Frozen.clock.days = Promoted.clock.days = Frozen.tide.startDay + Day;
+        tide::dayTick(Frozen); tide::dayTick(Promoted);
+    }
+    bool FrozenScoresMatch = true;
+    for (std::size_t ParticipantIndex = 0; ParticipantIndex < Frozen.tide.participants.size(); ++ParticipantIndex)
+        FrozenScoresMatch &= Frozen.tide.participants[ParticipantIndex].score == Promoted.tide.participants[ParticipantIndex].score;
+    check(FrozenScoresMatch && Frozen.rng == Promoted.rng, "NPC同期晋阶不改变冻结战场积分或上限计数");
+
+    auto LastKill = mfNpcPaceGame(1978); LastKill.tide.participants.resize(1);
+    LastKill.tide.participants.front().score = 11 * 27;
+    ++LastKill.clock.days; tide::dayTick(LastKill);
+    checkEq(LastKill.tide.participants.front().score, 12 * 27, "精英抽中一日2杀但仅余1杀时不越过12杀上限");
+    const auto LastKillRng = LastKill.rng;
+    ++LastKill.clock.days; tide::dayTick(LastKill);
+    checkEq(LastKill.rng, LastKillRng, "最后1杀结算后后续日不再抽无必要RNG");
+
+    auto EliteDay = mfNpcPaceGame(2144); EliteDay.tide.participants.resize(1);
+    auto NormalDay = EliteDay;
+    for (auto& Npc : NormalDay.npcs)
+        if (Npc.id == NormalDay.tide.participants.front().actorId) Npc.combatProfileId.clear();
+    ++NormalDay.clock.days; tide::dayTick(NormalDay);
+    ++EliteDay.clock.days; tide::dayTick(EliteDay);
+    check(NormalDay.tide.participants.front().score == 0 && NormalDay.rng == 287678527u,
+        "同一固定抽样落在十五分之一与十分之一之间时普通不出战且仅抽一次RNG");
+    check(EliteDay.tide.participants.front().score == 54 && EliteDay.rng == 3210227858u,
+        "同一固定抽样使精英出战并按第二次RNG抽中2杀");
+}
 }
 
 // 用途：核验固定战期、积分、完整构筑和原子市场；流程：核心自测；用法：由test_main调用；返回：无，失败进入harness计数。
 void runTideRuleTests() {
     std::printf("\n--- 兽潮战期、金榜与有限坊市 ---\n");
+    mfCheckNpcTidePace();
     {
         auto game = tideGame();
         checkEq(game.tide.endDay - game.tide.startDay, 60, "新规则兽潮固定六十天");
@@ -195,7 +330,8 @@ void runTideRuleTests() {
         const auto afterDay = saveToJson(game);
         tide::dayTick(game);
         checkStr(saveToJson(game), afterDay, "同一天不会重复模拟NPC积分");
-        check(npcScore(game, "npc-a") > npcScore(game, "npc-b"), "完整构筑在同境多日积分中体现优势");
+        check(npcScore(game, "npc-a") <= 12 * 27 && npcScore(game, "npc-b") <= 9 * 27,
+              "短战期积分同样不超过本期精英和普通击杀上限");
     }
     {
         auto game = marketGame();

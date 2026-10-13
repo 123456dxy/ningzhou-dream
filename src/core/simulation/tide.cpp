@@ -55,20 +55,25 @@ bool hasUnfinishedBattle(const Game& game) {
         content::parseBattleKind(battle->kind) == content::BattleKind::Tide &&
         battle->tideEventId == game.tide.eventId;
 }
-// 用途：模拟一天真实修士积分；流程：dayTick；用法：名单冻结后逐天调用；返回：无，仅活人随机击杀并加分。
+// 用途：按集中出战概率及本期上限模拟NPC积分；流程：dayTick；返回：无，冻结入场战场倍率，死人/未参战/已封顶不投骰。
 void simulateNpcDay(Game& game) {
-    std::unordered_map<string, const Npc*> living;
-    for (const auto& npc : game.npcs) if (npc.alive && !npc.beast) living.emplace(npc.id, &npc);
-    for (auto& participant : game.tide.participants) {
-        const auto found = living.find(participant.actorId);
-        if (found == living.end()) continue;
-        // 真实构筑是精英身份唯一依据；晋阶和特殊修士递补也反映在当日演算中。
-        const bool champion = content::isChampion(*found->second);
-        participant.elite = champion;
-        participant.combatProfileId = found->second->combatProfileId;
-        const int kills = randIntOf(game, 0, champion ? 2 : 1);
-        const auto* field = rules::battlefield(rules::battlefieldForStage(found->second->stage));
-        participant.score = rules::addScore(participant.score, kills * field->pointsPerKill);
+    std::unordered_map<string, const Npc*> LivingNpcs;
+    for (const auto& Npc : game.npcs) if (Npc.alive && !Npc.beast) LivingNpcs.emplace(Npc.id, &Npc);
+    for (auto& Participant : game.tide.participants) {
+        const auto Found = LivingNpcs.find(Participant.actorId);
+        if (Found == LivingNpcs.end()) continue;
+        const bool IsElite = content::isChampion(*Found->second);
+        Participant.elite = IsElite;
+        Participant.combatProfileId = Found->second->combatProfileId;
+        const auto& Pace = IsElite ? rules::EliteNpcBattlePace : rules::NormalNpcBattlePace;
+        const auto* Battlefield = rules::battlefield(rules::battlefieldForStage(Participant.entryStage));
+        const int KillsSoFar = std::max(0, Participant.score) / Battlefield->pointsPerKill;
+        // 保留已发生的大积分；只停止继续累加，不用新上限反向削减旧事实。
+        if (KillsSoFar >= Pace.MaximumEventKills) continue;
+        if (randIntOf(game, 1, Pace.BattleChanceDenominator) != 1) continue;
+        const int RemainingKills = Pace.MaximumEventKills - KillsSoFar;
+        const int KillCount = std::min(randIntOf(game, 0, Pace.MaximumDailyKills), RemainingKills);
+        Participant.score = rules::addScore(Participant.score, KillCount * Battlefield->pointsPerKill);
     }
 }
 // 用途：保留既有月度伤亡；流程：实际月界；用法：战期内每月一次；返回：无，npcDies保持履历和关系一致。

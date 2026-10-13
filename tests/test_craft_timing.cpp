@@ -4,6 +4,7 @@
 #include "core/api.h"
 #include "core/calendar.h"
 #include "core/crafting/craft_timing.h"
+#include "core/crafting/craft_prices.h"
 #include "core/economy.h"
 #include "core/play.h"
 #include "core/renown.h"
@@ -73,6 +74,10 @@ int mfMarketBudgetBase(const Game& State) {
     for (const auto& Recipe : data::RecipeDef_TABLE())
         if (Recipe.grade <= MarketTier)
             BaseBudget = std::max(BaseBudget, shop::salePrice(State, "potion", Recipe.id));
+    for (int Grade = 1; Grade <= MarketTier; ++Grade) {
+        const auto Quote = crafting::mfQuoteStandardGearPrice(State, Grade);
+        if (Quote.Valid) BaseBudget = std::max(BaseBudget, Quote.SellPrice);
+    }
     return BaseBudget;
 }
 
@@ -237,7 +242,7 @@ void mfRunCraftTimingTests() {
         checkEq(ecoMarketBudget(TripleBudget), mfMarketBudgetBase(TripleBudget) * 6,
                 "筑基总预算叠加基础3倍和境界2倍为原底座6倍");
         TripleBudget.player.stage = 12;
-        TripleBudget.world.market = 100.0;
+        TripleBudget.world.market = 30000.0;
         const long long ExtremeRawBudget = static_cast<long long>(mfMarketBudgetBase(TripleBudget)) * 48;
         check(ExtremeRawBudget > std::numeric_limits<int>::max(), "异常极端行情夹具覆盖32位乘法溢出区间");
         checkEq(ecoMarketBudget(TripleBudget), 1000000000, "64位计算异常极端预算后饱和到十亿，不溢出负值");

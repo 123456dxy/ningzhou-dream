@@ -1330,29 +1330,9 @@ http::Response handle(const http::Request& req) {
         return jsonOk(o);
     }
 
-    // ---- 成就（14 项）----
-    // artAchievements() 早就写好了，但从来没有调用点，
-    // 所以 achievementTexts 一直是空的，14 个成就完全不可得。
+    // ---- 成就（14 项）：只读展示，传承奖励由人生结算或实际重开领取。----
     if (route == RouteId::Achievements) {
-        Value o(json::Object{});
-        o.set("ok", Value(true));
-        json::Array arr;
-        for (const auto& achievement : data::AchievementDef_TABLE()) {
-            const int prog = artProgress(gameState.player, achievement.key);
-            const bool got = prog >= achievement.target;
-            Value ao(json::Object{});
-            ao.set("id", str(achievement.id));
-            ao.set("name", str(achievement.name));
-            ao.set("key", str(achievement.key));   // AchievementDef 没有 desc，用 key 代替展示
-            ao.set("key", str(achievement.key));
-            ao.set("target", num(achievement.target));
-            ao.set("progress", num(prog));
-            ao.set("points", num(achievement.points));
-            ao.set("done", Value(got));
-            arr.push_back(std::move(ao));
-        }
-        o.set("achievements", Value(std::move(arr)));
-        return jsonOk(o);
+        return jsonOk(view::mfAchievementsView(gameState, legacyLoad()));
     }
 
     // ---- 拜入宗门（自选五宗）占位结束 ----
@@ -1502,7 +1482,7 @@ http::Response handle(const http::Request& req) {
         const EcoActionInfo info = forge.valid ? ecoActionInfo(gameState, "forge", id) : EcoActionInfo{};
         Value result(json::Object{}), o(json::Object{});
         o.set("valid", Value(forge.valid)); o.set("grade", num(forge.grade)); o.set("cost", num(forge.cost));
-        o.set("pricing", view::mfCraftPriceView(crafting::mfQuoteForgePrice(gameState, main, aux, core)));
+        o.set("pricing", view::mfCraftPriceView(crafting::mfQuoteForgePrice(gameState, main, aux, core), gameState, "gear", ""));
         o.set("days", num(info.days)); o.set("bonus", num(forge.bonus)); o.set("chance", num(forge.chance));
         o.set("shapeId", str(forge.shapeId)); o.set("shapeName", str(forge.shapeName)); o.set("shapeSlot", str(forge.shapeSlot));
         o.set("mainName", str(forge.mainName)); o.set("mainElement", str(forge.mainElement)); o.set("mainPolarity", str(forge.mainPolarity));

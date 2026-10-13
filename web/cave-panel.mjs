@@ -22,6 +22,25 @@ function inputCount(value, maximum, initial = 1) {
   return Number.isSafeInteger(upper) && upper > 0 ? Math.min(chosen, upper) : chosen;
 }
 
+// 用途：合并后端库存与本格容量，给播种控件提供当前份数上限。
+// 流程：首次展示、药材切换、输入确认与动作提交共用同一范围。
+// 调用方式：传当前格和所选药材快照；缺失或非法数量视为不可播种。
+// 返回值：0 表示没有合法份数；不修改库存或计算种植结算。
+export function cavePlantCountLimit(plot, option) {
+  const capacity = Number(plot?.remainingCapacity), owned = Number(option?.ownedCount);
+  return Number.isSafeInteger(capacity) && capacity > 0 && Number.isSafeInteger(owned) && owned > 0
+    ? Math.min(99, capacity, owned) : 0;
+}
+
+// 用途：将播种草稿收束到当前可选的整数范围。
+// 流程：份数失焦及提交前规范化；空白、非有限值与小于一的输入回到一份。
+// 调用方式：传草稿与 cavePlantCountLimit 返回的上限。
+// 返回值：合法正整数；无可播种库存时仅返回禁用控件的占位一份。
+export function cavePlantCount(value, maximum) {
+  const numeric = Number(value);
+  return Math.max(1, Math.min(Math.max(1, maximum), Number.isFinite(numeric) ? Math.floor(numeric) : 1));
+}
+
 // 用途：统一生成按服务端资格启用的按钮。
 // 流程：返府、迁府、播种、收获、储备、清理与训练展示。
 // 调用方式：传动作、标题和权威资格；附加属性只能来自模块内预先转义的字符串。
@@ -89,13 +108,13 @@ function renderGrowth(plot, garden) {
   return `<div class="cave-growth-line"><span>生长中 <strong>${numberText(plot.growingCount)} 份</strong></span>`
     + `<span>成熟种苗 <strong>${numberText(plot.readyCount)} 份</strong></span></div>`
     + `<p>成熟可收 ${numberText(plot.harvest?.harvestCount)} 份${plot.harvest?.reason ? ` · ${esc(plot.harvest.reason)}` : ''}</p>`
-    + (hasGrowing ? `<p>按当前储备预计全部成熟约 <strong>${numberText(plot.estimatedEffectiveDays)} 天</strong>`
-      + ` · ${plot.accelerationFunded === true ? '储备充足 · 自动加速' : '自然生长'}</p>`
-      + `<details class="cave-batch-details"><summary>不同配给下的成熟时间</summary><ul>`
+    + (hasGrowing ? `<p>${garden.hasGreenBottle === true ? '按当前储备' : '按当前成长'}预计全部成熟约 <strong>${numberText(plot.estimatedEffectiveDays)} 天</strong>`
+      + (garden.hasGreenBottle === true ? ` · ${plot.accelerationFunded === true ? '储备充足 · 自动加速' : '自然生长'}` : '') + `</p>`
+      + (garden.hasGreenBottle === true ? `<details class="cave-batch-details"><summary>不同配给下的成熟时间</summary><ul>`
       + `<li>自然生长 ${numberText(plot.estimatedNaturalDays)} 天</li>`
       + `<li>灵气方案 ${numberText(plot.estimatedSpiritDays)} 天 · ${numberText(plot.spiritDailyCostStones)} 灵石 / 天</li>`
       + (garden.hasGreenBottle === true ? `<li>小绿瓶方案 ${numberText(plot.estimatedBottleDays)} 天 · ${numberText(plot.bottleDailyCostStones)} 灵石 / 天</li>` : '')
-      + `<li>全部加速 ${numberText(plot.estimatedFullyAcceleratedDays)} 天 · ${numberText(plot.dailyCostStones)} 灵石 / 天</li></ul></details>` : '')
+      + `<li>全部加速 ${numberText(plot.estimatedFullyAcceleratedDays)} 天 · ${numberText(plot.dailyCostStones)} 灵石 / 天</li></ul></details>` : '') : '')
     + `<div class="cave-plot-actions">${actionButton('cave-garden-harvest', ready ? '收获成熟药材' : '尚不可收获',
       plot.harvest, `data-plot-id="${esc(plot.plotId)}"`, ready ? 'primary' : '')}</div>`
     + renderCohorts(plot);
@@ -105,7 +124,8 @@ function renderGrowth(plot, garden) {
 // 流程：自动加速付费储备管理。
 // 调用方式：传plot快照及本地未提交金额，不隐式从背包扣款。
 // 返回值：存取控件HTML；真正转账由根应用动作与后端校验。
-function renderReserve(plot, amount) {
+function renderReserve(plot, amount, garden) {
+  if (garden.hasGreenBottle !== true) return '';
   const plotAttribute = `data-plot-id="${esc(plot.plotId)}"`;
   return `<div class="cave-reserve"><div class="cave-reserve-head">`
     + `<strong>本格储备 ${numberText(plot.reserveStones)} 灵石</strong><span>自动加速 ${numberText(plot.dailyCostStones)} 灵石 / 天</span></div>`
@@ -170,8 +190,9 @@ function renderPlantControls(plot, garden, choices, matchingOptions) {
   const selected = options.find(option => option.herbId === selectedId);
   const capacity = Number(plot.remainingCapacity);
   const hasCapacity = Number.isSafeInteger(capacity) && capacity > 0;
-  const count = inputCount(choices.count, hasCapacity ? Math.min(99, capacity) : 1);
-  const hasSeeds = Number(selected?.ownedCount) > 0;
+  const maximum = cavePlantCountLimit(plot, selected);
+  const count = cavePlantCount(choices.count, maximum);
+  const hasSeeds = maximum > 0;
   const qualification = { enabled: plot.plantEnabled === true && !!selected && hasSeeds && hasCapacity,
     reason: plot.plantReason || (!hasCapacity ? '此格已满，收获后可以继续播种。'
       : !selected ? '没有符合当前筛选的药材。' : !hasSeeds ? '行囊中没有此药材，取得后可播种。' : '') };
@@ -179,8 +200,8 @@ function renderPlantControls(plot, garden, choices, matchingOptions) {
     + ` ${options.length && hasCapacity && !locked ? '' : 'disabled'}>${options.length ? options.map(option => `<option value="${esc(option.herbId)}"`
       + `${option.herbId === selectedId ? ' selected' : ''}>${esc(option.name)} · ${numberText(option.grade)} 阶 · 行囊 ${numberText(option.ownedCount)}</option>`).join('')
       : '<option value="">没有符合筛选的药材</option>'}</select></label>`
-    + `<label class="cave-plant-quantity">份数<input type="number" min="1" max="${hasCapacity ? Math.min(99, capacity) : 1}" step="1" value="${count}"`
-    + ` data-cave-plant-count data-plot-id="${esc(plot.plotId)}" ${hasCapacity ? '' : 'disabled'} inputmode="numeric"></label>`
+    + `<label class="cave-plant-quantity">份数<input type="number" min="1" max="${Math.max(1, maximum)}" step="1" value="${count}"`
+    + ` data-cave-plant-count data-plot-id="${esc(plot.plotId)}" ${maximum > 0 ? '' : 'disabled'} inputmode="numeric"></label>`
     + actionButton('cave-garden-plant', Number(plot.seedCount) > 0 ? '追加播种' : '播种', qualification,
       `data-plot-id="${esc(plot.plotId)}"`, 'primary') + '</div>'
     + `<p>${locked ? '本格仅可追加同种药材 · ' : ''}本格还可播种 ${numberText(plot.remainingCapacity)} 份${selected?.baseGrowthDays != null ? ` · ${esc(selected.name)}自然成长 ${numberText(selected.baseGrowthDays)} 天` : ''}`
@@ -199,9 +220,9 @@ function renderPlot(plot, garden, choices, matchingOptions) {
     + `<span class="tag">${planted ? `${numberText(plot.grade)} 阶 · 已种 ${numberText(plot.seedCount)} / ${numberText(garden.plantsPerPlotLimit)}` : `可容纳 ${numberText(garden.plantsPerPlotLimit)} 份`}</span></div>`
     + renderPlantControls(plot, garden, choices, matchingOptions)
     + renderGrowth(plot, garden)
-    + renderReserve(plot, choices.reserveAmount)
+    + renderReserve(plot, choices.reserveAmount, garden)
     + (planted ? `<div class="cave-plot-actions">${actionButton('cave-garden-clear', '清除种苗', plot.clear,
-      `data-plot-id="${esc(plot.plotId)}"`, 'subtle')}<span class="cave-action-cost">放弃本格全部种苗，储备保留。</span></div>` : '')
+      `data-plot-id="${esc(plot.plotId)}"`, 'subtle')}<span class="cave-action-cost">${garden.hasGreenBottle === true ? '放弃本格全部种苗，储备保留。' : '放弃本格全部种苗。'}</span></div>` : '')
     + '</article>';
 }
 
@@ -253,7 +274,8 @@ function renderTraining(state) {
 // 返回值：整页HTML；没有进入/离开旗标、单次加速或炼丹炼器入口，不产生网络请求。
 export function renderCavePage(state, { supplyHtml = '', plantSelections = {}, plantFilters = {} } = {}) {
   return `<div class="cave-page">`
-    + heading('洞府', '安置修行居所，管理灵田、储备、配给与训练。', state.cave?.access?.atHome ? '在府' : '只读查看')
+    + heading('洞府', state.cave?.garden?.hasGreenBottle === true
+      ? '安置修行居所，管理灵田、储备、配给与训练。' : '安置修行居所，管理灵田、配给与训练。', state.cave?.access?.atHome ? '在府' : '只读查看')
     + renderResidence(state)
     + `<div class="cave-main-column">${renderGarden(state, plantSelections, plantFilters)}${renderTraining(state)}</div>`
     + (supplyHtml ? `<div class="cave-supply-section">${supplyHtml}</div>` : '')

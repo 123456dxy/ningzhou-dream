@@ -44,8 +44,11 @@ void mfRunCaveGardenTests() {
     check(!mfPlantGardenHerbs(State, "plot-8", "6001", 1).empty(), "未解锁地块不能播种");
     check(!mfDepositGardenReserve(State, "plot-1", -1).empty(), "负储备转账拒绝");
     check(saveToJson(State) == Full, "非法种植/储备均原子不变");
-    check(mfDepositGardenReserve(State, "plot-1", 1000).empty(), "格内储备从背包明确存入");
+    check(!mfQuoteGardenReserve(State, "plot-1", 1000, true).Enabled, "无小绿瓶存入报价不可用");
+    check(!mfDepositGardenReserve(State, "plot-1", 1000).empty(), "无小绿瓶真实存入拒绝");
+    check(saveToJson(State) == Full, "无小绿瓶存入拒绝保留整档时间RNG及资源");
     State.player.traits = {"greenBottle"};
+    check(mfDepositGardenReserve(State, "plot-1", 1000).empty(), "有小绿瓶格内储备从背包明确存入");
     State.player.location = "yifeng";
     const int Backpack = State.player.stones;
     mfGardenTestDay(State);
@@ -135,6 +138,34 @@ void mfRunCaveGardenTests() {
     auto Old = json::Value::parse(Harvested); Old.asObject().erase("garden");
     check(loadFromJson(Old.dump(), Restored, &Error), "旧缺灵田字段存档可加载");
     check(Restored.Garden.Initialized && Restored.Garden.Plots.size() == 8, "旧档初始化空格而不补发历史药材");
+
+    State = mfGardenTestGame(); State.player.qiSupply = 1;
+    check(mfPlantGardenHerbs(State, "plot-1", "6001", 1).empty(), "无瓶灵气配给成长夹具");
+    State.Garden.Plots[0].ReserveStones = 20;
+    const string BeforeNoBottleView = saveToJson(State);
+    const auto NoBottleView = mfGardenInfo(State);
+    check(!NoBottleView.HasGreenBottle && !NoBottleView.Plots[0].AccelerationFunded,
+          "无瓶不启用付费自动加速");
+    checkEq(NoBottleView.Plots[0].DailyCostStones, 0, "无瓶灵田不产生储备日费");
+    checkEq(NoBottleView.Plots[0].SpiritUnitsPerDay, 100, "无瓶引灵方案不提供免费灵气增量");
+    checkEq(NoBottleView.Plots[0].FullyAcceleratedUnitsPerDay, 100, "无瓶完整成长速度仍为自然值");
+    checkEq(NoBottleView.Plots[0].EffectiveUnitsPerDay, 100, "无瓶仅按自然成长，不读取未付款配给加成");
+    checkEq(NoBottleView.Plots[0].EstimatedEffectiveDays, 30, "无瓶实际预报按自然成长30天");
+    check(saveToJson(State) == BeforeNoBottleView, "无瓶预报不消耗旧储备或修改状态");
+    mfGardenTestDay(State);
+    checkEq(State.Garden.Plots[0].Cohorts[0].ProgressUnits, 100, "无瓶真实日不因配置灵气档位免费加速");
+    checkEq(State.Garden.Plots[0].ReserveStones, 20, "无瓶真实日不消耗残留储备");
+
+    State = mfGardenTestGame(); State.player.caveTier = 2; State.player.qiSupply = 3;
+    check(mfPlantGardenHerbs(State, "plot-1", "6001", 1).empty(), "高档洞府无瓶自然成长夹具");
+    State.player.location = "yifeng"; State.player.stones = 0;
+    const auto OutsideNoBottle = mfGardenInfo(State);
+    checkEq(OutsideNoBottle.Plots[0].EffectiveUnitsPerDay, 120, "无瓶外出无钱仅保留两档洞府自然加成");
+    checkEq(OutsideNoBottle.Plots[0].EstimatedEffectiveDays, 25, "无瓶高档洞府预报不计未付费的三档灵气");
+    State.player.traits = {"greenBottle"};
+    checkEq(mfGardenInfo(State).Plots[0].EffectiveUnitsPerDay, 120, "有瓶空储备与无瓶享有相同自然成长");
+    State.player.traits.clear(); mfGardenTestDay(State);
+    checkEq(State.Garden.Plots[0].Cohorts[0].ProgressUnits, 120, "外出无瓶实际结算与自然成长预报一致");
 
     State = mfGardenTestGame(); State.player.qiSupply = 1;
     State.player.traits = {"greenBottle"};

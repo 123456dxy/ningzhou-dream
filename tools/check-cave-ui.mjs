@@ -51,7 +51,7 @@ verify(html.includes('洞府') && html.includes('青石灵脉'), '洞府页显�
 verify(html.includes('在府') && !html.includes('cave-enter') && !html.includes('cave-leave'), '沿用真实地点，不引入进入离开旗标');
 verify(html.includes('服务端配给区域'), '配给区域由根页面现有权威渲染传入');
 verify(!html.includes('炼丹') && !html.includes('炼器') && !html.includes('goto-workshop'), '洞府不重复嵌入工坊制作');
-verify(html.includes('data-cave-plant-count') && html.includes('max="79"'), '播种数量控件采用后端剩余容量');
+verify(html.includes('data-cave-plant-count') && html.includes('max="12"'), '播种数量上限合并后端剩余容量与所选药材库存');
 verify(html.includes('data-action="cave-garden-plant"') && html.includes('data-plot-id="plot-1"'), '播种动作标识与点位完整');
 verify(html.includes('data-action="cave-garden-deposit"') && html.includes('data-action="cave-garden-withdraw"'), '储备操作有明确存取动作');
 verify(!html.includes('cave-garden-accelerate') && !html.includes('加速一次'), '自动加速不再提供单次收费按钮');
@@ -61,6 +61,18 @@ verify(html.includes('成熟可收 15 份') && html.includes('5 份') && html.in
 verify(html.includes('data-action="cave-garden-clear"'), '放弃种苗有独立动作供主入口确认');
 verify(html.includes('data-action="cave-train"') && html.includes('data-id="arena"') && html.includes('10 灵石') && html.includes('2 天'), '训练场展示真实演武报价');
 verify(JSON.stringify(fixture) === before, '纯展示不修改调用方状态或批次进度');
+
+const noBottle = structuredClone(fixture);
+noBottle.cave.garden.hasGreenBottle = false;
+const noBottleHtml = renderCavePage(noBottle);
+verify(!noBottleHtml.includes('data-cave-reserve-amount') && !noBottleHtml.includes('cave-garden-deposit')
+  && !noBottleHtml.includes('cave-garden-withdraw'), '无瓶完全隐藏储备存入取出控件');
+verify(!noBottleHtml.includes('自动加速') && !noBottleHtml.includes('全部加速')
+  && noBottleHtml.includes('按当前成长预计全部成熟约'), '无瓶隐藏付费加速方案但保留真实成长时间');
+const lowCapacity = structuredClone(fixture);
+lowCapacity.cave.garden.plots[1].remainingCapacity = 1;
+const lowCapacityHtml = renderCavePage(lowCapacity, { plantSelections: { 'plot-2': { count: 99 } } });
+verify(/min="1" max="1" step="1" value="1"/.test(lowCapacityHtml), '本格剩余一份容量时草稿收束到一份');
 
 const outside = structuredClone(fixture);
 outside.cave.access.atHome = false;
@@ -124,7 +136,7 @@ const gradeHtml = renderCavePage(catalogFixture, { plantFilters: { grade: '3', s
   plantSelections: { 'plot-1': { herbId: 'herb-a', count: 7 } } });
 const gradeEmptyPlot = plotHtml(gradeHtml, 'plot-1');
 verify(gradeEmptyPlot.includes('value="herb-d" selected') && !gradeEmptyPlot.includes('value="herb-a"')
-  && gradeEmptyPlot.includes('value="7"'), '切换品阶舍弃不可见的旧药材草稿，同时保留份数');
+  && gradeEmptyPlot.includes('value="6"'), '切换品阶舍弃不可见的旧药材草稿，份数收束到新药材库存');
 const lockedPlot = plotHtml(gradeHtml, 'plot-2');
 verify(lockedPlot.includes('value="herb-a" selected') && !lockedPlot.includes('value="herb-d"')
   && /data-cave-plant-herb[^>]*disabled/.test(lockedPlot)

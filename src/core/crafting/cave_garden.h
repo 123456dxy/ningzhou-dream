@@ -80,7 +80,7 @@ void mfInitializeGarden(Game& State);
     const std::string& HerbId, int Count);
 // 用途：报价本格所有成熟批次收获；流程：预览/收获；返回：真正可增加的药材份数，未成熟或库存溢出拒绝，无写入。
 [[nodiscard]] GardenActionQuote mfQuoteGardenHarvest(const Game& State, const std::string& PlotId);
-// 用途：预检格内储备存取；流程：储备报价/命令；参数：正整数Amount、存入true/取出false；返回：余额与容量校验，无写入。
+// 用途：预检格内储备存取；流程：储备报价/命令；参数：正整数Amount、存入true/取出false，存入必须持有小绿瓶；返回：天赋、余额与容量校验，无写入。
 [[nodiscard]] GardenActionQuote mfQuoteGardenReserve(const Game& State, const std::string& PlotId,
     int Amount, bool IsDeposit);
 // 用途：预检放弃本格全部种苗；流程：清理确认；返回：丢弃种苗份数，格内储备仍可取回，无写入。
@@ -90,7 +90,7 @@ void mfInitializeGarden(Game& State);
     const std::string& HerbId, int Count);
 // 用途：按新报价收获成熟批次并清掉对应种苗；返回：空成功或原因，同一成熟批次不可重复收获；失败原子，不自动播种。
 [[nodiscard]] std::string mfHarvestGardenHerbs(Game& State, const std::string& PlotId);
-// 用途：从背包显式存入本格储备；返回：空成功或原因，所有预检通过再一次转账，不隐式跨格用钱。
+// 用途：持有小绿瓶时从背包显式存入本格储备；返回：空成功或原因，所有预检通过再一次转账，不隐式跨格用钱。
 [[nodiscard]] std::string mfDepositGardenReserve(Game& State, const std::string& PlotId, int Amount);
 // 用途：显式取回本格储备到背包；返回：空成功或原因，失败不留下半笔转账。
 [[nodiscard]] std::string mfWithdrawGardenReserve(Game& State, const std::string& PlotId, int Amount);

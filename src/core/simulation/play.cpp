@@ -105,7 +105,7 @@ vector<MarketItem> marketList(const Game& g) {
         m.name = h.name;
         m.desc = std::to_string(h.grade) + "品药材" + (h.main.empty() ? "" : (" · 主" + h.main));
         // 本地药材打折
-        const int base = h.sourcePrice > 0 ? h.sourcePrice : 20 + h.grade * 15;
+        const int base = h.price;
         m.price = normalMaterialBuyPrice(g, "herb", h.id);
         if (m.price <= 0) continue;
         m.sellPrice = sellPriceOf(g, base);
@@ -136,30 +136,9 @@ vector<MarketItem> marketList(const Game& g) {
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Game& g，按本模块入口调用。
 // 返回值：对应目录或计算结果列表。
-vector<MarketItem> gearList(const Game& g) {
-    vector<MarketItem> out;
-    if (!ecoIsCity(g.player.location)) return out;
-
-    // 法器随境界解锁：炼气期只能买到低阶
-    const int maxGrade = ordinaryMaterialGradeLimit(g.player);
-    for (const auto& sh : data::ShapeDef_TABLE()) {
-        for (int grade = 1; grade <= maxGrade; ++grade) {
-            MarketItem m;
-            m.kind = "gear";
-            m.id = sh.id + "-" + std::to_string(grade);
-            m.name = std::string(sh.name) + "·" +
-                     std::to_string(grade) + "阶";
-            m.desc = (sh.slot == "weapon")   ? "兵器"
-                     : (sh.slot == "armor")  ? "护甲"
-                                             : "饰物";
-            const auto Quote = crafting::mfQuoteStandardGearPrice(g, grade);
-            if (!Quote.Valid) continue;
-            m.price = Quote.BuyPrice;
-            m.sellPrice = Quote.SellPrice;
-            out.push_back(m);
-        }
-    }
-    return out;
+vector<MarketItem> gearList(const Game&) {
+    // 普通坊市不出售没有真实能力定义的批量标准法器；兼容目录入口保留为空。
+    return {};
 }
 
 // 用途：验证地点品阶库存与灵石后购入指定数量。
@@ -171,6 +150,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
     if (g.pending.has_value()) return "请先处理当前事件。";
     if (g.player.arts.battle.has_value()) return "斗法中无法交易。";
     if (count < 1 || count > 1000) return "购买数量须为 1 至 1000。";
+    if (kind == "gear") return "成品法器未上架，可在工坊自行炼制。";
     if (!ecoIsCity(g.player.location))
         return "此处不是城池，没有坊市。可以在「舆图」前往城池。";
 
@@ -248,48 +228,7 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
         return "";
     }
 
-    if (kind == "gear") {
-        if (count != 1) return "法器请每次购买一件。";
-        // id 形如 "sword-2"
-        const size_t dash = id.find_last_of('-');
-        if (dash == string::npos) return "没有这件法器。";
-        const string shapeId = id.substr(0, dash);
-        const string gradeText = id.substr(dash + 1);
-        if (gradeText.size() != 1 || gradeText.front() < '1' || gradeText.front() > '5')
-            return "法器品阶无效。";
-        const int grade = gradeText.front() - '0';
-        const data::ShapeDef* sh = nullptr;
-        for (const auto& s : data::ShapeDef_TABLE())
-            if (s.id == shapeId) sh = &s;
-        if (!sh) return "没有这件法器。";
-        if (grade > 2) return "三阶及以上法器不在普通坊市出售，请以秘境材料自行炼制或向道友寻求真实藏品。";
-        if (grade > ordinaryMaterialGradeLimit(p)) return "二阶法器需达到筑基期。";
 
-        const auto Quote = crafting::mfQuoteStandardGearPrice(g, grade);
-        if (!Quote.Valid) return Quote.Reason;
-        const int unit = Quote.BuyPrice;
-        if (p.stones < unit)
-            return "灵石不足：需要 " + std::to_string(unit) +
-                   "，你只有 " + std::to_string(p.stones) + "。";
-
-        p.stones -= unit;
-        
-        Gear gear;
-        do {
-            gear.id = "buy-" + std::to_string(g.clock.days) + "-" + std::to_string(g.economy.seq++);
-        } while (std::any_of(a.gear.begin(), a.gear.end(), [&](const Gear& item) { return item.id == gear.id; }));
-        gear.name = std::string(sh->name) + "·" + std::to_string(grade) + "阶";
-        gear.slot = sh->slot;
-        gear.shape = sh->id;
-        gear.grade = grade;
-        gear.price = unit;
-        gear.craftCost = unit;
-        gear.bonus = 0.04 * grade;
-        a.gear.push_back(gear);
-        logEvent(g, "self", "购入法器「" + gear.name + "」。", true, "",
-                 "灵石 −" + std::to_string(unit));
-        return "";
-    }
 
     return "不认识的货品。";
 }

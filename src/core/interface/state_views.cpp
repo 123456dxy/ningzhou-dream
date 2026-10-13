@@ -1,6 +1,7 @@
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
 #include "core/api_exploration.h"
+#include "core/shop.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 
@@ -12,6 +13,7 @@ namespace nz::api::view {
 // 返回值：可直接供接口序列化的JSON值。
 Value state(const Game& game, const ViewContext& context) {
     Value state(json::Object{});
+    const auto MarketContext = shop::mfMarketSaleContext(game);
 
     state.set("dungeons", dungeonView(game));
     state.set("cave", caveView(game));
@@ -60,9 +62,9 @@ Value state(const Game& game, const ViewContext& context) {
 
     if (game.player.arts.battle) state.set("battle", battle(game));
     appendWorldState(game, state);
-    appendSocialState(game, state);
-    appendEconomyState(game, state);
-    appendEquipmentState(game, state);
+    mfAppendSocialState(game, state, MarketContext);
+    mfAppendEconomyState(game, state, MarketContext);
+    mfAppendEquipmentState(game, state, MarketContext);
 
 
     state.set("ended", Value(game.ended));

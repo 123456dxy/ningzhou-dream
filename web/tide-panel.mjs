@@ -5,14 +5,15 @@ import { esc } from './shell.mjs';
 function count(value) { return Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0; }
 
 // 用途：判断纪事是否应保留兽潮入口；参与纪事渲染；传兽潮状态，返回是否显示。
-export function shouldRenderTide(tide) { return !!(tide?.active || tide?.settled || tide?.market?.open); }
+export function shouldRenderTide(tide) { return tide?.active === true || tide?.market?.open === true; }
 
 // 用途：生成可滚动金榜；参与进行中及期末面板；传权威榜单，返回安全HTML。
 function renderLeaderboard(tide) {
   const rows = Array.isArray(tide.leaderboard) ? tide.leaderboard : [];
   if (!rows.length) return '<p class="tp-note">本期金榜尚无战绩。</p>';
   return `<details class="tide-goldboard" ${tide.settled ? 'open' : ''}><summary>兽潮金榜 · ${rows.length} 位修士${tide.active ? ' · 实时战绩' : ' · 最终排名'}</summary>`
-    + '<p class="tp-note">按积分排名，同分并列。流派高手拥有完整功法与神通配合。</p>'
+    + '<p class="tp-note">全州按积分排名，同分并列，各境界不分榜。流派高手拥有完整功法与神通配合。</p>'
+    + (tide.npcPace ? `<p class="tp-note">修士间歇参战：普通修士本期最多击杀 ${count(tide.npcPace.normalMaxKills)} 只，流派高手最多 ${count(tide.npcPace.eliteMaxKills)} 只。高境界战场每只妖兽的积分更多。</p>` : '')
     + '<div class="tide-ranking-scroll"><table><thead><tr><th scope="col">名次</th><th scope="col">修士</th><th scope="col">参战境界</th><th scope="col">积分</th></tr></thead><tbody>'
     + rows.map(row => `<tr class="${row.isPlayer ? 'tide-self' : ''}"><td>${count(row.rank) || '—'}</td><th scope="row">${esc(row.name)}${row.isPlayer ? '<span class="tide-row-tag">你</span>' : ''}${row.elite ? '<span class="tide-row-tag">完整流派</span>' : ''}<small>${esc(row.sectName || row.sect || '散修')}</small></th><td>${esc(row.realm)}</td><td>${count(row.score)}</td></tr>`).join('')
     + '</tbody></table></div></details>';
@@ -49,12 +50,15 @@ export function renderTideBattleNotice(battle, tide) {
   return `<p class="tide-combat-clock"><strong>兽潮尚余 ${count(tide?.daysLeft)} 天</strong><span>每完成一回合消耗一天；快速击杀也至少消耗一天。击杀获得对应战场积分。</span></p>`;
 }
 
-// 用途：展示战后高阶商品与权威报价；参与坊市兽潮子页；传状态和本地筛选/数量，返回交易HTML。
+// 用途：独立展示战后三至五阶药材与器材及权威报价；参与兽潮坊市页。
+// 调用方式：传状态和本地筛选/数量，拒绝展示其他类别与低阶目录；返回交易HTML，不修改后端资格或价格。
 export function renderTideMarket(state, { kind = 'all', grade = '3', quantities = {} } = {}) {
   const tide = state?.tide, market = tide?.market;
   if (!market?.open) return '<div class="empty">兽潮坊市尚未开放或已结束。兽潮结束后开放 30 天，按全州积分供给高阶材料。</div>';
-  const items = (market.items || []).filter(item => (kind === 'all' || item.kind === kind) && (grade === 'all' || Number(item.grade) === Number(grade)));
-  const grades = [...new Set([3, 4, 5, ...(market.items || []).map(item => count(item.grade)).filter(value => value > 0)])].sort((a, b) => a - b);
+  const catalog = (market.items || []).filter(item => ['herb', 'material'].includes(item.kind)
+    && Number.isInteger(Number(item.grade)) && Number(item.grade) >= 3 && Number(item.grade) <= 5);
+  const items = catalog.filter(item => (kind === 'all' || item.kind === kind) && (grade === 'all' || Number(item.grade) === Number(grade)));
+  const grades = [...new Set([3, 4, 5, ...catalog.map(item => count(item.grade))])].sort((a, b) => a - b);
   const controls = `<div class="tide-market-controls"><div class="shop-tabs">${[['all', '全部材料'], ['herb', '炼丹药材'], ['material', '炼器材料']].map(([id, name]) => `<button data-tide-market-kind="${id}" class="${kind === id ? 'active' : ''}">${name}</button>`).join('')}</div><label>品阶 <select data-tide-market-grade><option value="all" ${grade === 'all' ? 'selected' : ''}>全部品阶</option>${grades.map(value => `<option value="${value}" ${String(value) === String(grade) ? 'selected' : ''}>${value} 阶</option>`).join('')}</select></label></div>`;
   const rows = items.map(item => {
     const key = `${item.kind}:${item.id}`, stock = count(item.stock);

@@ -19,6 +19,10 @@ json::Value tideState(const Game& game) {
     out.set("playerScore",num(tide.playerScore)); out.set("playerRank",num(tide.playerRank));
     out.set("rewardStones",num(tide.rewardStones)); out.set("rewardPaid",Value(tide.rewardPaid));
     out.set("totalScore",num(tide.totalScore));
+    Value NpcPace(json::Object{});
+    NpcPace.set("normalMaxKills", num(tide::rules::NormalNpcBattlePace.MaximumEventKills));
+    NpcPace.set("eliteMaxKills", num(tide::rules::EliteNpcBattlePace.MaximumEventKills));
+    out.set("npcPace", std::move(NpcPace));
     json::Array fallen, fields, ranking, items;
     for (const auto& name : tide.fallen) fallen.push_back(str(name));
     for (const auto& field : tide::battlefields(game)) {

@@ -18,7 +18,13 @@ constexpr int MinimumGearGrade = 1;
 constexpr int MaximumGearGrade = 6;
 constexpr int LegacySixthGradeMaterialBasePrice = 288;
 constexpr double InscribedSaleMultiplier = 1.12;
-constexpr std::int64_t MaximumQuotedMaterialCost = std::numeric_limits<int>::max() / 3;
+constexpr CraftEconomyRules EconomyRules{};
+static_assert(EconomyRules.BaseSellNumerator > 0 && EconomyRules.BaseSellDenominator > 0 &&
+    EconomyRules.BaseBuyMultiplier > 0 && EconomyRules.MonthlyBudgetMultiplier > 0 &&
+    EconomyRules.MaximumMonthlyBudget > 0 && EconomyRules.MinorStagesPerMajorRealm > 0 &&
+    EconomyRules.MaximumMajorRealmIndex >= 0 && EconomyRules.MaximumMajorRealmIndex < 30);
+constexpr std::int64_t MaximumQuotedMaterialCost = std::numeric_limits<int>::max() /
+    std::max(EconomyRules.BaseBuyMultiplier, EconomyRules.BaseSellNumerator);
 
 // 用途：构造明确失败的报价；流程：所有只读价格校验；返回：Valid为假且持有原因的值。
 CraftPriceQuote mfPriceFailure(const std::string& Reason) {
@@ -45,9 +51,10 @@ CraftPriceQuote mfBaseCraftQuote(std::int64_t MaterialCost, int StandardOutput, 
     Quote.MaterialCost = static_cast<int>(MaterialCost);
     Quote.StandardOutput = StandardOutput;
     // 分母固定是标准产量；增产功法或天赋影响收益数量，不降低同一枚丹的市场价值。
-    const std::int64_t BuyNumerator = MaterialCost * 3;
+    const std::int64_t BuyNumerator = MaterialCost * EconomyRules.BaseBuyMultiplier;
     Quote.BuyPrice = static_cast<int>((BuyNumerator + StandardOutput / 2) / StandardOutput);
-    Quote.BaseSellPrice = static_cast<int>((BuyNumerator + StandardOutput) / (2 * StandardOutput));
+    const std::int64_t SaleDenominator = static_cast<std::int64_t>(EconomyRules.BaseSellDenominator) * StandardOutput;
+    Quote.BaseSellPrice = static_cast<int>((MaterialCost * EconomyRules.BaseSellNumerator + SaleDenominator / 2) / SaleDenominator);
     Quote.SellPrice = Quote.BaseSellPrice;
     Quote.UsesEstimatedMaterials = UsesEstimatedMaterials;
     Quote.Valid = Quote.BuyPrice > 0 && Quote.BaseSellPrice > 0;
@@ -91,6 +98,8 @@ CraftPriceQuote mfStandardGearMaterialQuote(const Game& GameState, int Grade) {
 }
 } // namespace
 
+const CraftEconomyRules& mfCraftEconomyRules() { return EconomyRules; }
+
 // 用途：折算正常采购价格；流程：普通材料报价的唯一倍率实现；返回：安全整数单价，非法数值为0。
 int mfNormalBuyPrice(const Game& GameState, int BasePrice) {
     if (BasePrice <= 0 || !std::isfinite(GameState.world.market) || GameState.world.market <= 0.0) return 0;
@@ -109,7 +118,8 @@ int mfNormalMaterialBuyPrice(const Game& GameState, MaterialPriceKind Kind, cons
     case MaterialPriceKind::Herb: {
         const auto* Herb = findHerbById(MaterialId);
         if (!Herb) return 0;
-        const int BasePrice = Herb->sourcePrice > 0 ? Herb->sourcePrice : 20 + Herb->grade * 15;
+        // price是本地经济目录值；sourcePrice是导入参考值，六阶两者相差六百余倍，不能混用。
+        const int BasePrice = Herb->price;
         const int LocalBasePrice = Herb->sourceLocation == GameState.player.location ? jsRound(BasePrice * 0.8) : BasePrice;
         return mfNormalBuyPrice(GameState, LocalBasePrice);
     }
