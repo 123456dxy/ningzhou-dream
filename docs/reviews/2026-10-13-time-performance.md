@@ -52,3 +52,18 @@ API 端到端数字受到同时编译和系统负荷影响明显，本记录不�
 另外以真实 `travelBegin`、`ecoBegin` 建立合法工作，再通过核心 `/api/advance` 推进：武陵城至永安镇步行实际7天完成；一阶首丹方实际4天完成。两者响应200、剩余工作归零、报告done，日志 `time-action-work-after.log`。该测试使用独立内存会话与独立存档目录，包含真实工作/行程完成分发，但不包含网络和浏览器绘制耗时。
 
 定向验证命令为 GCC 链接 `test_time_performance.cpp` 与 `test_cave_garden.cpp` 到当前 `nzcore`，共915项通过、0失败；日志 `time-performance-tests-final.log`。完整存档摘要对照为 `advance-performance-before.log` / `advance-performance-after.log`：空田/密集田 × 1/30/360/3600天八组均一致，包含日历、RNG、NPC、费用、成长及纪事。
+
+## 可玩预览交付后的真实冒烟
+
+本地8108已使用同一源码的MSVC Release服务，原玩家存档保留并备份，网页先交给用户游玩，随后使用独立18143服务和临时账号计时。基线与新角色均为720 NPC，真实页面等待到动作解锁，不只测纯C++函数。
+
+| 操作 | 原MSVC Debug点击 | 新Release点击 |
+| --- | ---: | ---: |
+| 过一天 | 2963 ms | 231 ms |
+| 过月 | 3007 ms | 214 ms |
+| 过年 | 3228 ms | 221 ms |
+| 长推进 | 4444 ms | 320 ms |
+
+两次长推进都在第1080天遇事停止，不表示完整走完十年。上述对比包含构建配置与代码优化的综合影响，不能全部归于某一项算法。新版本独立state请求约131 ms，eco-options/forge-options/forge-preview约59/63/66 ms，没有页面错误；所有推进仅一次POST。日志和诊断为build/diagnostics/ui-time-audit-release-feedback.{log,json}。
+
+真实灵田/工坊浏览器35项检查涵盖计划切换、品阶及记忆、无匹配禁用、中文组词、已种格锁定、第一点击播种/储备、外出成长、真实返府、价格详情；桌面定向275项和灵田纯展示36项覆盖失败恢复、目录去重与过期响应。核心编码等改动触发的一轮全量已完成且0失败，但不以此替代浏览器冒烟。
