@@ -55,6 +55,13 @@ int main() {
     nztest::runTideRuleTests();
     nztest::runTideIntegrationTests();
     nztest::runTideApiTests();
+    nztest::mfRunTideStockRewardTests();
+    nztest::mfRunTideEnrollmentTests();
+    nztest::mfRunDungeonTideTransitionTests();
+    nztest::mfRunServiceConvenienceTests();
+    nztest::mfRunTradeQuickActionsApiTests();
+    nztest::mfRunTideMaxPurchaseTests();
+    nztest::mfRunPotionBulkSalesTests();
 
     nztest::runCharacterBuildTests();
     nztest::runAlchemyEconomyTests();

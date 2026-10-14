@@ -1,5 +1,6 @@
 // 洞府独立页面：只展示后端快照，动作和报价由应用入口提交、后端再次校验。
 import { esc, heading, panel } from './shell.mjs';
+import { renderQuantitySlider } from './quantity-controls.mjs';
 
 // 用途：安全展示后端数值，不把缺失报价默认为免费。
 // 流程：灵田、储备、成熟时间及训练报价展示。
@@ -200,8 +201,8 @@ function renderPlantControls(plot, garden, choices, matchingOptions) {
     + ` ${options.length && hasCapacity && !locked ? '' : 'disabled'}>${options.length ? options.map(option => `<option value="${esc(option.herbId)}"`
       + `${option.herbId === selectedId ? ' selected' : ''}>${esc(option.name)} · ${numberText(option.grade)} 阶 · 行囊 ${numberText(option.ownedCount)}</option>`).join('')
       : '<option value="">没有符合筛选的药材</option>'}</select></label>`
-    + `<label class="cave-plant-quantity">份数<input type="number" min="1" max="${Math.max(1, maximum)}" step="1" value="${count}"`
-    + ` data-cave-plant-count data-plot-id="${esc(plot.plotId)}" ${maximum > 0 ? '' : 'disabled'} inputmode="numeric"></label>`
+    + renderQuantitySlider({ value: count, maximum, enabled: maximum > 0 && qualification.enabled,
+      label: '份数', className: 'cave-plant-quantity', attributes: `data-cave-plant-count data-plot-id="${esc(plot.plotId)}"` })
     + actionButton('cave-garden-plant', Number(plot.seedCount) > 0 ? '追加播种' : '播种', qualification,
       `data-plot-id="${esc(plot.plotId)}"`, 'primary') + '</div>'
     + `<p>${locked ? '本格仅可追加同种药材 · ' : ''}本格还可播种 ${numberText(plot.remainingCapacity)} 份${selected?.baseGrowthDays != null ? ` · ${esc(selected.name)}自然成长 ${numberText(selected.baseGrowthDays)} 天` : ''}`

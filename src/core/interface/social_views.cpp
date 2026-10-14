@@ -11,10 +11,35 @@
 #include "core/renown.h"
 #include "core/economy.h"
 #include "core/shop.h"
+#include "core/content/npc_combat_profiles.h"
+#include "core/content/game_ids.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 
 namespace nz::api::view {
+namespace {
+// 用途：展示实际装备构筑标签；参与仙友筛选；按合法模板或实际大道/核心神通归类，返回ID/中文名，不改NPC装备或成长。
+void mfAppendNpcBuild(const Npc& Person, const Arts& Loadout, Value& Entry) {
+    if (const auto* Profile = content::findNpcCombatProfile(Person)) {
+        Entry.set("buildId", Profile->id);
+        Entry.set("buildName", Profile->name);
+        return;
+    }
+    const auto Focus = content::parseDaoId(Loadout.focus);
+    for (const auto& Build : artBuilds()) {
+        const bool HasCoreSpell = std::any_of(Build.spells.begin(), Build.spells.end(), [&](const auto& SpellId) {
+            return std::find(Loadout.spells.begin(), Loadout.spells.end(), SpellId) != Loadout.spells.end();
+        });
+        if (Focus && content::parseDaoId(Build.dao) == Focus && HasCoreSpell) {
+            Entry.set("buildId", Build.id);
+            Entry.set("buildName", Build.name);
+            return;
+        }
+    }
+    Entry.set("buildId", Focus ? "dao-" + string(content::stableId(*Focus)) : "basic");
+    Entry.set("buildName", Focus ? string(content::legacyDaoKey(*Focus)) + "道传承" : "基础传承");
+}
+}
 
 // 用途：追加可见道友关系消息与交互预览。
 // 参与流程：HTTP请求分派、前端状态或动作预览。
@@ -36,6 +61,15 @@ void mfAppendSocialState(const Game& GameState, Value& State, const shop::Market
         entry.set("lessons", num(bonds.lessons));
         entry.set("notoriety", num(bonds.notoriety));
         entry.set("stipendBalance", num(bonds.payroll.balance));
+        {
+            const auto Quote = mfQuoteStipend(GameState);
+            Value Action(json::Object{});
+            Action.set("enabled", Quote.Enabled);
+            Action.set("reason", Quote.Reason);
+            Action.set("paid", Quote.Paid);
+            Action.set("owed", Quote.Owed);
+            entry.set("stipendAction", std::move(Action));
+        }
         {
             json::Array d;
             for (const auto& item : bonds.disciples) d.push_back(str(item));
@@ -87,6 +121,7 @@ void mfAppendSocialState(const Game& GameState, Value& State, const shop::Market
             entry.set("dao", str(npc->dao));
             {
                 const Arts loadout = artNpcLoadout(*npc);
+                mfAppendNpcBuild(*npc, loadout, entry);
                 Value lo(json::Object{}); json::Array spells, manuals, nodes;
                 for (const auto& id : loadout.spells) { const auto* spell = battleSpell(id); Value value(json::Object{}); value.set("id", str(id)); value.set("name", str(spell ? spell->name : id)); spells.push_back(std::move(value)); }
                 for (const auto& [id, level] : loadout.manuals) { ManualInfo manual; findManualInfo(id, manual); Value value(json::Object{}); value.set("id", str(id)); value.set("name", str(manual.found ? manual.name : id)); value.set("level", num(level)); value.set("main", Value(id == loadout.main)); manuals.push_back(std::move(value)); }

@@ -777,6 +777,7 @@ struct BeastTide {
     int playerScore = 0, playerEntryStage = 0, playerRank = 0;
     bool playerJoined = false, settled = false, rewardPaid = false;
     int rewardStones = 0, totalScore = 0, marketExpiresDay = -1;
+    int RewardRenown = 0;    // 本期金榜实际发放声望；缺省0，读取旧已结算档不补发。
     vector<TideParticipant> participants;
     vector<TideMarketStock> marketStock;
 };

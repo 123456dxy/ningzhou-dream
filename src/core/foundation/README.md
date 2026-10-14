@@ -10,6 +10,7 @@
 | --- | --- |
 | `base.cpp`、core 根的 `base.h` | 底层类型和头文件内的工具；主要工具以内联定义提供 |
 | `json.cpp`、core 根的 `json.h` | `json::Value` 解析、序列化与 JSON 值操作 |
+| `state_limits.h` | 一般持久数值绝对上限 `StateLimits::MaxPersistedInteger`，供存档校验和交易提交预检共用；RNG/seed使用各自32位规则 |
 | core 根的 `model.h` | `Game`、`Player`、`Npc`、`Battle`、`Job`、秘境等共享模型与静态表 |
 
 公共 include 路径继续为 `core/base.h`、`core/json.h`、`core/model.h`。随机入口包括 `Rng::next`、`mixSeed`、`randInt`；JSON 入口是类成员 `Value::parse` 与 `Value::dump`，不是自由函数。`model.h` 中的 `buildCharacter`、`rollInnate`、查表等非内联入口实现实际在 `simulation/rules.cpp`，这是共享头与实现归属不同的现状。

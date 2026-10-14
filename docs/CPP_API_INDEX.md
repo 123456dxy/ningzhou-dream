@@ -225,6 +225,8 @@ void ecoHuntEnd(Game& g, bool win);
 const vector<struct TaskDef>* ecoTaskList();
 ```
 
+2026-10-14 一键交易新增入口（历史声明数量保持原口径）：`shop.h` 的 `PotionSaleQuote` 为只读值对象，`mfQuoteMaxPotionSale(const Game&, const std::string&)` 及接收 `MarketSaleContext` 的重载返回单种丹药最大可售数、单价、总收益和资格；`mfSellPotions(Game&, const std::string&, int Count, int ExpectedUnitPrice=-1)` 重新核验并一次结算。`tide.h` 的 `MarketItem` 新增最大可买数量/成本/原因，仅扩大报价，不增加路由或持久字段。`foundation/state_limits.h` 集中一般持久数值上限。HTTP字段和测试边界见 [一键交易记录](reviews/2026-10-14-quick-trade.md)。
+
 #### `shop.h` · 28 条声明
 
 头文件：[shop.h](../src/core/shop.h)。
@@ -1016,6 +1018,8 @@ std::string breakthroughReason(const Game& game, const BreakthroughInfo& info);
 源码的实际声明是最终依据。内部 codec、视图 helper 与 cpp 局部函数可随实现演进，不应在对外统计里扩大为稳定扩展接口。
 
 ## 本版新增公开入口
+
+2026-10-14 便利补充（不改写历史统计）：`society.h` 中 `nz::mfQuoteStipend` / `mfCollectStipend`，旧 `socCollectStipend` 保留为薄适配；`exploration/service_navigation.h` 中 `nz::Exploration::mfQuoteServiceRoute` / `mfQuoteMaterialRoute`。共 4 条新领域入口；`interface/service_views.h` 的 3 条 JSON 编码/组合函数为内部协议协作，不计为长期领域扩展 API。只读报价不累计俸禄、不买材料、不消耗活动 RNG。
 
 - crafting/material_supply.h：materialQuote、buyMaterials、materialQuoteJson、recordForgeMaterials、salvageQuote、salvageMaterials、salvageQuoteJson（7条；namespace nz::crafting）。
 - adventure.h：adventureHarvestHerbs（具体药材奖励1条）。

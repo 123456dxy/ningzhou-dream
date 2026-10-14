@@ -33,6 +33,8 @@
 
 ## 已有测试
 
+`potion_sales.cpp` 提供 `mfQuoteMaxPotionSale` / `mfSellPotions`：每种丹药一键出售的数量由真实拥有量、需求余量、收购资金和灵石余额容量共同限制。报价使用本次只读响应的 `MarketSaleContext`，实际动作重新核算，不接收前端伪造的上下文。成功仅产生一条批量纪事，拒绝不部分扣丹或增加需求计数；旧 `sell` 单件接口保留。定向验收见 `tests/test_potion_bulk_sales.cpp` 和 `test_trade_quick_actions_api.cpp`。
+
 `tests/test_craft.cpp`、`test_equipment_task.cpp`、`test_material_sources.cpp`、`test_passive_life_travel.cpp`、`test_numeric_previews.cpp`；API 与收益另见 `test_api.cpp`、`test_renown_artifact_api.cpp`、`test_event_rewards.cpp`。测试统一编入 `ningzhou_tests`；此处仅列出已有覆盖入口。
 新增时长与月预算回归见 `tests/test_craft_timing.cpp`，包含真实核心 API、旧工作合同和同月余额保持。
 洞府灵田规则见 [灵田说明](../../../docs/CAVE_GARDEN.md)，定向批次/储备/日历回归为 `tests/test_cave_garden.cpp`。

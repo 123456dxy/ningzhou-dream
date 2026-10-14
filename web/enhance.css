@@ -1573,6 +1573,28 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
 .craft-materials{font-size:11px;line-height:1.8;text-align:left}.craft-card.card-disabled{opacity:.75;cursor:default}
 .inventory-pill-details{margin-top:12px}.inventory-pill-details summary{cursor:pointer;font-size:12px;color:var(--green);padding:7px 0}.inventory-pill-details>p{font-size:12px;color:var(--muted);margin-top:8px}
 
+/* 数量滑条：input只更新本行，不触发全页重绘；金额存取仍使用直接输入。 */
+.quantity-slider{display:grid;gap:2px;width:148px;max-width:100%;min-width:0;font-size:12px;color:var(--muted)}
+.quantity-slider-heading{display:block;white-space:normal}.quantity-slider output{color:var(--green);font-weight:600;font-variant-numeric:tabular-nums}
+.quantity-slider input[type="range"],.shop-row .qty.quantity-slider input[type="range"],.tide-market-quantity.quantity-slider input[type="range"]{width:100%;height:28px;min-width:0;padding:0;margin:0;border:0;background:transparent;accent-color:var(--green);cursor:pointer;box-sizing:border-box}
+.quantity-slider input[type="range"]:disabled{cursor:default;opacity:.45}.quantity-slider input[type="range"]:focus-visible{outline:2px solid var(--green);outline-offset:3px;border-radius:4px}
+.quantity-slider-limits{display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
+.shop-row .qty.quantity-slider{display:grid;justify-content:stretch;justify-self:center}
+.shop-row .price small{display:block;font-size:11px;font-weight:normal;margin-top:5px;color:var(--muted)}
+.trade-purchase-actions{display:grid;gap:7px;min-width:0}.trade-purchase-actions button{white-space:normal;line-height:1.5;min-height:36px;max-width:100%;padding:8px 11px;font:inherit;font-size:12px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--green);cursor:pointer}
+.trade-purchase-actions button.primary,.pill-sale-buttons button.primary{background:var(--green);color:var(--surface);border-color:var(--green)}
+.trade-purchase-actions button:disabled,.pill-sale-buttons button:disabled{opacity:.5;cursor:not-allowed}
+.pill-row-actions{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0;max-width:100%}
+.pill-sale-actions{min-width:0;max-width:100%}.pill-sale-buttons{display:flex;gap:7px;flex-wrap:wrap}.pill-sale-buttons button{white-space:normal;line-height:1.5;max-width:100%;padding:7px 10px}
+.trade-limit-reason{font-size:11px;color:var(--muted);line-height:1.7;margin:7px 0 0;overflow-wrap:anywhere}
+.trade-market-cash{font-size:12px;color:var(--muted);line-height:1.7;margin:8px 0 0}.trade-market-cash strong{color:var(--green);font-variant-numeric:tabular-nums}
+.inventory-pill-details .arts-actions{flex-wrap:wrap}.inventory-pill-details .pill-sale-actions{flex-basis:100%}
+.cave-plant-controls .quantity-slider{width:100%;min-width:100px}
+.cave-page .cave-plant-quantity.quantity-slider{flex:0 1 140px;min-width:100px}
+.cave-page .cave-plant-quantity.quantity-slider input[type="range"]{width:100%;height:28px;padding:0;margin:0;border:0;background:transparent}
+@media (min-width:761px) and (max-width:1200px){.tide-market-row .trade-purchase-actions{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr))}.shop-row[data-quantity-row]{grid-template-columns:minmax(0,1fr) auto}.shop-row[data-quantity-row]>:first-child{grid-column:1/-1}.shop-row .qty.quantity-slider{justify-self:start}.pill-row{flex-wrap:wrap;gap:10px}.pill-row>span{min-width:0;flex:1 1 180px}.pill-row-actions{flex:1 1 240px}}
+@media (max-width:760px){.tide-market-row .trade-purchase-actions{grid-column:1/-1}.quantity-slider input[type="range"]{min-height:36px}.trade-purchase-actions button{min-height:44px}}
+
 /* 突破入口：左侧金色按钮 + 面板高亮 */
 .progress-box button.bt-cta { background: linear-gradient(135deg, #e3c77d, #c9a457); color: #2a2412; font-weight: bold; letter-spacing: 2px; box-shadow: 0 0 0 1px #f1dc9e inset, 0 4px 14px #c9a45755; animation: bt-glow 2.2s ease-in-out infinite; }
 .progress-box button.bt-cta small { display: block; font-weight: normal; letter-spacing: 0; font-size: 10px; color: #4f4322; margin-top: 2px; }
@@ -1612,4 +1634,23 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
   .tide-market-quantity{justify-self:end}
   .tide-market-quantity input{min-height:44px}
   .tide-market-row>.buy{grid-column:1/-1;width:100%;min-height:44px}
+}
+/* 当地仙友筛选与异地服务导航：只压缩操作空间，不盖住游戏行动。 */
+.friend-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:14px; margin-bottom:14px; border:1px solid var(--line, #e4e8dc); border-radius:10px; background:var(--paper, #fafaf4); }
+.friend-filters label { display:flex; flex-direction:column; gap:5px; min-width:0; font-size:13px; color:var(--muted, #7f8b78); }
+.friend-filters select,.friend-filters input { width:100%; min-width:0; min-height:38px; box-sizing:border-box; }
+.friend-search,.friend-filter-summary { grid-column:1 / -1; }
+.friend-filter-summary { display:flex; gap:8px; justify-content:space-between; align-items:center; flex-wrap:wrap; font-size:13px; }
+.service-route { display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin:10px 0; }
+.service-route button { white-space:normal; min-height:40px; text-align:left; max-width:100%; }
+.service-route small { display:block; flex-basis:100%; color:var(--muted, #7f8b78); }
+.service-journey { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:14px 18px; margin-bottom:16px; border:1px solid #d9dfcc; border-radius:10px; background:#f1f4e9; }
+.service-journey p { margin:5px 0 0; font-size:13px; }
+.service-journey > div:last-child { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.remote-stipend { margin:12px 0; }
+body[aria-busy="true"] .service-route button { cursor:wait; }
+@media (max-width:960px) {
+  .friend-split .fs-list { min-width:0; }
+  .friend-filters { padding:10px; gap:8px; }
+  .service-journey { padding:12px; }
 }

@@ -4,6 +4,7 @@
 #include "core/economy.h"
 #include "core/play.h"
 #include "core/sim.h"
+#include "core/foundation/state_limits.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 #include <limits>
@@ -31,22 +32,67 @@ int owned(const Game& game, const string& kind, const string& key) {
     const auto found = inventory.find(key);
     return found == inventory.end() ? 0 : found->second;
 }
-// 用途：检查新增材料是否超背包容量；流程：成交前原子校验；用法：传类别、背包键和数量；返回：失败原因或空串。
-string capacityError(const Game& game, const string& kind, const string& key, int count) {
-    const int current = owned(game, kind, key);
-    if (current < 0 || static_cast<long long>(current) + count > rules::InventoryLimit)
-        return "行囊无法收存更多这份材料。";
-    if (kind == "herb") {
-        long long total = count;
-        for (const auto& [name, amount] : game.player.arts.herbs) {
-            if (amount < 0) return "行囊药材记录无效，请先恢复存档。";
-            total += amount;
-            if (total > rules::InventoryLimit) return "行囊无法收存更多药材。";
+// 类型：当前材料行囊容量的只读值对象；属于兽潮交易模块，无外部资源或持久字段。
+// AvailableCount 为单物品、分类药材总量与汇总药材数共同允许的剩余空间；Reason 说明不可收存原因。
+struct MaterialCapacityQuote {
+    int AvailableCount = 0;
+    string Reason;
+};
+
+// 用途：集中计算真实材料剩余容量；参与买满报价和成交预检，避免两套背包限制。
+// 使用：传只读游戏、类别及背包键（药材名称/器材ID）；返回：安全非负容量或明确拒绝原因，不改状态。
+MaterialCapacityQuote mfQuoteMaterialCapacity(const Game& GameState, const string& Kind,
+                                              const string& InventoryKey) {
+    const int CurrentCount = owned(GameState, Kind, InventoryKey);
+    if (CurrentCount < 0 || CurrentCount > rules::InventoryLimit)
+        return {0, "行囊材料记录无效，请先恢复存档。"};
+    int AvailableCount = rules::InventoryLimit - CurrentCount;
+    if (Kind == "herb") {
+        long long ClassifiedHerbCount = 0;
+        for (const auto& Entry : GameState.player.arts.herbs) {
+            const int HerbCount = Entry.second;
+            if (HerbCount < 0 || HerbCount > rules::InventoryLimit)
+                return {0, "行囊药材记录无效，请先恢复存档。"};
+            ClassifiedHerbCount += HerbCount;
+            if (ClassifiedHerbCount > rules::InventoryLimit)
+                return {0, "行囊药材总量记录无效，请先恢复存档。"};
         }
-        if (game.player.herbs < 0 || static_cast<long long>(game.player.herbs) + count > rules::InventoryLimit)
-            return "行囊无法收存更多药材。";
+        if (GameState.player.herbs < 0 || GameState.player.herbs > rules::InventoryLimit)
+            return {0, "行囊药材总量记录无效，请先恢复存档。"};
+        AvailableCount = std::min({AvailableCount,
+            rules::InventoryLimit - static_cast<int>(ClassifiedHerbCount),
+            rules::InventoryLimit - GameState.player.herbs});
     }
+    if (AvailableCount == 0)
+        return {0, Kind == "herb" ? "行囊无法收存更多药材。" : "行囊无法收存更多这份材料。"};
+    return {AvailableCount, {}};
+}
+
+// 用途：复用统一剩余容量验证本笔数量；参与原有单笔和一键买满的原子成交预检。
+// 使用：传只读游戏、材料背包键与正数量；返回：失败原因或空串，无资源、时钟、随机数副作用。
+string capacityError(const Game& GameState, const string& Kind, const string& InventoryKey, int Count) {
+    const auto Capacity = mfQuoteMaterialCapacity(GameState, Kind, InventoryKey);
+    if (!Capacity.Reason.empty()) return Capacity.Reason;
+    if (Count > Capacity.AvailableCount)
+        return Kind == "herb" ? "行囊无法收存更多药材。" : "行囊无法收存更多这份材料。";
     return {};
+}
+
+// 用途：把当前最大可买数量和总价写入临时报价；参与每件商品的买满按钮与数量范围显示。
+// 使用：传只读游戏、统一查询的剩余行囊容量和已完成资格报价的快照；返回：无，仅修改快照字段，不写活动状态。
+void mfPopulateMaxPurchaseQuote(const Game& GameState, int AvailableInventoryCount, MarketItem& Item) {
+    Item.MaxPurchaseReason = Item.reason;
+    if (!Item.enabled) return;
+    const int AffordableCount = GameState.player.stones / Item.unitPrice;
+    const int PurchaseCount = std::min({Item.stock, AffordableCount, AvailableInventoryCount});
+    const long long TotalCost = static_cast<long long>(Item.unitPrice) * PurchaseCount;
+    if (PurchaseCount <= 0 || TotalCost > std::numeric_limits<int>::max() ||
+        TotalCost > GameState.player.stones) {
+        Item.MaxPurchaseReason = "当前灵石或行囊容量不足以购买这份材料。";
+        return;
+    }
+    Item.MaxPurchaseCount = PurchaseCount;
+    Item.MaxPurchaseCost = static_cast<int>(TotalCost);
 }
 // 用途：集中检查交易时机；流程：报价门槛和成交；用法：传只读游戏；返回：不可交易原因或空串。
 string tradingError(const Game& game) {
@@ -57,6 +103,8 @@ string tradingError(const Game& game) {
     if (game.player.arts.battleActive()) return "请先完成当前斗法。";
     if (game.job) return "请先完成或取消当前安排。";
     if (game.dungeons.run) return "请先结束秘境探索。";
+    if (game.eventSeq < 0 || game.eventSeq >= StateLimits::MaxPersistedInteger)
+        return "纪事编号无效或已满，无法提交交易。";
     return {};
 }
 // 用途：创建无副作用的失败返回；流程：交易入口；用法：传明确原因；返回：失败对象。
@@ -101,11 +149,26 @@ vector<MarketItem> marketItems(const Game& game) {
         const string key = stock.kind == "herb" ? material.name : stock.id;
         item.owned = owned(game, stock.kind, key);
         item.reason = blocked;
-        if (item.reason.empty() && item.stock <= 0) item.reason = "本期库存已售罄。";
+        if (item.reason.empty() && (stock.stock < 0 || stock.stock > rules::MaximumStock))
+            item.reason = "本期材料库存记录无效，请刷新战后坊市。";
+        if (item.reason.empty() && item.stock <= 0) {
+            item.reason = game.tide.totalScore < rules::mfStockUnlockScore(item.grade)
+                ? "全州积分尚未达到该阶库存解锁门槛（需" +
+                    std::to_string(rules::mfStockUnlockScore(item.grade)) + "分）。"
+                : "本期库存已售罄。";
+        }
         if (item.reason.empty() && item.unitPrice <= 0) item.reason = "这份材料尚未登记有效价格。";
+        if (item.reason.empty() && (game.player.stones < 0 || game.player.stones > rules::InventoryLimit))
+            item.reason = "灵石余额记录无效，请先恢复存档。";
         if (item.reason.empty() && game.player.stones < item.unitPrice) item.reason = "灵石不足。";
-        if (item.reason.empty()) item.reason = capacityError(game, stock.kind, key, 1);
+        int AvailableInventoryCount = 0;
+        if (item.reason.empty()) {
+            const auto Capacity = mfQuoteMaterialCapacity(game, stock.kind, key);
+            AvailableInventoryCount = Capacity.AvailableCount;
+            item.reason = Capacity.Reason;
+        }
         item.enabled = item.reason.empty();
+        mfPopulateMaxPurchaseQuote(game, AvailableInventoryCount, item);
         result.push_back(std::move(item));
     }
     return result;
@@ -118,12 +181,16 @@ MarketResult buyMarket(Game& game, const string& eventId, const string& kind,
     if (expectedUnitPrice < -1) return failure("提交的报价无效。");
     const string blocked = tradingError(game);
     if (!blocked.empty()) return failure(blocked);
+    if (game.player.stones < 0 || game.player.stones > rules::InventoryLimit)
+        return failure("灵石余额记录无效，请先恢复存档。");
     const auto found = std::find_if(game.tide.marketStock.begin(), game.tide.marketStock.end(), [&](const TideMarketStock& stock) {
         return stock.kind == kind && stock.id == id;
     });
     if (found == game.tide.marketStock.end()) return failure("本期坊市没有这份材料。");
     const auto material = descriptor(*found);
     if (material.grade == 0) return failure("这份材料不属于战后坊市。");
+    if (found->stock == 0 && game.tide.totalScore < rules::mfStockUnlockScore(material.grade))
+        return failure("全州积分尚未达到该阶库存解锁门槛。");
     if (found->stock < count || found->stock > rules::MaximumStock) return failure("本期材料库存不足。");
     const int normalPrice = play::normalMaterialBuyPrice(game, kind, id);
     const int unitPrice = rules::discountedPrice(normalPrice, discountPercent(game));
@@ -135,15 +202,28 @@ MarketResult buyMarket(Game& game, const string& eventId, const string& kind,
     const string capacity = capacityError(game, kind, key, count);
     if (!capacity.empty()) return failure(capacity);
 
-    // 所有校验完成后才扣灵石、减库存、写背包，避免失败造成半笔交易。
-    game.player.stones -= static_cast<int>(cost);
-    found->stock -= count;
-    if (kind == "herb") { game.player.arts.herbs[key] += count; game.player.herbs += count; }
-    else game.player.arts.materials[key] += count;
+    // 只准备本笔材料账本与纪事副本，不复制全州NPC；插入新键和纪事分配失败均发生在提交前。
+    auto& CurrentInventory = kind == "herb" ? game.player.arts.herbs : game.player.arts.materials;
+    auto NextInventory = CurrentInventory;
+    NextInventory[key] += count;
+    Game JournalState;
+    JournalState.year = game.year;
+    JournalState.player.age = game.player.age;
+    JournalState.clock.days = game.clock.days;
+    JournalState.eventSeq = game.eventSeq;
+    JournalState.logs = game.logs;
     MarketResult result;
     result.ok = true; result.cost = static_cast<int>(cost);
     result.text = "在战后坊市购入" + material.name + " ×" + std::to_string(count) + "，支付" + std::to_string(cost) + "灵石。";
-    logEvent(game, "self", result.text, false, "", "灵石 −" + std::to_string(cost));
+    logEvent(JournalState, "self", result.text, false, "", "灵石 −" + std::to_string(cost));
+
+    // 以下只交换已构造容器和写入预先校验的整数；交易事实一次提交，不再执行会分配的操作。
+    CurrentInventory.swap(NextInventory);
+    game.player.stones -= result.cost;
+    found->stock -= count;
+    if (kind == "herb") game.player.herbs += count;
+    game.logs.swap(JournalState.logs);
+    game.eventSeq = JournalState.eventSeq;
     return result;
 }
 } // namespace nz::tide

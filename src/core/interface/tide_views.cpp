@@ -18,11 +18,23 @@ json::Value tideState(const Game& game) {
     out.set("daysLeft",num(tide::daysLeft(game))); out.set("settled",Value(tide.settled));
     out.set("playerScore",num(tide.playerScore)); out.set("playerRank",num(tide.playerRank));
     out.set("rewardStones",num(tide.rewardStones)); out.set("rewardPaid",Value(tide.rewardPaid));
+    out.set("rewardRenown", num(tide.RewardRenown));
     out.set("totalScore",num(tide.totalScore));
     Value NpcPace(json::Object{});
+    NpcPace.set("normalChanceDenominator", num(tide::rules::NormalNpcBattlePace.BattleChanceDenominator));
+    NpcPace.set("eliteChanceDenominator", num(tide::rules::EliteNpcBattlePace.BattleChanceDenominator));
     NpcPace.set("normalMaxKills", num(tide::rules::NormalNpcBattlePace.MaximumEventKills));
     NpcPace.set("eliteMaxKills", num(tide::rules::EliteNpcBattlePace.MaximumEventKills));
     out.set("npcPace", std::move(NpcPace));
+    json::Array RewardRules;
+    for (const auto& RankBand : tide::rules::RankBands) {
+        Value RewardRule(json::Object{});
+        RewardRule.set("maxRank", num(RankBand.maxRank));
+        RewardRule.set("rewardYears", num(RankBand.rewardYears));
+        RewardRule.set("rewardRenown", num(RankBand.RenownReward));
+        RewardRules.push_back(std::move(RewardRule));
+    }
+    out.set("rewardRules", Value(std::move(RewardRules)));
     json::Array fallen, fields, ranking, items;
     for (const auto& name : tide.fallen) fallen.push_back(str(name));
     for (const auto& field : tide::battlefields(game)) {
@@ -52,12 +64,31 @@ json::Value tideState(const Game& game) {
         row.set("grade",num(item.grade)); row.set("basePrice",num(item.basePrice)); row.set("unitPrice",num(item.unitPrice));
         row.set("stock",num(item.stock)); row.set("owned",num(item.owned));
         row.set("enabled",Value(item.enabled)); row.set("reason",str(item.reason));
+        Value MaxPurchase(json::Object{});
+        MaxPurchase.set("enabled", Value(item.MaxPurchaseCount > 0 && item.MaxPurchaseReason.empty()));
+        MaxPurchase.set("count", num(item.MaxPurchaseCount));
+        MaxPurchase.set("unitPrice", num(item.unitPrice));
+        MaxPurchase.set("totalCost", num(item.MaxPurchaseCost));
+        MaxPurchase.set("reason", str(item.MaxPurchaseReason));
+        row.set("maxPurchase", std::move(MaxPurchase));
         items.push_back(std::move(row));
     }
     Value market(json::Object{});
     market.set("open",Value(tide::marketOpen(game))); market.set("expiresDay",num(tide.marketExpiresDay));
     market.set("daysLeft",num(tide::marketOpen(game)?std::max(0,tide.marketExpiresDay-game.clock.days):0));
     market.set("discountPercent",num(tide::discountPercent(game))); market.set("minDiscountPercent",num(tide::rules::MinimumPayablePercent));
+    market.set("pointsPerStock", num(tide::rules::PointsPerStock));
+    json::Array StockRules;
+    const int DisplayedTotalScore = tide.settled ? tide.totalScore
+        : static_cast<int>(std::min(1000000000LL, liveTotal));
+    for (int Grade = tide::rules::MinimumStockGrade; Grade <= tide::rules::MaximumStockGrade; ++Grade) {
+        Value StockRule(json::Object{});
+        StockRule.set("grade", num(Grade));
+        StockRule.set("unlockScore", num(tide::rules::mfStockUnlockScore(Grade)));
+        StockRule.set("initialStock", num(tide::rules::stockPerItem(DisplayedTotalScore, Grade)));
+        StockRules.push_back(std::move(StockRule));
+    }
+    market.set("stockRules", Value(std::move(StockRules)));
     market.set("priceBasis",str("当前声望下普通坊市购入价")); market.set("items",Value(std::move(items)));
     out.set("fallen",Value(std::move(fallen))); out.set("battlefields",Value(std::move(fields)));
     out.set("leaderboard",Value(std::move(ranking))); out.set("market",std::move(market));

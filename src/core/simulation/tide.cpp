@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace nz::tide {
 namespace {
@@ -17,21 +18,15 @@ int deadline(int day, int duration) {
     return static_cast<int>(std::min(static_cast<long long>(std::max(0, day)) + duration,
                                     static_cast<long long>(std::numeric_limits<int>::max())));
 }
+// 用途：统一参战名册与日模拟的修士资格；流程：开潮、增量报名及积分模拟；用法：传只读NPC；返回：有效身份的存活非妖兽修士为真。
+bool mfIsEligibleTideNpc(const Npc& Actor) {
+    return Actor.alive && !Actor.beast && !Actor.id.empty() && Actor.id != "player" && !Actor.name.empty();
+}
 // 用途：冻结本期参战身份；流程：开启和迁移；用法：新活动初始化时调用；返回：无，不消耗随机数。
 void registerNpcs(Game& game) {
     content::ensureChampionNpcs(game);
     game.tide.participants.clear();
-    for (const auto& npc : game.npcs) {
-        if (!npc.alive || npc.beast || npc.id.empty()) continue;
-        TideParticipant participant;
-        participant.actorId = npc.id; participant.name = npc.name; participant.sect = npc.sect;
-        participant.combatProfileId = npc.combatProfileId;
-        participant.entryStage = clampInt(npc.stage, 0, 12);
-        participant.elite = content::isChampion(npc);
-        game.tide.participants.push_back(std::move(participant));
-    }
-    std::sort(game.tide.participants.begin(), game.tide.participants.end(),
-              [](const TideParticipant& left, const TideParticipant& right) { return left.actorId < right.actorId; });
+    mfEnrollEligibleNpcs(game);
 }
 // 用途：初始化固定战期事实；流程：开潮和旧档迁移；用法：调用前决定是否保留旧记录；返回：无，设置期限与名单。
 void initializeEvent(Game& game) {
@@ -45,6 +40,7 @@ void initializeEvent(Game& game) {
     tide.playerEntryStage = clampInt(game.player.stage, 0, 12);
     tide.playerJoined = false;
     tide.playerScore = tide.playerRank = tide.totalScore = tide.rewardStones = 0;
+    tide.RewardRenown = 0;
     tide.settled = tide.rewardPaid = false; tide.marketExpiresDay = -1; tide.marketStock.clear();
     registerNpcs(game);
 }
@@ -58,7 +54,7 @@ bool hasUnfinishedBattle(const Game& game) {
 // 用途：按集中出战概率及本期上限模拟NPC积分；流程：dayTick；返回：无，冻结入场战场倍率，死人/未参战/已封顶不投骰。
 void simulateNpcDay(Game& game) {
     std::unordered_map<string, const Npc*> LivingNpcs;
-    for (const auto& Npc : game.npcs) if (Npc.alive && !Npc.beast) LivingNpcs.emplace(Npc.id, &Npc);
+    for (const auto& Npc : game.npcs) if (mfIsEligibleTideNpc(Npc)) LivingNpcs.emplace(Npc.id, &Npc);
     for (auto& Participant : game.tide.participants) {
         const auto Found = LivingNpcs.find(Participant.actorId);
         if (Found == LivingNpcs.end()) continue;
@@ -98,6 +94,36 @@ void resolveMonthlyCasualties(Game& game) {
     }
 }
 } // namespace
+
+// 用途：增量冻结当日新修士的参战身份；流程：年度人口更新与日推进；用法：仅动作边界调用；返回：无，不投骰或重置老账。
+void mfEnrollEligibleNpcs(Game& GameState) {
+    auto& Event = GameState.tide;
+    if (!Event.active || Event.settled || Event.rulesVersion == 0 ||
+        GameState.clock.days < Event.startDay || GameState.clock.days >= Event.endDay ||
+        Event.lastProcessedDay != GameState.clock.days) return;
+
+    std::unordered_set<string> EnrolledIds{"player"};
+    EnrolledIds.reserve(Event.participants.size() + GameState.npcs.size() + 1);
+    for (const auto& Entry : Event.participants) EnrolledIds.insert(Entry.actorId);
+    bool HasNewEnrollment = false;
+    for (const auto& Actor : GameState.npcs) {
+        if (!mfIsEligibleTideNpc(Actor) || !EnrolledIds.insert(Actor.id).second) continue;
+        TideParticipant Entry;
+        Entry.actorId = Actor.id;
+        Entry.name = Actor.name;
+        Entry.sect = Actor.sect;
+        Entry.combatProfileId = Actor.combatProfileId;
+        Entry.entryStage = clampInt(Actor.stage, 0, 12);
+        Entry.elite = content::isChampion(Actor);
+        Event.participants.push_back(std::move(Entry));
+        HasNewEnrollment = true;
+    }
+    if (HasNewEnrollment) {
+        // 名单顺序决定日模拟投骰顺序；仅在新增时稳定排序，已登记的人物事实不变。
+        std::sort(Event.participants.begin(), Event.participants.end(),
+            [](const TideParticipant& Left, const TideParticipant& Right) { return Left.actorId < Right.actorId; });
+    }
+}
 
 // 用途：读取战期危险增量；流程：游历赶路；用法：传只读游戏；返回：仅有效战期内的风险。
 int dangerBonus(const Game& game) {
@@ -153,6 +179,8 @@ void dayTick(Game& game) {
     const int days = clampInt(target - first, 0, tide.durationDays);
     for (int day = 0; day < days; ++day) simulateNpcDay(game);
     tide.lastProcessedDay = std::max(tide.lastProcessedDay, target);
+    // 先补算旧名单，再登记当前新修士；新人只从下一次真实日推进开始计分，不追溯历史。
+    mfEnrollEligibleNpcs(game);
     tide.monthsLeft = (std::max(0, tide.endDay - game.clock.days) + 29) / 30;
     if (game.clock.days >= tide.endDay) tide.active = false;
     settleIfDue(game);
@@ -258,11 +286,14 @@ void settleIfDue(Game& game) {
         const int intended = rules::rewardStones(tide.playerEntryStage, tide.playerRank);
         const int room = std::max(0, rules::InventoryLimit - std::max(0, game.player.stones));
         tide.rewardStones = std::min(intended, room);
+        const int BeforeRenown = std::max(0, game.player.renown);
+        game.player.renown = rules::addScore(BeforeRenown, rules::mfRewardRenown(tide.playerRank));
+        tide.RewardRenown = std::max(0, game.player.renown - BeforeRenown);
         game.player.stones += tide.rewardStones; tide.rewardPaid = true;
     }
     logEvent(game, "world", "【兽潮金榜】妖潮退去，全体修士累计" + std::to_string(tide.totalScore) + "分。" +
-        (tide.playerRank > 0 ? "你以" + std::to_string(tide.playerScore) + "分列第" + std::to_string(tide.playerRank) + "名，获得" +
-          std::to_string(tide.rewardStones) + "灵石。" : "你本期未获得有效讨伐积分。") + "战后坊市开放" + std::to_string(rules::MarketDays) + "天，供给随总积分增加，排名影响售价。", true);
+        (tide.playerRank > 0 ? "你以" + std::to_string(tide.playerScore) + "分列第" + std::to_string(tide.playerRank) + "名，" +
+          (tide.rewardPaid ? "获得" + std::to_string(tide.rewardStones) + "灵石，声望 +" + std::to_string(tide.RewardRenown) + "。" : "本期奖励未发放。") : "你本期未获得有效讨伐积分。") + "战后坊市开放" + std::to_string(rules::MarketDays) + "天，供给随总积分增加，排名影响售价。", true);
 }
 // 用途：记录避战选择；流程：兽潮纪事按钮；用法：活动内调用；返回：文字，不推进时间或加分。
 string hunkerDown(Game& game) {

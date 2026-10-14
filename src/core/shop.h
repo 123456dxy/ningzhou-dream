@@ -95,6 +95,22 @@ struct SellResult {
     std::string text;
     int gain = 0;
 };
+
+// 类型：单种丹药批量出售的纯值报价，无资源所有权，可复制；由游戏串行动作边界使用。
+// Count 是持有量、坊市资金、月需求和灵石余额容量共同允许的最大数量。
+struct PotionSaleQuote {
+    bool Enabled = false;
+    int Count = 0, UnitPrice = 0, TotalGain = 0;
+    std::string Reason, LimitReason;
+};
+// 用途：预览单种丹药可售尽数量；参与行囊/工坊出售；使用稳定丹方ID，返回纯报价且不改时间/RNG/资源。
+[[nodiscard]] PotionSaleQuote mfQuoteMaxPotionSale(const Game& State, const std::string& ItemId);
+// 用途：目录同次响应复用坊市快照；参与批量目录预览；上下文只由后端提供，返回无副作用报价。
+[[nodiscard]] PotionSaleQuote mfQuoteMaxPotionSale(const Game& State, const std::string& ItemId,
+                                                 const MarketSaleContext& Context);
+// 用途：按当前状态重新验证并一次出售指定数量；参与一键售尽/滑条出售，失败不部分扣丹或插入账本。
+// 使用：Count 必须为正；ExpectedUnitPrice 为旧报价单价，-1 表示不用旧报价校验；返回真实收益或中文原因。
+SellResult mfSellPotions(Game& State, const std::string& ItemId, int Count, int ExpectedUnitPrice = -1);
 // 用途：检查出售条件后转移物品并发放灵石。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入Game& g, const std::string& kind, const std::string& id，按本模块入口调用。

@@ -35,7 +35,11 @@ import { renderTaskPanel } from './task-panel.mjs';
 import { renderCavePage, cavePlantCountLimit, cavePlantCount } from './cave-panel.mjs';
 import { renderCraftPricing } from './craft-pricing.mjs';
 import { renderCraftSupply, renderSalvageQuote } from './workshop.mjs';
+import { createServiceIntent, saveServiceIntent, loadServiceIntent, serviceIntentStatus,
+  renderServiceRoute, renderServiceJourney, renderRemoteStipend } from './service-navigation.mjs';
+import { loadFriendFilters, saveFriendFilters, normalizeFriendFilters } from './friend-filters.mjs';
 import { shouldRenderTide, renderTideMarket, renderTideBattleNotice } from './tide-panel.mjs';
+import { quantityValue, renderQuantitySlider, updateQuantitySlider, renderPotionSaleActions } from './quantity-controls.mjs';
 import {
   renderFriendList, renderFriendPanel, loadNpcBag, invalidateFriendCache,
   renderTidePanel, renderBondActions,
@@ -45,6 +49,8 @@ let S = null;            // 游戏状态（来自 C++）
 let tab = tabFromHash();   // 当前页签
 let selectedNpc = null;  // 选中的人
 let friendBag = null;    // 选中的人的可换物品（/api/npc-bag 结果）
+let friendFilters = loadFriendFilters();
+let serviceIntent = null, serviceIntentLoaded = false;
 let mapFocus = null;     // 舆图上选中的地点
 let mapSearch = '';
 let mapFilter = 'all';
@@ -124,6 +130,7 @@ try { chronicleHeight = Math.max(180, Math.min(900, Number(localStorage.getItem(
 let chronicleResizeObserver = null;
 let brewSupplyRecipeId = '';
 let craftSupplyQuote = null;
+let craftSupplySerial = 0;
 const gardenSelections = {};
 const gardenFilters = { grade: '1', search: '' };
 try {
@@ -147,6 +154,34 @@ function applyGardenSearch(input) {
   const restored = document.querySelector('[data-cave-plant-search]');
   restored?.focus();
   if (start !== null && end !== null) restored?.setSelectionRange(start, end);
+}
+
+// 用途：应用当地仙友搜索且保留中文输入位置；流程：组词完成后的本地筛选。
+// 用法：传搜索控件；返回：无，不发请求，不改变 NPC。
+function applyFriendSearch(input) {
+  friendFilters.search = input.value;
+  saveFriendFilters(friendFilters);
+  const start = input.selectionStart, end = input.selectionEnd;
+  render();
+  const restored = document.querySelector('[data-friend-search]');
+  restored?.focus();
+  if (start !== null && end !== null) restored?.setSelectionRange(start, end);
+}
+
+// 用途：在实际抵达后打开原服务页；流程：动作响应与刷新恢复。
+// 用法：状态就绪后由 render 调用；返回：无，仅处理白名单客户端页面与意图。
+function synchronizeServiceNavigation() {
+  if (!serviceIntentLoaded) { serviceIntent = loadServiceIntent(S); serviceIntentLoaded = true; }
+  if (!serviceIntent) return;
+  const status = serviceIntentStatus(S, serviceIntent);
+  if (status === 'arrived') {
+    tab = serviceIntent.tab;
+    if (tab === 'workshop') setSub('workshop', serviceIntent.sub);
+    if (tab === 'dungeon') dungeonView = serviceIntent.sub;
+    history.replaceState({ nzTab: tab }, '', '#' + tab);
+    selectedNpc = null; friendBag = null;
+  }
+  if (status === 'arrived' || status === 'invalid') { serviceIntent = null; saveServiceIntent(null); }
 }
 
 // 用途：兼容旧页面链接，并解析新顶级页签的 hash。
@@ -281,6 +316,11 @@ async function call(path, body) {
     if (data.state) {
       const wasReady = S?.breakthrough?.ready, wasStage = S?.player?.stage;
       S = data.state;
+      // 秘境离境跨年遇事会保留剩余耗时；按后端恢复指引显示已有的继续推进入口。
+      if (data.targetTab === 'chronicle' && (path.startsWith('dungeon/') || path === 'battle/turn')
+          && !S.dungeons?.run && S.job?.type === 'socialElapsed' && S.job.remaining > 0) {
+        tab = 'chronicle';
+      }
       if (S.breakthrough?.ready && wasReady === false && wasStage === S.player?.stage) {
         pushFeed(`修为圆满，可叩关「${S.breakthrough.next}」`, '点左侧「叩关突破 →」', 'good');
         setTimeout(() => toast(`修为已圆满！点左侧金色「叩关突破 →」冲击「${S.breakthrough.next}」。`, 'good'), 2700);
@@ -298,10 +338,12 @@ async function call(path, body) {
       ecoOpts = []; forgeOpts = { materials: [], shapes: [] };
       forgePreview = null; forgePreviewSerial++; forgePreviewLoading = null;
       craftSupplyQuote = null;
+      craftSupplySerial++;
       invalidateRoster(); rosterReady = false;
       invalidateSects(); sectData = null; achData = null;
       legCache = null;
       if (['new', 'load', 'import'].includes(path)) {
+        serviceIntent = null; serviceIntentLoaded = true; saveServiceIntent(null);
         selectedNpc = null; friendBag = null; mapFocus = null;
         mapSearch = ''; mapFilter = 'all'; mapModes = {};
         mapZoom = 1; mapPanFocus = true;
@@ -490,6 +532,7 @@ function viewChronicle() {
     ? `<p class="intro">进行中：${escape(S.job.name)}（剩 ${S.job.remaining}/${S.job.total} 天）</p>`
       + (S.job.type === 'brew' ? renderPillEffect(S, S.job.to) : '')
       + (S.job.type === 'forge' ? '<button data-action="goto-workshop-forge">查看本炉法宝实际效果 →</button>' : '')
+      + (S.job.type === 'socialElapsed' ? `<button class="primary" data-action="advance" data-days="${S.job.remaining}" ${S.pending || S.battle ? 'disabled' : ''}>继续当前安排 · ${S.job.remaining} 天</button>` : '')
     : `<p class="intro">本月尚余 ${S.clock.left} 天；短工作结束后可另作安排。</p>`;
 
   const bt = S.breakthrough;
@@ -524,7 +567,7 @@ function viewChronicle() {
   + `<div class="arts-actions" style="margin:0">`
   + `<button class="primary" data-action="breakthrough" ${btBlock ? 'disabled' : ''} title="${escape(btBlock)}">`
   + `${btBlock ? escape(btBlock) : '开始闭关突破'}</button>`
-  + `<button data-action="stipend">领俸禄（${S.bonds.stipendBalance}）</button>`
+  + renderRemoteStipend(S.bonds)
   + `<button data-action="save">保存</button>`
   + (window.__NZ_LOCAL__ ? '' : `<button data-action="export-save">导出行卷</button>`)
   + `<button data-action="import-save">导回行卷</button>`
@@ -634,7 +677,7 @@ function viewMap() {
     return head + tabs
       + `<div class="friend-split">
            <div class="fs-list">${
-             renderFriendList(S, { scope: 'local', selected: selectedNpc })
+             renderFriendList(S, { scope: 'local', selected: selectedNpc, filters: friendFilters })
            }</div>
            <div class="fs-panel">${right}</div>
          </div>`;
@@ -956,6 +999,7 @@ function viewSociety() {
         <div><label>贡献</label><strong>${S.contribution ?? 0}</strong></div>
         <div><label>恶名</label><strong>${S.notoriety ?? 0}</strong></div>
       </div>`
+      + `<div class="remote-stipend">${renderRemoteStipend(S.bonds)}</div>`
       + (S.player && S.player.bodyHp ? `<div class="detail-list" style="border-top:0">
         <div><label>体魄</label><strong>${S.player.bodyHp.points} 点</strong></div>
         <div><label>气血上限</label><strong>+${Math.round(S.player.bodyHp.bonus * 100)}%</strong></div>
@@ -1378,17 +1422,18 @@ function viewMarket() {
 
   let shopBody;
   if (!S.inCity) {
-    shopBody = `<div class="empty">此地没有坊市。去「宁州舆图」前往城池即可买卖。</div>`;
+    shopBody = `<div class="empty">此地没有坊市。可前往最近的城池买卖。`
+      + renderServiceRoute(S.serviceRoutes?.market, { tab: 'market', routeKey: 'market' }) + `</div>`;
   } else {
     const items = (S.market || []).filter(i => i.kind === shopKind).map(i => ({ ...i, grade: marketGrade(S, i) }))
       .filter(i => shopGrades[shopKind] === 'all' || Number(i.grade) === Number(shopGrades[shopKind]));
     shopBody = items.length
       ? `<div class="shop-list" style="padding:14px 22px 18px">` + items.map(i => {
-          const qty = i.kind === 'gear' ? 1 : (shopQty[i.id] ?? 1);
+          const qty = quantityValue(shopQty[i.id], i.kind === 'gear' ? 1 : 99);
           const total = i.price * qty;
           const afford = p.stones >= total;
           const available = afford && i.enabled !== false && i.locked !== true;
-          return `<div class="shop-row">
+          return `<div class="shop-row" data-quantity-row>
             <div><div class="item-name">${escape(i.name)}</div>
             <div class="item-sub">${escape(i.kind === 'potion' ? '' : i.desc || '')}`
             + `${i.grade ? ` · ${i.grade} 阶` : ''}`
@@ -1396,17 +1441,15 @@ function viewMarket() {
             + `${i.stageName ? ` · 需${escape(i.stageName)}` : ''}`
             + `${i.reason ? `<span class="market-item-reason">${escape(i.reason)}</span>` : ''}`
             + `</div>${i.kind === 'potion' ? renderPillEffect(S, i.id, { catalog: true }) : ''}${['potion', 'gear'].includes(i.kind) ? renderCraftPricing(i.pricing, { kind: i.kind, compact: true }) : ''}</div>
-            <div class="price">${i.price} 灵石</div>
-            <div class="qty">
-              <button data-qty="${i.id}" data-delta="-1" ${i.kind === 'gear' || qty === 1 ? 'disabled' : ''}>−</button>
-              <input type="number" min="1" max="99" value="${qty}"
-                     data-qtyinput="${i.id}" ${i.kind === 'gear' ? 'disabled' : ''}>
-              <button data-qty="${i.id}" data-delta="1" ${i.kind === 'gear' || qty === 99 ? 'disabled' : ''}>+</button>
-            </div>
+            <div class="price">${i.price} 灵石<small data-quantity-total>合计 ${total} 灵石</small></div>`
+            + renderQuantitySlider({ value: qty, maximum: i.kind === 'gear' ? 1 : 99,
+              enabled: i.enabled !== false && i.locked !== true, className: 'qty',
+              unit: i.kind === 'potion' ? '枚' : '份', attributes: `data-qtyinput="${escape(i.id)}"` }) + `
             <button class="buy" ${available ? '' : 'disabled'}
                     data-action="buy" data-kind="${i.kind}" data-id="${i.id}"
-                    data-count="${qty}">
-              ${i.enabled === false || i.locked === true ? '未开放' : afford ? `买入 ${i.kind === 'gear' ? '' : total}` : `差 ${total - p.stones}`}
+                    data-count="${qty}" data-quantity-submit data-unit-price="${i.price}" data-balance="${p.stones}"
+                    data-permitted="${i.enabled !== false && i.locked !== true}" data-block-reason="${escape(i.reason || '未开放')}">
+              ${i.enabled === false || i.locked === true ? '未开放' : afford ? `买入 · ${total} 灵石` : `还差 ${total - p.stones} 灵石`}
             </button></div>`;
         }).join('') + `</div>`
       : `<div class="empty">这一类暂时没有货。${['herb','material'].includes(shopKind) ? '高阶材料需探索秘境、委托或其他稀有来源。' : ''}</div>`;
@@ -1466,10 +1509,8 @@ function viewMarket() {
     return `<div class="pill-row">
       <span>${escape(opt ? opt.name : id)} ×${n}`
     + ` <span class="item-sub">已服 ${used}</span>${renderPillEffect(S, id)}</span>
-      <span style="display:flex;gap:6px">
-      <button data-action="use-pill" data-id="${id}">服用</button>
-      <button data-action="sell" data-kind="potion" data-id="${id}" ${S.inCity ? '' : 'disabled'}>${S.inCity ? '出售' : '城中可售'}</button>
-      </span></div>`;
+      <div class="pill-row-actions"><button data-action="use-pill" data-id="${id}">服用</button>
+      ${renderPotionSaleActions(id, opt?.maxSale, S)}</div></div>`;
   }).join('') || `<div class="empty">还没有炼成丹药。</div>`;
 
   // ---- 丹炉 ----
@@ -1935,6 +1976,7 @@ async function refreshSects() {
 // 返回值：无返回值；更新DOM。
 function render() {
   if (!S) return;
+  synchronizeServiceNavigation();
   tianji.setVisible(tab === 'tianji' && !S.battle && !S.dungeons?.run && !S.ended);
   const oldViewport = document.querySelector('[data-map-viewport]');
   const mapScroll = oldViewport ? { x: oldViewport.scrollLeft, y: oldViewport.scrollTop, zoom: oldViewport.dataset.zoom } : null;
@@ -1996,6 +2038,7 @@ function render() {
     // 通讯录的筛选/排序/传讯是委托事件，插进 DOM 之后才绑得上
     if (tab === 'roster') bindRosterTab();
   }
+  if (serviceIntent) $('#workspace').insertAdjacentHTML('afterbegin', renderServiceJourney(S, serviceIntent));
   if (checkpointNotice) $('#workspace').insertAdjacentHTML('afterbegin', `<div class="checkpoint-restored" role="alert"><div><strong>已恢复最近存档</strong><p>${escape(checkpointNotice)}</p></div><button class="subtle" data-action="checkpoint-dismiss">知道了</button></div>`);
   renderPending();
   renderRemoval();
@@ -2085,6 +2128,11 @@ async function loadConflictPreview(npcId) {
 // 返回值：Promise；只更新界面与动作状态，没有业务数据返回。
 document.addEventListener('click', async e => {
   if (e.target.closest('[data-tianji]')) { await tianji.handleClick(e); return; }
+  // 动作未返回时不切换服务目标或重复提交，避免过期导航与交易响应覆盖当前页面。
+  if (requestBusy) return;
+  if (e.target.closest('[data-friend-filter-reset]')) {
+    friendFilters = normalizeFriendFilters(); saveFriendFilters(friendFilters); render(); return;
+  }
   // 页签
   const tabBtn = e.target.closest('.main-tabs button');
   if (tabBtn) { if (S) navigateTab(tabBtn.dataset.tab); return; }
@@ -2128,10 +2176,16 @@ document.addEventListener('click', async e => {
     // 顺带把对方的背包拉回来（讨要用），拉完再重绘
     friendBag = null;
     const npcId = selectedNpc;
+    const stateBefore = S;
     loadNpcBag(npcId, true).then(b => {
-      if (selectedNpc !== npcId) return;
+      if (selectedNpc !== npcId || S !== stateBefore) return;
       friendBag = b;
-      render();
+      const host = tab === 'map' && subOf('map', 'atlas') === 'friends' ? document.querySelector('.fs-panel') : null;
+      if (host) {
+        // 迟到的详情查询只更新所选人物面板，不能重建筛选控件并打断中文组词。
+        host.innerHTML = renderFriendPanel(S, npcId, friendBag, { materials: S.materialCatalog || forgeOpts.materials });
+        loadSocialActions(npcId);
+      } else if (tab === 'society') render();
     });
     render();
     if (globalThis.innerWidth <= 760) document.querySelector('.friend-panel')?.scrollIntoView({ block: 'start', behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
@@ -2211,16 +2265,6 @@ document.addEventListener('click', async e => {
   const inventoryFilter = e.target.closest('[data-inventory-kind]');
   if (inventoryFilter) { inventoryKind = inventoryFilter.dataset.inventoryKind; render(); return; }
 
-  // 数量加减
-  const qtyBtn = e.target.closest('[data-qty]');
-  if (qtyBtn) {
-    const id = qtyBtn.dataset.qty;
-    const d = Number(qtyBtn.dataset.delta);
-    shopQty[id] = Math.max(1, Math.min(99, (shopQty[id] ?? 1) + d));
-    render();
-    return;
-  }
-
   // 子页签切换
   const st = e.target.closest('[data-subtab]');
   if (st) {
@@ -2239,14 +2283,47 @@ document.addEventListener('click', async e => {
   const id = btn.dataset.id;
 
   switch (a) {
+    case 'service-navigation-refresh':
+      await call('state', {});
+      break;
+    case 'service-navigation-dismiss':
+      serviceIntent = null; saveServiceIntent(null); render();
+      break;
+    case 'service-travel': {
+      const routeKey = btn.dataset.serviceRoute;
+      const route = routeKey === 'craft' ? craftSupplyQuote?.quote?.travel : S.serviceRoutes?.[routeKey];
+      const target = routeKey === 'craft'
+        ? { tab: route?.targetTab || 'workshop', sub: route?.targetSub || (craftSupplyQuote?.kind === 'forge' ? 'forge' : 'brew') }
+        : routeKey === 'intel' ? { tab: 'dungeon', sub: 'intel' } : { tab: 'market', sub: '' };
+      const intent = createServiceIntent(S, route, target);
+      if (!intent) { toast(route?.reason || '路线已变化，请刷新当前报价后再启程。', 'warn'); break; }
+      serviceIntent = intent; serviceIntentLoaded = true; saveServiceIntent(intent);
+      const result = await call('travel', { to: route.destination, mode: route.mode });
+      showTravelResult(result, route.destination);
+      if (result?.error || result?.ok === false) { serviceIntent = null; saveServiceIntent(null); render(); }
+      else if (serviceIntent) navigateTab('chronicle');
+      break;
+    }
     case 'goto-workshop-forge':
       setSub('workshop', 'forge'); navigateTab('workshop');
       break;
     case 'craft-supply-quote': {
       const payload = JSON.parse(btn.dataset.payload || '{}');
-      const response = await fetch('/api/craft/materials/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(result => result.json()).catch(() => ({ error: '暂时无法读取补料报价。' }));
-      craftSupplyQuote = { kind: payload.kind, key: JSON.stringify(payload), quote: response.quote || response };
-      render();
+      const serial = ++craftSupplySerial, stateBefore = S, key = JSON.stringify(payload);
+      requestBusy = true; document.body.setAttribute('aria-busy', 'true');
+      try {
+        const response = await fetch('/api/craft/materials/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await response.json().catch(() => ({ error: '补料报价返回格式异常，请重新查询。' }));
+        if (!response.ok) data.error ||= '暂时无法读取补料报价，请重新查询。';
+        if (serial === craftSupplySerial && S === stateBefore) {
+          craftSupplyQuote = { kind: payload.kind, key, quote: data.error ? data : data.quote || data };
+          render();
+        }
+      } catch {
+        if (serial === craftSupplySerial && S === stateBefore) {
+          craftSupplyQuote = { kind: payload.kind, key, quote: { error: '暂时无法读取补料报价。' } }; render();
+        }
+      } finally { requestBusy = false; document.body.removeAttribute('aria-busy'); }
       break;
     }
     case 'craft-supply-buy':
@@ -2614,6 +2691,7 @@ document.addEventListener('click', async e => {
       navigateTab('market');
       break;
     }
+    case 'tide-market-buy-max':
     case 'tide-market-buy': {
       const r = await call('tide/market/buy', {
         eventId: btn.dataset.eventId, kind: btn.dataset.kind, id,
@@ -2770,8 +2848,10 @@ document.addEventListener('click', async e => {
       if (r && r.text) toast(r.text, 'warn');
       break;
     }
+    case 'sell-max':
     case 'sell':
-      await call('sell', { kind: btn.dataset.kind, id });
+      await call('sell', { kind: btn.dataset.kind, id, count: Number(btn.dataset.count) || 1,
+        ...(Number(btn.dataset.unitPrice) > 0 ? { expectedUnitPrice: Number(btn.dataset.unitPrice) } : {}) });
       break;
     case 'trade-stock': {
       const r = await call('trade-stock', {
@@ -2807,7 +2887,10 @@ document.addEventListener('click', async e => {
       const journey = isTravelJob(S.job);
       const cost = S.job?.cost || 0;
       const r = await call('cancel-job', {});
-      if (journey && r && !r.error) toast(`已中止赶路，仍在${S.player.locationName}${cost ? `；已付 ${cost} 灵石不返还` : ''}。`, 'info');
+      if (journey && r && !r.error) {
+        serviceIntent = null; saveServiceIntent(null); render();
+        toast(`已中止赶路，仍在${S.player.locationName}${cost ? `；已付 ${cost} 灵石不返还` : ''}。`, 'info');
+      }
       break;
     }
     case 'equip': {
@@ -2860,12 +2943,29 @@ document.addEventListener('click', async e => {
   }
 });
 
-// 数量输入框
+// 用途：同步拖动数量草稿与当前行文案；流程：滑条input/change事件。
+// 用法：传事件控件，仅处理购买和播种数量；返回：是否已处理，不发请求、不重建DOM。
+function applyQuantityDraft(input) {
+  if (!input.matches('[data-quantity-range]')) return false;
+  const selected = updateQuantitySlider(input);
+  if (input.matches('[data-qtyinput]')) shopQty[input.dataset.qtyinput] = selected;
+  if (input.matches('[data-tide-quantity]')) tideMarketQuantities[input.dataset.tideQuantity] = selected;
+  if (input.matches('[data-cave-plant-count]')) (gardenSelections[input.dataset.plotId] ||= {}).count = selected;
+  return true;
+}
+
+// 数量滑条及金额输入框
 // 用途：处理选择框与数量输入的最终变更。
 // 流程：更新单选计划、行囊筛选、炼制炉数或配方，必要时重取权威预览。
 // 调用方式：由 document 的 change 事件自动调用。
 // 返回值：Promise；无显式返回值。
 document.addEventListener('change', async e => {
+  if (requestBusy) return;
+  if (applyQuantityDraft(e.target)) return;
+  if (e.target.matches('[data-friend-filter]')) {
+    friendFilters = normalizeFriendFilters({ ...friendFilters, [e.target.dataset.friendFilter]: e.target.value });
+    saveFriendFilters(friendFilters); render(); return;
+  }
   if (e.target.matches('[data-cave-plant-herb], [data-cave-plant-count], [data-cave-reserve-amount]')) {
     const plotId = e.target.dataset.plotId;
     const choices = gardenSelections[plotId] ||= {};
@@ -2877,22 +2977,10 @@ document.addEventListener('change', async e => {
       choices.count = cavePlantCount(choices.count, maximum);
       render();
     }
-    if (e.target.matches('[data-cave-plant-count]')) {
-      choices.count = cavePlantCount(e.target.value, Number(e.target.max));
-      e.target.value = String(choices.count);
-    }
     if (e.target.matches('[data-cave-reserve-amount]')) choices.reserveAmount = Number(e.target.value);
     return; // 数量失焦不能重建正在被点击的按钮，否则第一次点击会丢失。
   }
-  const tideQuantity = e.target.closest('[data-tide-quantity]');
-  if (tideQuantity) { tideMarketQuantities[tideQuantity.dataset.tideQuantity] = Math.max(1, Math.min(Number(tideQuantity.max) || 99, Math.floor(Number(tideQuantity.value)) || 1)); render(); return; }
   if (e.target.matches('[data-tide-market-grade]')) { tideMarketGrade = e.target.value; try { localStorage.setItem('nz-desktop-tide-market-grade', tideMarketGrade); } catch {} render(); return; }
-  const inp = e.target.closest('[data-qtyinput]');
-  if (inp) {
-    const id = inp.dataset.qtyinput;
-    shopQty[id] = Math.max(1, Math.min(99, Number(inp.value) || 1));
-    render();
-  }
   if (e.target.matches('[data-plan-select]')) {
     const result = await call('plan', { plan: e.target.value });
     if (!result || result.error || result.ok === false) e.target.value = S?.plan || e.target.value;
@@ -2919,6 +3007,13 @@ document.addEventListener('change', async e => {
 // 调用方式：由 document 的 input 事件自动调用。
 // 返回值：无返回值；不修改游戏规则或推进时间。
 document.addEventListener('input', e => {
+  if (requestBusy) return;
+  if (applyQuantityDraft(e.target)) return;
+  if (e.target.matches('[data-friend-search]')) {
+    friendFilters.search = e.target.value;
+    if (!e.isComposing) applyFriendSearch(e.target);
+    return;
+  }
   if (e.target.matches('[data-cave-plant-search]')) {
     gardenFilters.search = e.target.value;
     if (!e.isComposing) applyGardenSearch(e.target);
@@ -2951,6 +3046,7 @@ document.addEventListener('input', e => {
 // 用途：在中文组词确认后应用搜索；流程：灵田药材输入法事件。
 // 用法：由document的compositionend事件调用；返回：无，避免组词中重建控件打断输入法。
 document.addEventListener('compositionend', e => {
+  if (e.target.matches('[data-friend-search]') && !requestBusy) applyFriendSearch(e.target);
   if (e.target.matches('[data-cave-plant-search]')) applyGardenSearch(e.target);
 });
 

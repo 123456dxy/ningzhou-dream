@@ -71,6 +71,7 @@
 <ClInclude Include="..\src\core\crafting\herb_acquisition.h"><Filter>Backend\crafting</Filter></ClInclude>
 <ClCompile Include="..\src\core\crafting\material_supply.cpp"><Filter>Backend\crafting</Filter></ClCompile>
 <ClInclude Include="..\src\core\crafting\material_supply.h"><Filter>Backend\crafting</Filter></ClInclude>
+<ClCompile Include="..\src\core\crafting\potion_sales.cpp"><Filter>Backend\crafting</Filter></ClCompile>
 <None Include="..\src\core\crafting\README.md"><Filter>Backend\crafting</Filter></None>
 <ClCompile Include="..\src\core\crafting\shop.cpp"><Filter>Backend\crafting</Filter></ClCompile>
 <ClCompile Include="..\src\core\crafting\source_limits.cpp"><Filter>Backend\crafting</Filter></ClCompile>
@@ -82,10 +83,13 @@
 <ClCompile Include="..\src\core\exploration\location_services.cpp"><Filter>Backend\exploration</Filter></ClCompile>
 <None Include="..\src\core\exploration\README.md"><Filter>Backend\exploration</Filter></None>
 <ClCompile Include="..\src\core\exploration\resource_points.cpp"><Filter>Backend\exploration</Filter></ClCompile>
+<ClCompile Include="..\src\core\exploration\service_navigation.cpp"><Filter>Backend\exploration</Filter></ClCompile>
+<ClInclude Include="..\src\core\exploration\service_navigation.h"><Filter>Backend\exploration</Filter></ClInclude>
 <ClCompile Include="..\src\core\exploration\travel.cpp"><Filter>Backend\exploration</Filter></ClCompile>
 <ClCompile Include="..\src\core\foundation\base.cpp"><Filter>Backend\foundation</Filter></ClCompile>
 <ClCompile Include="..\src\core\foundation\json.cpp"><Filter>Backend\foundation</Filter></ClCompile>
 <None Include="..\src\core\foundation\README.md"><Filter>Backend\foundation</Filter></None>
+<ClInclude Include="..\src\core\foundation\state_limits.h"><Filter>Backend\foundation</Filter></ClInclude>
 <ClInclude Include="..\src\core\friendship.h"><Filter>Backend</Filter></ClInclude>
 <ClCompile Include="..\src\core\http.cpp"><Filter>Backend</Filter></ClCompile>
 <ClInclude Include="..\src\core\http.h"><Filter>Backend</Filter></ClInclude>
@@ -102,6 +106,8 @@
 <None Include="..\src\core\interface\README.md"><Filter>Backend\interface</Filter></None>
 <ClCompile Include="..\src\core\interface\routes.cpp"><Filter>Backend\interface</Filter></ClCompile>
 <ClInclude Include="..\src\core\interface\routes.h"><Filter>Backend\interface</Filter></ClInclude>
+<ClCompile Include="..\src\core\interface\service_views.cpp"><Filter>Backend\interface</Filter></ClCompile>
+<ClInclude Include="..\src\core\interface\service_views.h"><Filter>Backend\interface</Filter></ClInclude>
 <ClCompile Include="..\src\core\interface\social_views.cpp"><Filter>Backend\interface</Filter></ClCompile>
 <ClCompile Include="..\src\core\interface\state_views.cpp"><Filter>Backend\interface</Filter></ClCompile>
 <ClCompile Include="..\src\core\interface\tide_views.cpp"><Filter>Backend\interface</Filter></ClCompile>
@@ -171,6 +177,7 @@
 <ClCompile Include="..\src\core\social\roster.cpp"><Filter>Backend\social</Filter></ClCompile>
 <ClCompile Include="..\src\core\social\sect_trial.cpp"><Filter>Backend\social</Filter></ClCompile>
 <ClCompile Include="..\src\core\social\society.cpp"><Filter>Backend\social</Filter></ClCompile>
+<ClCompile Include="..\src\core\social\stipend.cpp"><Filter>Backend\social</Filter></ClCompile>
 <ClInclude Include="..\src\core\society.h"><Filter>Backend</Filter></ClInclude>
 <ClInclude Include="..\src\core\source_limits.h"><Filter>Backend</Filter></ClInclude>
 <ClInclude Include="..\src\core\sword.h"><Filter>Backend</Filter></ClInclude>

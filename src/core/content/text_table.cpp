@@ -106,6 +106,7 @@ std::string_view text(TextId id) {
     case TextId::GardenNoBottleGrowthRule: return "每格同药材最多99份；每份成熟收获3份。天然每天100成长点，洞府每档+10；外出照常自然生长。灵气配给沿用原修炼规则，不额外加速灵田。";
     case TextId::PillCultivationCompleteEffect: return "标称修为 +{NominalValue}；实际吸收受本小境25%及距圆满余量限制。";
     case TextId::PillCultivationUseLimit: return "；修为增量不超过标称药效（{NominalValue}）、本小境25%（{StageLimit}）及距圆满余量（{RemainingValue}）";
+    case TextId::DungeonElapsedPaused: return "秘境探索已结束，余下 {RemainingDays} 天探索耗时尚未结算。已回到岁月纪事，请先处理当前抉择并点击继续推进，再迎战兽潮或进行其他安排。";
     }
     throw std::invalid_argument("Invalid text ID");
 }

@@ -93,6 +93,10 @@ std::string hunkerDown(Game& g);
 // 返回值：无；完成说明所述写入或展示操作。
 void ensureTide(Game& g);
 
+// 用途：给有效战期增量登记新修士；流程：年度人口更新和真实日推进；用法：仅在动作边界传游戏；返回：无。
+// 当前日须已完成旧名单模拟；不补算报名日前积分、不消耗随机数、不覆盖既有冻结境界与积分；查询入口不得调用。
+void mfEnrollEligibleNpcs(Game& GameState);
+
 // 用途：按真实日历推进积分模拟和战期；流程：普通安排和兽潮斗法；用法：日历更新后传游戏；返回：无。
 void dayTick(Game& g);
 // 用途：到期冻结金榜、发奖和生成市场；流程：日历及战斗收尾；用法：可重复传游戏；返回：无，不重复付款。
@@ -114,17 +118,22 @@ int discountPercent(const Game& g);
 // 用途：判断战后市场开放期；流程：状态和成交；用法：传只读游戏；返回：未结束人生且仍在期限内时为真。
 bool marketOpen(const Game& g);
 
+// 类型：兽潮交易模块的可复制商品报价快照；负责展示本期库存、权威价格和可买数量，不持有资源或写入存档。
+// 查询仅借用当前游戏；成交须重新验证场次、单价、余额及容量，旧字段名作为已有 C++/HTTP 兼容边界保留。
 struct MarketItem {
     string kind, id, name, reason;
     int grade = 0, basePrice = 0, unitPrice = 0, stock = 0, owned = 0;
     bool enabled = false;
+    // 本次只读快照的一键买满报价：受余额、有限库存和各相关行囊容量共同限制，不写入存档。
+    int MaxPurchaseCount = 0, MaxPurchaseCost = 0;
+    string MaxPurchaseReason;
 };
 struct MarketResult {
     bool ok = false;
     string error, text;
     int cost = 0;
 };
-// 用途：只读生成战后市场目录；流程：坊市展示和报价；用法：传只读游戏；返回：有限库存、正常价、排名价和购买门槛。
+// 用途：只读生成战后市场目录；流程：坊市展示和报价；用法：传只读游戏；返回：有限库存、正常价、排名价、购买门槛和一键买满数量/总价。
 vector<MarketItem> marketItems(const Game& g);
 // 用途：全部预检后一次性成交；流程：坊市动作；用法：传场次、类别、材料ID、数量和可选旧报价；返回：成本与说明或失败原因，失败不改库存资金。
 MarketResult buyMarket(Game& g, const string& eventId, const string& kind,

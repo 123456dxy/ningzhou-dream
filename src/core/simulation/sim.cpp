@@ -873,6 +873,8 @@ void worldYear(Game& g) {
     for (auto& n : g.npcs) {
         if (n.alive) npcTurn(g, n);
     }
+    // 开潮先于年度新人生成；在真实年度动作末登记存活新人，保留老参战者入场境界与积分。
+    tide::mfEnrollEligibleNpcs(g);
     refreshSects(g);
     prunePopulation(g);
     // 师尊/道侣/弟子离世后解除名分，否则死人会一直挂在关系里

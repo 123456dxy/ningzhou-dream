@@ -1,4 +1,4 @@
-﻿// 宁州一梦 · C++ 版 — 宗门与知交实现
+// 宁州一梦 · C++ 版 — 宗门与知交实现
 // 覆盖 society.mjs 的：姓名、身份、俸禄账簿、师徒道侣、原创支线、野外冲突。
 #include "core/society.h"
 #include "core/source_limits.h"
@@ -541,45 +541,11 @@ void societyBondBegin(Game& g, const string& kind) {
 // ============================================================
 // 用途：从真实宗门库藏领取应付俸禄。
 // 参与流程：山门俸禄动作。
-// 使用方式：传游戏，要求本月未领、在本门且恶名允许。
+// 使用方式：传游戏，要求本月未领且恶名允许，可异地领取；委托统一报价和结算模块。
 // 返回值：实付和余欠结果；成功修改府库、玩家灵石及工资账。
 StipendResult socCollectStipend(Game& g) {
-    StipendResult out;
-    Player& p = g.player;
-    Bonds& b = g.bonds;
-    const int month = g.clock.days / 30;
-
-    if (g.ended || g.pending.has_value())
-        return {false, "请先处理当前事件。", 0, 0};
-    if (p.sect.empty()) return {false, "散修没有俸禄。", 0, 0};
-    if (p.location != p.sect) return {false, "请回所属山门领取。", 0, 0};
-    if (b.stipend == month) return {false, "本月已经领过俸禄。", 0, 0};
-    // 恶名 40 以上暂停领取（旧欠不消失）
-    if (b.notoriety >= 40)
-        return {false, "恶名过高，宗门暂停发放；旧欠保留。", 0, 0};
-
-    Payroll& pay = b.payroll;
-    if (pay.balance <= 0) return {false, "暂无可领俸禄。", 0, 0};
-
-    // 府库不足时部分支付，欠额保留
-    const int treasury = g.world.sects[p.sect].treasury;
-    const int paid = std::min(pay.balance, std::max(0, treasury));
-    g.world.sects[p.sect].treasury -= paid;
-    p.stones += paid;
-    pay.balance -= paid;
-    b.stipend = month;
-
-    out.paid = paid;
-    out.owed = pay.balance;
-    logEvent(g, "self",
-             "领取俸禄 " + std::to_string(paid) + " 灵石。" +
-                 (out.owed > 0 ? "府库不足，尚欠 " + std::to_string(out.owed) +
-                                     " 灵石，欠额保留。"
-                               : ""),
-             out.owed > 0);
-    return out;
+    return mfCollectStipend(g);
 }
-
 
 // ============================================================
 // 关系往来的结算（对应 JS socComplete 的 bond 分支）

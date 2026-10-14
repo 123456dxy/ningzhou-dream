@@ -20,6 +20,7 @@ Value tideToJson(const BeastTide& tide) {
     out.set("playerRank", num(tide.playerRank)); out.set("playerJoined", Value(tide.playerJoined));
     out.set("settled", Value(tide.settled)); out.set("rewardPaid", Value(tide.rewardPaid));
     out.set("rewardStones", num(tide.rewardStones)); out.set("totalScore", num(tide.totalScore));
+    out.set("rewardRenown", num(tide.RewardRenown));
     out.set("marketExpiresDay", num(tide.marketExpiresDay));
     json::Array fallen, participants, stock;
     for (const auto& name : tide.fallen) fallen.push_back(str(name));
@@ -55,6 +56,7 @@ void tideFromJson(const Value& in, BeastTide& tide) {
     tide.playerRank=in["playerRank"].asInt(); tide.playerJoined=in["playerJoined"].asBool();
     tide.settled=in["settled"].asBool(); tide.rewardPaid=in["rewardPaid"].asBool();
     tide.rewardStones=in["rewardStones"].asInt(); tide.totalScore=in["totalScore"].asInt();
+    tide.RewardRenown=in["rewardRenown"].asInt(0);
     tide.marketExpiresDay=in["marketExpiresDay"].asInt(-1);
     tide.fallen.clear(); tide.participants.clear(); tide.marketStock.clear();
     for (const auto& name : in["fallen"].asArray()) tide.fallen.push_back(name.asString());
@@ -82,6 +84,7 @@ bool tideShapeValid(const Value& in) {
             "npcDeaths","startDay","endDay","durationDays","lastProcessedDay","playerScore",
             "playerEntryStage","playerRank","rewardStones","totalScore","marketExpiresDay"})
         if (!in[key].isNull() && !saveInteger(in[key],-1,1000000000)) return false;
+    if (!in["rewardRenown"].isNull() && !saveInteger(in["rewardRenown"], 0, 50)) return false;
     for (const auto& key : {"fallen","participants","marketStock"})
         if (!in[key].isNull() && (!in[key].isArray() || in[key].asArray().size()>10000)) return false;
     for (const auto& name : in["fallen"].asArray()) if (!name.isString()) return false;
@@ -103,6 +106,7 @@ std::string tideStateError(const Game& game) {
     if (tide.rulesVersion<0 || tide.rulesVersion>1 || tide.severity<1 || tide.severity>3 ||
         tide.monthsLeft<0 || tide.wavesFought<0 || tide.wavesWon<0 || tide.wavesWon>tide.wavesFought ||
         tide.npcDeaths<0 || tide.playerScore<0 || tide.totalScore<0 || tide.rewardStones<0 ||
+        tide.RewardRenown<0 || tide.RewardRenown>50 || (tide.RewardRenown>0 && !tide.rewardPaid) ||
         tide.playerEntryStage<0 || tide.playerEntryStage>12) return "兽潮账本数值无效";
     if (tide.rulesVersion==0 && tide.eventId.empty()) return "";
     if (tide.rulesVersion!=1 || tide.eventId.empty()) return "现代兽潮场次标识无效";

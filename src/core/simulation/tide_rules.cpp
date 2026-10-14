@@ -16,6 +16,13 @@ int rewardYears(int rank) {
     for (const auto& band : RankBands) if (band.maxRank==0 || rank<=band.maxRank) return band.rewardYears;
     return RankBands.back().rewardYears;
 }
+// 用途：按集中排名档位读取声望奖励；参与期末发奖与只读预览，返回应发整数声望，不改变状态。
+int mfRewardRenown(int Rank) {
+    if (Rank <= 0) return 0;
+    for (const auto& Band : RankBands)
+        if (Band.maxRank == 0 || Rank <= Band.maxRank) return Band.RenownReward;
+    return 0;
+}
 // 用途：按冻结入场境界折算俸禄奖励；流程：金榜结算；用法：传境界与名次；返回：应发灵石。
 int rewardStones(int entryStage, int rank) {
     Person reference;
@@ -30,8 +37,15 @@ int payablePercent(int rank, bool participated) {
 }
 // 用途：按总分配置有限库存；流程：期末生成；用法：传总分和品阶；返回：有上限的每项库存。
 int stockPerItem(int totalScore, int grade) {
-    const int stock = 3 + std::max(0, totalScore) / PointsPerStock;
-    return clampInt(stock - std::max(0, grade - 3), 1, MaximumStock);
+    if (grade < MinimumStockGrade || grade > MaximumStockGrade) return 0;
+    const int ScoreSteps = std::max(0, totalScore) / PointsPerStock;
+    const int PreviousTierSteps = (grade - MinimumStockGrade) * (StockTierUnlockCount - 1);
+    return clampInt(ScoreSteps - PreviousTierSteps, 0, MaximumStock);
+}
+// 用途：给出阶梯库存的有效品阶门槛；参与报价拒绝与界面说明，返回全州积分要求，无副作用。
+int mfStockUnlockScore(int Grade) {
+    if (Grade < MinimumStockGrade || Grade > MaximumStockGrade) return 0;
+    return ((Grade - MinimumStockGrade) * (StockTierUnlockCount - 1) + 1) * PointsPerStock;
 }
 // 用途：用整数计算不少于正常价一半的价格；流程：报价和成交；用法：传正常价与比例；返回：安全单价。
 int discountedPrice(int normalPrice, int percent) {

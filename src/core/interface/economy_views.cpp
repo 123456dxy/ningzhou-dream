@@ -78,6 +78,16 @@ void mfAppendEconomyState(const Game& GameState, Value& State, const shop::Marke
             item.set("requiredRealm", str(info.requiredStage >= 0 ? realmName(info.requiredStage) : ""));
             const string reason = blocked.empty() ? info.reason : blocked;
             item.set("enabled", Value(reason.empty())); item.set("reason", str(reason));
+            const auto SaleQuote = shop::mfQuoteMaxPotionSale(GameState, recipe.id, MarketContext);
+            const string SaleBlocked = actionBlockReason(GameState, routePath(RouteId::Sell));
+            Value MaxSale(json::Object{});
+            MaxSale.set("enabled", Value(SaleBlocked.empty() && SaleQuote.Enabled));
+            MaxSale.set("count", num(SaleQuote.Count));
+            MaxSale.set("unitPrice", num(SaleQuote.UnitPrice));
+            MaxSale.set("totalGain", num(SaleQuote.TotalGain));
+            MaxSale.set("reason", str(SaleBlocked.empty() ? SaleQuote.Reason : SaleBlocked));
+            MaxSale.set("limitReason", str(SaleQuote.LimitReason));
+            item.set("maxSale", std::move(MaxSale));
             catalog.push_back(std::move(item));
         }
         State.set("pillCatalog", Value(std::move(catalog)));

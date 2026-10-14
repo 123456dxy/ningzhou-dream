@@ -24,7 +24,10 @@ API 根据当前位置与目标查询选项，规则入口验证后创建在途 
 
 ## 维护注意
 
+- `service_navigation.h/.cpp` 提供 `ServiceRouteQuote` 和纯查询 `mfQuoteServiceRoute/mfQuoteMaterialRoute`。最近城市只从 `ecoIsCity` 实际坊市选，补料候选核对 `play::marketList`，不按 UI 名称或复制品阶公式判断。路线复用 `travelPlan` 的资格/费用/耗时；只推荐地点，不绕过秘境阻塞、不自动采购。前端意图为浏览器临时状态，不新增存档字段。
+
 - 路线报价与实际执行保持一致；长途工作、跨月/跨年与途中斗法要保存可恢复的上下文。
+- 秘境房间和斗法期间只累加 `run.elapsedDays`，世界日历暂停；离境先清除 run，再用 `socialElapsed` 工作结算累计天数。跨年新开兽潮或遇事时保留剩余工作，不强推到活动结束。成功响应引导至岁月纪事并说明剩余天数；重新打开秘境目录也保留精准继续入口。相关回归为 `tests/test_dungeon_tide_transition.cpp::mfRunDungeonTideTransitionTests`。
 - 奖励 ID 和节点 ID 必须稳定，领取和退出不能重复发奖；旧奖励结构变更需要迁移。
 - 秘境的活动限制应同时反映在 interface 路由策略、领域检查与 persistence 校验中。
 - 只读列表/计划不应推进时间；`ensure...`、进入与完成函数属于会改状态的入口。

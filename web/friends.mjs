@@ -9,6 +9,7 @@
 
 'use strict';
 import { renderPortrait } from './portraits.mjs';
+import { filterNearbyFriends, renderFriendFilters, friendBuild } from './friend-filters.mjs';
 // 兼容旧调用；兽潮展示集中到独立模块，避免道友功能与全州事件耦合。
 export { renderTidePanel } from './tide-panel.mjs';
 
@@ -129,18 +130,21 @@ export function renderFriendList(state, opts = {}) {
     list = p.sect ? all.filter(n => n.sect === p.sect) : [];
   }
 
+  const original = list;
+  if (scope === 'local') list = filterNearbyFriends(original, opts.filters);
+  const filters = scope === 'local' ? renderFriendFilters(original, opts.filters, list.length) : '';
   if (!list.length) {
     const hint = scope === 'sect'
       ? (p.sect
           ? '此地没有同门。换个地方，或去「好友通讯录」看看。'
           : '你尚未拜入宗门。去「宗门知交」择一宗，或在地图上看当地仙友。')
-      : (opts.emptyHint || '此处没有别的修士。换个地方看看。');
-    return `<div class="empty">${esc(hint)}</div>`;
+      : (original.length ? '没有符合条件的仙友。可调整筛选，或重置后查看当地全部仙友。' : opts.emptyHint || '此处没有别的修士。换个地方看看。');
+    return filters + `<div class="empty">${esc(hint)}</div>`;
   }
 
-  const sorted = [...list].sort((a, b) => (b.relation ?? 0) - (a.relation ?? 0));
+  const sorted = scope === 'local' ? list : [...list].sort((a, b) => (b.relation ?? 0) - (a.relation ?? 0));
 
-  return `<div class="friend-grid">` + sorted.map(n => {
+  return filters + `<div class="friend-grid">` + sorted.map(n => {
     const sel = opts.selected === n.id;
     const rel = n.relation ?? 0;
     const tags = [];
@@ -153,7 +157,7 @@ export function renderFriendList(state, opts = {}) {
       <div class="fc-head">${renderPortrait(n, 'npc', 'friend-card-portrait')}<strong>${esc(n.name)}</strong>
         <span class="tag">${esc(n.realmName)}</span>${tags.join('')}</div>
       <div class="fc-meta">${esc(n.gender)} · ${n.age} 岁 · `
-    + `${esc(n.sectName || '散修')} · ${esc(n.personality)}</div>
+    + `${esc(n.sectName || '散修')} · ${esc(n.personality)} · ${esc(friendBuild(n).name)}</div>
       <div class="fc-bars">
         <span class="fc-lab">好感</span>${affinityBar(rel)}
         <span class="fc-num">${rel}</span>

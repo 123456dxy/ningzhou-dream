@@ -30,6 +30,7 @@
 <ClCompile Include="..\tests\test_crafting_fixes.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_display_contract.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_dungeon.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_dungeon_tide_transition.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_equipment_task.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_event_rewards.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_friendship.cpp"><Filter>Tests</Filter></ClCompile>
@@ -47,12 +48,14 @@
 <ClCompile Include="..\tests\test_pill_effects.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_play.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_player_fixes.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_potion_bulk_sales.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_renown_artifact_api.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_resource_points.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_reward_api.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_save.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_sect_completion.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_sect_trial.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_service_convenience.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_shadow_combat.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_social_integrity.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_society.cpp"><Filter>Tests</Filter></ClCompile>
@@ -61,8 +64,12 @@
 <ClCompile Include="..\tests\test_talents.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tianji.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tide_api.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_tide_enrollment.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tide_integration.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_tide_max_purchase.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_tide_rules.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_tide_stock_rewards.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_time_performance.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_trade_quick_actions_api.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_travel.cpp"><Filter>Tests</Filter></ClCompile>
 </ItemGroup></Project>

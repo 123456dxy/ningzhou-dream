@@ -67,6 +67,7 @@
 <ClInclude Include="..\src\core\crafting\herb_acquisition.h"/>
 <ClCompile Include="..\src\core\crafting\material_supply.cpp"/>
 <ClInclude Include="..\src\core\crafting\material_supply.h"/>
+<ClCompile Include="..\src\core\crafting\potion_sales.cpp"/>
 <None Include="..\src\core\crafting\README.md"/>
 <ClCompile Include="..\src\core\crafting\shop.cpp"/>
 <ClCompile Include="..\src\core\crafting\source_limits.cpp"/>
@@ -78,10 +79,13 @@
 <ClCompile Include="..\src\core\exploration\location_services.cpp"/>
 <None Include="..\src\core\exploration\README.md"/>
 <ClCompile Include="..\src\core\exploration\resource_points.cpp"/>
+<ClCompile Include="..\src\core\exploration\service_navigation.cpp"/>
+<ClInclude Include="..\src\core\exploration\service_navigation.h"/>
 <ClCompile Include="..\src\core\exploration\travel.cpp"/>
 <ClCompile Include="..\src\core\foundation\base.cpp"/>
 <ClCompile Include="..\src\core\foundation\json.cpp"/>
 <None Include="..\src\core\foundation\README.md"/>
+<ClInclude Include="..\src\core\foundation\state_limits.h"/>
 <ClInclude Include="..\src\core\friendship.h"/>
 <ClCompile Include="..\src\core\http.cpp"/>
 <ClInclude Include="..\src\core\http.h"/>
@@ -98,6 +102,8 @@
 <None Include="..\src\core\interface\README.md"/>
 <ClCompile Include="..\src\core\interface\routes.cpp"/>
 <ClInclude Include="..\src\core\interface\routes.h"/>
+<ClCompile Include="..\src\core\interface\service_views.cpp"/>
+<ClInclude Include="..\src\core\interface\service_views.h"/>
 <ClCompile Include="..\src\core\interface\social_views.cpp"/>
 <ClCompile Include="..\src\core\interface\state_views.cpp"/>
 <ClCompile Include="..\src\core\interface\tide_views.cpp"/>
@@ -167,6 +173,7 @@
 <ClCompile Include="..\src\core\social\roster.cpp"/>
 <ClCompile Include="..\src\core\social\sect_trial.cpp"/>
 <ClCompile Include="..\src\core\social\society.cpp"/>
+<ClCompile Include="..\src\core\social\stipend.cpp"/>
 <ClInclude Include="..\src\core\society.h"/>
 <ClInclude Include="..\src\core\source_limits.h"/>
 <ClInclude Include="..\src\core\sword.h"/>

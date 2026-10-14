@@ -1,6 +1,7 @@
 // 秘境展示只读引擎状态；路线、奖励和可执行条件均由 C++ 决定。
 import { heading, panel, esc, hintBox } from './shell.mjs';
 import { locationArt } from './location-art.mjs';
+import { renderServiceRoute } from './service-navigation.mjs';
 
 const ROOM = {
   battle: ['⚔', '斗法'], combat: ['⚔', '斗法'], elite: ['✦', '强敌'],
@@ -101,7 +102,9 @@ export function renderDungeonIntel(state, { kind = 'all', search = '', grade = '
   const here = state.player.location === 'tianji';
   return panel('天机阁 · 秘境情报', '每月限购一次', `<div class="dungeon-intel-body">`
     + `<p class="dungeon-intel-lead">购买三阶及以上材料所在的秘境位置。探索分支路线，击败终点守关者，保底取得指定材料 ×10，并选择一份通关主奖励。</p>`
-    + (!here ? `<div class="dungeon-intel-away">需在天机阁购买情报。<button data-action="dungeon-locate" data-id="tianji">在舆图定位天机阁</button></div>` : '')
+    + (!here ? `<div class="dungeon-intel-away">需在天机阁购买情报。`
+      + renderServiceRoute(state.serviceRoutes?.intel, { tab: 'dungeon', sub: 'intel', routeKey: 'intel' })
+      + `<button class="subtle" data-action="dungeon-locate" data-id="tianji">在舆图定位天机阁</button></div>` : '')
     + `<div class="dungeon-intel-filters"><div class="shop-tabs">${[['all','全部'],['herb','炼丹药材'],['material','炼器材料']].map(([id,label]) => `<button class="${kind === id ? 'active' : ''}" data-dungeon-intel-kind="${id}">${label}</button>`).join('')}</div>`
     + `<label class="shop-grade-control">品阶 <select data-dungeon-intel-grade><option value="all" ${grade === 'all' ? 'selected' : ''}>全部三阶以上</option>${grades.map(value => `<option value="${value}" ${String(value) === String(grade) ? 'selected' : ''}>${value} 阶</option>`).join('')}</select></label>`
     + `<input type="search" data-dungeon-intel-search value="${esc(search)}" placeholder="搜索材料或境界" aria-label="搜索材料秘境情报"></div>`
@@ -220,7 +223,14 @@ export function renderDungeonRun(state, battleHTML = '') {
 // 返回值：秘境页HTML字符串。
 export function renderDungeons(state, { mode = 'sites', intelKind = 'all', intelSearch = '', intelGrade = '3', battleHTML = '' } = {}) {
   if (state.dungeons?.run) return renderDungeonRun(state, battleHTML);
+  const unfinishedElapsed = state.job?.type === 'socialElapsed' && state.job.remaining > 0;
+  const continuation = unfinishedElapsed
+    ? `<div class="choice-banner" data-dungeon-elapsed-continuation><p>当前安排「${esc(state.job.name)}」尚余 ${state.job.remaining} 天。请先完成剩余耗时，再开始其他活动。</p>`
+      + `<button class="primary" data-action="advance" data-days="${state.job.remaining}" ${state.pending || state.battle ? 'disabled' : ''}>继续当前安排 · ${state.job.remaining} 天</button>`
+      + `<button data-action="goto-tab" data-tab="chronicle">返回岁月纪事</button></div>`
+    : '';
   return heading('宁州秘境', '寻访秘境，选择路线，以神通与遗物应对层层斗法。', '带伤续战 · 临时构筑')
+    + continuation
     + `<div class="subtabs"><button class="subtab ${mode === 'sites' ? 'on' : ''}" data-dungeon-view="sites">山河秘境</button>`
     + `<button class="subtab ${mode === 'intel' ? 'on' : ''}" data-dungeon-view="intel">天机阁情报</button></div>`
     + (mode === 'intel' ? renderDungeonIntel(state, { kind: intelKind, search: intelSearch, grade: intelGrade }) : renderDungeonDirectory(state))

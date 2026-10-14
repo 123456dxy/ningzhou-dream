@@ -1,4 +1,5 @@
 import { esc } from './shell.mjs';
+import { renderServiceRoute } from './service-navigation.mjs';
 
 // 用途：展示服务端核算的一键补料明细和预计灵石。
 // 流程：检查报价是否对应当前配方，列出缺口与货源，用 enabled 控制确认购买。
@@ -15,7 +16,8 @@ export function renderCraftSupply(quote, payload) {
     + `</div><p>预计消耗 <b>${Number.isFinite(cost) ? esc(cost) + ' 灵石' : '报价待查'}</b></p>`
     + (quote.reason ? `<p class="card-why">${esc(quote.reason)}</p>` : '')
     + `<button class="primary" data-action="craft-supply-buy" data-payload="${request}" ${quote.enabled === true && Number.isFinite(cost) ? '' : 'disabled'}>确认购买缺少材料</button>`
-    + `<button data-action="craft-supply-quote" data-payload="${request}">刷新报价</button></div>`;
+    + `<button data-action="craft-supply-quote" data-payload="${request}">刷新报价</button>`
+    + renderServiceRoute(quote.travel, { tab: quote.travel?.targetTab || 'workshop', sub: quote.travel?.targetSub || (payload.kind === 'forge' ? 'forge' : 'brew'), routeKey: 'craft' }) + `</div>`;
 }
 
 // 用途：在法宝材料回收前展示真实返还材料与手续费。

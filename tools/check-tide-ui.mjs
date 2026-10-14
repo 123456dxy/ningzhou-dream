@@ -27,7 +27,9 @@ check(active.includes('27 积分') && active.includes('1 积分'), '击杀积分
 check(active.includes('道友&lt;script&gt;') && !active.includes('<script>'), '金榜姓名安全转义');
 check(active.includes('流派高手') && active.includes('完整流派'), '特殊修士显示完整流派标记');
 check(legacyRender === renderTidePanel, 'friends旧导出保持同一个实现');
-check(!shouldRenderTide({ active: false }) && shouldRenderTide({ active: false, settled: true }), '结榜后保留事件卡');
+check(!shouldRenderTide({ active: false })
+  && shouldRenderTide({ active: false, settled: true, market: { open: true } }), '结榜后仅在战后市场开放期间保留事件卡');
+check(!shouldRenderTide({ active: false, settled: true, market: { open: false } }), '战后市场关闭后结榜事实不再永久显示活动入口');
 const ended = { ...tide, active: false, settled: true, rewardStones: 5000, rewardPaid: true,
   market: { open: true, daysLeft: 20, discountPercent: 50, minDiscountPercent: 50, priceBasis: '当前声望下普通坊市购入价', items: [
     { kind: 'herb', id: 'h3', name: '三阶灵药', grade: 3, basePrice: 100, unitPrice: 50, stock: 3, enabled: true },

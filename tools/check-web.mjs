@@ -8,7 +8,7 @@ import vm from 'node:vm';
 import * as tianji from '../web/tianji.mjs';
 import { renderDaos, renderSpellPicker, renderArtBuilds, renderManualIllustration } from '../web/arts.mjs';
 import { renderTidePanel, shouldRenderTide, renderTideMarket, renderTideBattleNotice } from '../web/tide-panel.mjs';
-import { renderFriendPanel, renderBondActions, renderNpcLearning, renderNpcLoadout } from '../web/friends.mjs';
+import { renderFriendList, renderFriendPanel, renderBondActions, renderNpcLearning, renderNpcLoadout } from '../web/friends.mjs';
 import { bindRoster } from '../web/roster.mjs';
 import { renderAtlas, selectedTravelMode, travelFeedback, isTravelJob } from '../web/map.mjs';
 import { LOCATION_ART, locationArt, renderLocationArt } from '../web/location-art.mjs';
@@ -28,6 +28,8 @@ import { renderCraftPricing } from '../web/craft-pricing.mjs';
 import { renderInventoryPanel } from '../web/inventory-panel.mjs';
 import { renderTaskPanel } from '../web/task-panel.mjs';
 import { renderCraftSupply, renderSalvageQuote } from '../web/workshop.mjs';
+import * as serviceNavigation from '../web/service-navigation.mjs';
+import * as friendFilters from '../web/friend-filters.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 let checks = 0;
@@ -233,7 +235,7 @@ const document = { querySelector: element, getElementById(id) { return element('
   querySelectorAll() { return []; }, addEventListener(type, fn) { handlers[type] = fn; },
   body: { setAttribute() {}, removeAttribute() {} } };
 const requests = [];
-const context = { ...tianji, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, document, console, setTimeout, clearTimeout,
+const context = { ...tianji, ...serviceNavigation, ...friendFilters, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, renderFriendList, document, console, setTimeout, clearTimeout,
   renderSectMentors, renderSectTasks, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
   renderCavePage, renderCraftPricing,
   renderManualIllustration, renderTidePanel, shouldRenderTide, renderTideMarket, renderTideBattleNotice,

@@ -175,7 +175,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 | `/api/eco` | POST | 动作 | 是 | `type`, `id`, `batch=1` | 通用营生（如task/commission/hunt/mine/arena/quest/forge）；安排并推进；状态、text |
 | `/api/eco-options` | GET/POST | 只读 | 是 | 无 | `options[]`：营生与机缘的耗时/报酬/费用/门槛、完成标记及宗门奖励预览 |
 | `/api/buy` | POST | 动作 | 是 | `kind`, `id`, `count=1`，1–1000 | 坊市购买、扣资源；状态 |
-| `/api/sell` | POST | 动作 | 是 | `kind`, `id` | 出售一次物品/装备；状态、text |
+| `/api/sell` | POST | 动作 | 是 | `kind`, `id`, `count=1`, `expectedUnitPrice`可选 | 丹药可批量出售，法器count仅允许1；状态、text、gain；过期售价和超过库存/需求/资金的数量拒绝，不部分出售 |
 | `/api/trade-stock` | POST | 动作 | 是 | `kind`, `buy=true`, `count=1` | 交易基础凝元丹/灵核等库存；状态、text |
 | `/api/book-buy` | POST | 动作 | 是 | `id` 功法标识 | 购买功法书；状态、text |
 | `/api/library` | POST | 动作 | 是 | `id` 功法标识 | 贡献兑换功法；状态、text |
@@ -219,6 +219,8 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 | `/api/tide/market/buy` | POST | 动作 | 是 | eventId,kind=herb/material,id,count=1,expectedUnitPrice可选 | 当前城市且开放期可购有限高阶库存；全部预检成功后一次性扣钱/发货；状态、text、cost |
 | `/api/tide/hunker` | POST | 动作 | 是 | 无 | 避险度过兽潮；状态、text |
 
+一键交易复用以上动作：`state.tide.market.items[].maxPurchase` 提供 `{enabled,count,unitPrice,totalCost,reason}`，数量取库存、灵石和行囊剩余容量的交集。`state.pillCatalog[].maxSale` 提供 `{enabled,count,unitPrice,totalGain,reason,limitReason}`，数量取持有量、当月同类需求、收购资金及玩家灵石余额容量的交集。前端提交对应的报价数量和单价；动作按最新活动状态再次检查。查询不补充月资金、不改变库存或随机数。字段是展示快照，不是锁定库存或价格的凭证。
+
 ## 展示预览的权威边界
 
 非战斗预览统一标记reference:true并附context，使用真实规则层计算，不能直接视为当前敌方实战结果：
@@ -259,6 +261,12 @@ NPC新增记录保存在导出/导入JSON中的 `npcs[].pillState`，**不作为
 本表99条路径全部在实际分派中存在，逐行路径无重复，核心表86条全覆盖。服务层的前缀转发、HTML页面、assets文件与JSON字段不是API端点；不同请求方法和同一路径在多层出现也不重复计数。新增端点需同时更新RouteInfo（核心）、真实handler与本表，再复核方法/登录/阻塞和错误契约。
 
 ## 工坊整单补料（本版新增）
+
+2026-10-14 便利补充未增加 HTTP 路由：`state.serviceRoutes.market/intel` 和 `quote.travel` 包含 `enabled,alreadyHere,destination,destinationName,mode,distance,days,cost,reason,targetTab,targetSub`。路线由领域选择最近实际供应城市/天机阁并复用 `travelPlan`；前端使用现有 `/api/travel`，到达只打开目标页，不触发购买。制作缺料无法城市直购时，高阶材料可引导情报目录，情报仍是材料位置，尚未实施功法线索改版。
+
+`state.bonds.stipendAction` 包含 `enabled,reason,paid,owed`。`/api/stipend` 保留原协议，允许异地领取；已有工作、斗法、抉择、秘境、月额或账目异常明确拒绝，府库空不消耗领取月额。附近仙友新增 `buildId/buildName`，由真实模板或实际大道/已带核心神通生成，仅作展示分类，不改变装备或决策。
+
+材料购买成功响应的 `quote` 重新计算剩余缺料，备齐后不会继续推荐补料路线；该单实际花费在 `text` 中说明。
 
 | 路径 | 方法 | 效应 | 输入 | 输出 |
 | --- | --- | --- | --- | --- |

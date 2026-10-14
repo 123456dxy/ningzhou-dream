@@ -47,6 +47,10 @@ inline void checkStr(const std::string& got, const std::string& want,
 }
 
 // 各模块测试入口
+void mfRunServiceConvenienceTests();
+void mfRunTradeQuickActionsApiTests();
+void mfRunTideMaxPurchaseTests();
+void mfRunPotionBulkSalesTests();
 void runDataTests();
 void runNpcCardTests();
 void runPassiveLifeTravelTests();
@@ -96,6 +100,9 @@ void runCatalogDisplayTests();
 void runTideRuleTests();
 void runTideIntegrationTests();
 void runTideApiTests();
+void mfRunTideStockRewardTests();
+void mfRunTideEnrollmentTests();
+void mfRunDungeonTideTransitionTests();
 
 void runCharacterBuildTests();
 void runAlchemyEconomyTests();

@@ -179,9 +179,20 @@ struct StipendResult {
     int paid = 0;    // 本次实付
     int owed = 0;    // 领取后仍欠（府库不足时保留）
 };
+// 类型：宗门待领俸禄的只读快照；无外部资源，不累计工资或改变府库，Paid/Owed 非负。
+struct StipendQuote {
+    bool Enabled = false;
+    string Reason;
+    int Paid = 0;
+    int Owed = 0;
+};
+// 用途：报价本月远程俸禄；参与宗门/纪事展示与动作复核；传只读人生，返回实付、余欠和拒绝原因。
+[[nodiscard]] StipendQuote mfQuoteStipend(const Game& State);
+// 用途：原子领取报价中的俸禄；参与既有 stipend 路由；传活动人生，返回实付/余欠，拒绝不改变状态。
+StipendResult mfCollectStipend(Game& State);
 // 用途：从真实宗门库藏领取应付俸禄。
 // 参与流程：山门俸禄动作。
-// 使用方式：传游戏，要求本月未领、在本门且恶名允许。
+// 使用方式：传游戏，要求本月未领且恶名允许，可在宗门外领取；旧公共接口委托 mfCollectStipend。
 // 返回值：实付和余欠结果；成功修改府库、玩家灵石及工资账。
 StipendResult socCollectStipend(Game& g);
 

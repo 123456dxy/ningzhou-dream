@@ -29,6 +29,7 @@
 <None Include="..\web\economy.mjs"/>
 <None Include="..\web\enhance.css"/>
 <None Include="..\web\feedback.mjs"/>
+<None Include="..\web\friend-filters.mjs"/>
 <None Include="..\web\friends.mjs"/>
 <None Include="..\web\index.html"/>
 <None Include="..\web\inventory-panel.mjs"/>
@@ -43,9 +44,11 @@
 <None Include="..\web\numeric-preview.mjs"/>
 <None Include="..\web\nz-mode.mjs"/>
 <None Include="..\web\portraits.mjs"/>
+<None Include="..\web\quantity-controls.mjs"/>
 <None Include="..\web\renown.mjs"/>
 <None Include="..\web\roster.mjs"/>
 <None Include="..\web\sects.mjs"/>
+<None Include="..\web\service-navigation.mjs"/>
 <None Include="..\web\shell.mjs"/>
 <None Include="..\web\styles.css"/>
 <None Include="..\web\task-panel.mjs"/>

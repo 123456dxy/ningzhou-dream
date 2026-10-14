@@ -1,5 +1,6 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/foundation/state_limits.h"
 #include <cmath>
 #include <set>
 
@@ -19,7 +20,7 @@ bool validSaveNumbers(const Value& value, const std::string& field) {
     if (value.isNumber()) {
         if (field == "rng" || field == "seed") return saveInteger(value, 0, 4294967295.0);
         const double npc = value.asNumber();
-        return std::isfinite(npc) && std::fabs(npc) <= 1000000000.0 &&
+        return std::isfinite(npc) && std::fabs(npc) <= StateLimits::MaxPersistedInteger &&
                (floating.count(field) || npc == std::floor(npc));
     }
     if (value.isObject()) {

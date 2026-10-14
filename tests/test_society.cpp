@@ -25,7 +25,8 @@ Game makeSocietyGame(const string& sect, int stage, int days) {
     g.player.stage = stage;
     g.player.highestStage = stage;
     g.player.sect = sect;
-    // 入宗后默认待在山门，否则领俸禄的地点校验会拦住
+    // 纯模块夹具显式准备宗门府库；报价不得通过map下标偷偷补世界。
+    if (!sect.empty()) g.world.sects.try_emplace(sect);
     g.player.location = sect.empty() ? "wuling" : sect;
     g.player.traits = {"sword"};
     g.player.build.budget = 10;
@@ -170,15 +171,15 @@ void runSocietyTests() {
         checkStr(r2.error, "本月已经领过俸禄。", "给出重复领取提示");
     }
     {
-        // 不在山门不能领
+        // 异地同样可以领取，到账仍从真实宗门府库扣除
         Game g = makeSocietyGame("jinhong", 0, 0);
         socInitPayroll(g);
         g.clock.days = 150;
         socAccrue(g);
         g.player.location = "wuling";
         const StipendResult r = socCollectStipend(g);
-        check(!r.ok, "不在山门不能领俸禄");
-        checkStr(r.error, "请回所属山门领取。", "给出回山门提示");
+        check(r.ok, "不在山门也能领俸禄");
+        checkEq(r.paid, 48, "异地领取累计俸禄48");
     }
     {
         // 府库不足时部分支付，欠额保留

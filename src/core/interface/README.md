@@ -27,6 +27,10 @@ transport 生成 `http::Request` → 外层 Web 服务处理账号与会话 → 
 
 ## 维护注意
 
+- `service_views.h/.cpp` 仅编码领域路线与补料导航。完整状态新增 `serviceRoutes`，补料报价新增 `travel`；俸禄 `stipendAction` 与执行共用领域报价。`nearby.buildId/buildName` 先验证特殊模板，其余按真实大道与已带核心神通归类，避免共享辅修 `mind/zhou` 导致误分类。路由数量不变。
+
+- 桌面一键交易消费 `tide.market.items[].maxPurchase` 与 `pillCatalog[].maxSale` 的领域纯报价，复用既有购买/出售路由。`sell` 的 `count` 缺省1保留旧调用；显式非法类型、零/负数量和过期单价拒绝。最大数量和费用不由前端自行推导，详情见 [一键交易记录](../../../docs/reviews/2026-10-14-quick-trade.md)。
+
 - 新增路由要同步 `RouteId`、路由表、处理入口及 HTTP 方法；进行中斗法、工作、抉择、秘境的限制要显式设置。
 - 前端收到的 JSON 字段是协议；内部函数或展示文字重命名不等于协议字段可随意变更。
 - 预览的阻止理由与执行资格保持一致；过期请求仍要在动作入口重新检查。

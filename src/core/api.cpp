@@ -12,9 +12,11 @@
 #include "core/interface/view_policy.h"
 #include "core/interface/routes.h"
 #include "core/interface/craft_price_views.h"
+#include "core/interface/service_views.h"
 #include "core/crafting/cave_garden.h"
 #include "core/api_exploration.h"
 #include "core/dungeon.h"
+#include "core/content/text_table.h"
 #include "core/checkpoint.h"
 #include "core/source_limits.h"
 #include "core/talents.h"
@@ -86,6 +88,18 @@ Session* currentSession = nullptr;
 // 使用方式：无参数，读取或初始化当前模块状态。
 // 返回值：当前线程账号会话的可写引用。
 Session& sessionState() { return currentSession ? *currentSession : defaultSession(); }
+// 用途：给中断的秘境耗时安排提供恢复页面与说明；流程：离境或秘境撤离响应。
+// 使用：传稳定游戏快照及成功响应；返回：无，只补协议字段，不推进时间、RNG或存档。
+void mfAppendDungeonElapsedContinuation(const Game& GameState, Value& Response) {
+    if (GameState.ended || GameState.dungeons.run || !GameState.job ||
+        GameState.job->actionType != "socialElapsed" || GameState.job->kind != "dungeon" ||
+        GameState.job->remaining <= 0) return;
+    const string RemainingDays = std::to_string(GameState.job->remaining);
+    Response.set("targetTab", str("chronicle"));
+    Response.set("text", str(content::formatText(content::TextId::DungeonElapsedPaused,
+        {{"RemainingDays", RemainingDays}})));
+}
+
 } // namespace
 
 // 用途：绑定当前线程的独立角色会话。
@@ -793,7 +807,10 @@ http::Response handle(const http::Request& req) {
         if (!error.empty()) return jsonError(error);
         if (gameState.checkpoint.restores==restores && !gameState.player.arts.battle && gameState.job && gameState.job->actionType == "socialElapsed" && !gameState.ended)
             advanceEx(gameState,gameState.job->remaining,true);
-        Value response = okWithState(gameState); response.set("targetTab",str("dungeon")); return jsonOk(response);
+        Value response = okWithState(gameState);
+        response.set("targetTab",str("dungeon"));
+        mfAppendDungeonElapsedContinuation(gameState, response);
+        return jsonOk(response);
     }
     if (route == RouteId::BattleTurn) {
         if (!gameState.player.arts.battle.has_value())
@@ -805,7 +822,9 @@ http::Response handle(const http::Request& req) {
         // 奖励结算已收口在 core 的 battleFinish 里，
         // 所以这里不需要再做什么 —— 见 battle.cpp 的说明。
         if (gameState.checkpoint.restores == restores && !gameState.player.arts.battle && gameState.job && gameState.job->actionType == "socialElapsed" && !gameState.ended) advanceEx(gameState, gameState.job->remaining, true);
-        return jsonOk(okWithState(gameState));
+        Value Response = okWithState(gameState);
+        mfAppendDungeonElapsedContinuation(gameState, Response);
+        return jsonOk(Response);
     }
 
     // ---- 设主修 / 辅修功法 ----
@@ -1146,11 +1165,12 @@ http::Response handle(const http::Request& req) {
         const int batch=intOf(in,"batch",1);
         const auto quote=crafting::materialQuote(gameState,kind,id,batch);
         if(route==RouteId::CraftMaterialsQuote) {
-            Value o(json::Object{}); o.set("quote",crafting::materialQuoteJson(quote)); return jsonOk(o);
+            Value o(json::Object{}); o.set("quote",view::mfMaterialSupplyView(gameState,quote,kind)); return jsonOk(o);
         }
         const auto error=crafting::buyMaterials(gameState,kind,id,batch,intOf(in,"expectedCost",-1));
         if(!error.empty()) return jsonError(error);
-        Value o=okWithState(gameState); o.set("quote",crafting::materialQuoteJson(quote));
+        const auto RemainingQuote=crafting::materialQuote(gameState,kind,id,batch);
+        Value o=okWithState(gameState); o.set("quote",view::mfMaterialSupplyView(gameState,RemainingQuote,kind));
         o.set("text",str("购齐所选配方缺少的材料，消耗"+std::to_string(quote.totalCost)+"灵石。")); return jsonOk(o);
     }
 
@@ -1701,12 +1721,24 @@ http::Response handle(const http::Request& req) {
 
     // ---- 坊市出售 ----
     if (route == RouteId::Sell) {
-        const shop::SellResult r =
-            shop::sell(gameState, strOf(in, "kind"), strOf(in, "id"));
-        if (!r.ok) return jsonError(r.error);
-        Value o = okWithState(gameState);
-        o.set("text", str(r.text));
-        return jsonOk(o);
+        if (in.asObject().count("count") && !in["count"].isNumber())
+            return jsonError("出售数量必须为整数。");
+        if (in.asObject().count("expectedUnitPrice") && !in["expectedUnitPrice"].isNumber())
+            return jsonError("预计单价必须为非负整数。");
+        const string ItemKind = strOf(in, "kind");
+        const int Count = intOf(in, "count", 1);
+        if (Count < 1 || (ItemKind != "potion" && Count != 1))
+            return jsonError("请选择有效的出售数量，法器每次只可出售一件。");
+        if (!in["expectedUnitPrice"].isNull() && intOf(in, "expectedUnitPrice") < 0)
+            return jsonError("预计单价必须为非负整数。");
+        const shop::SellResult Result = ItemKind == "potion"
+            ? shop::mfSellPotions(gameState, strOf(in, "id"), Count, intOf(in, "expectedUnitPrice", -1))
+            : shop::sell(gameState, ItemKind, strOf(in, "id"));
+        if (!Result.ok) return jsonError(Result.error);
+        Value Response = okWithState(gameState);
+        Response.set("text", str(Result.text));
+        Response.set("gain", num(Result.gain));
+        return jsonOk(Response);
     }
 
     // ---- 灵核 / 凝元丹 交易 ----

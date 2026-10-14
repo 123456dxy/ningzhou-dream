@@ -39,6 +39,7 @@
 <ClCompile Include="..\tests\test_crafting_fixes.cpp"/>
 <ClCompile Include="..\tests\test_display_contract.cpp"/>
 <ClCompile Include="..\tests\test_dungeon.cpp"/>
+<ClCompile Include="..\tests\test_dungeon_tide_transition.cpp"/>
 <ClCompile Include="..\tests\test_equipment_task.cpp"/>
 <ClCompile Include="..\tests\test_event_rewards.cpp"/>
 <ClCompile Include="..\tests\test_friendship.cpp"/>
@@ -56,12 +57,14 @@
 <ClCompile Include="..\tests\test_pill_effects.cpp"/>
 <ClCompile Include="..\tests\test_play.cpp"/>
 <ClCompile Include="..\tests\test_player_fixes.cpp"/>
+<ClCompile Include="..\tests\test_potion_bulk_sales.cpp"/>
 <ClCompile Include="..\tests\test_renown_artifact_api.cpp"/>
 <ClCompile Include="..\tests\test_resource_points.cpp"/>
 <ClCompile Include="..\tests\test_reward_api.cpp"/>
 <ClCompile Include="..\tests\test_save.cpp"/>
 <ClCompile Include="..\tests\test_sect_completion.cpp"/>
 <ClCompile Include="..\tests\test_sect_trial.cpp"/>
+<ClCompile Include="..\tests\test_service_convenience.cpp"/>
 <ClCompile Include="..\tests\test_shadow_combat.cpp"/>
 <ClCompile Include="..\tests\test_social_integrity.cpp"/>
 <ClCompile Include="..\tests\test_society.cpp"/>
@@ -70,9 +73,13 @@
 <ClCompile Include="..\tests\test_talents.cpp"/>
 <ClCompile Include="..\tests\test_tianji.cpp"/>
 <ClCompile Include="..\tests\test_tide_api.cpp"/>
+<ClCompile Include="..\tests\test_tide_enrollment.cpp"/>
 <ClCompile Include="..\tests\test_tide_integration.cpp"/>
+<ClCompile Include="..\tests\test_tide_max_purchase.cpp"/>
 <ClCompile Include="..\tests\test_tide_rules.cpp"/>
+<ClCompile Include="..\tests\test_tide_stock_rewards.cpp"/>
 <ClCompile Include="..\tests\test_time_performance.cpp"/>
+<ClCompile Include="..\tests\test_trade_quick_actions_api.cpp"/>
 <ClCompile Include="..\tests\test_travel.cpp"/>
 </ItemGroup>
 <ItemGroup><ProjectReference Include="nzcore.vcxproj"><Project>{2AE6D2AE-ED9A-5011-8713-BD16CCE15CE8}</Project></ProjectReference></ItemGroup>

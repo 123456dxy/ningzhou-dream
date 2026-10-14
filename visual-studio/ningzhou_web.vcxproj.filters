@@ -25,6 +25,7 @@
 <None Include="..\web\economy.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\enhance.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\feedback.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\friend-filters.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\friends.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\index.html"><Filter>Web UI</Filter></None>
 <None Include="..\web\inventory-panel.mjs"><Filter>Web UI</Filter></None>
@@ -39,9 +40,11 @@
 <None Include="..\web\numeric-preview.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\nz-mode.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\portraits.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\quantity-controls.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\renown.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\roster.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\sects.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\service-navigation.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\shell.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\styles.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\task-panel.mjs"><Filter>Web UI</Filter></None>

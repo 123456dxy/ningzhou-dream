@@ -3,6 +3,7 @@ import { renderArtifactAbility, renderEquippedArtifacts } from './artifacts.mjs'
 import { renderPillEffect } from './economy.mjs';
 import { renderRenownPanel } from './renown.mjs';
 import { renderCraftPricing } from './craft-pricing.mjs';
+import { renderPotionSaleActions, renderMarketCash } from './quantity-controls.mjs';
 
 // 用途：从真实库存汇总拥有的物品，排除功法与神通。
 // 流程：合并法宝、丹药、材料、草药与突破物品，用权威目录补充名称和品阶。
@@ -71,20 +72,23 @@ export function renderInventoryPanel(state, { kind = 'all', grade = 'all', sub =
   const cards = visible.map(item => {
     const label = `${item.grade ? `${item.grade} 阶` : '无品阶 / 待查'} · ×${item.count}${item.equipped ? ' · 已装备' : ''}`;
     let actions = '';
-    if (item.kind === 'potion') actions = `<button class="primary" data-action="use-pill" data-id="${esc(item.id)}" ${item.enabled === false ? 'disabled' : ''}>${esc(item.enabled === false ? item.reason || '暂不可服用' : '服用丹药')}</button>`;
+    if (item.kind === 'potion') actions = `<button class="primary" data-action="use-pill" data-id="${esc(item.id)}" ${item.enabled === false ? 'disabled' : ''}>${esc(item.enabled === false ? item.reason || '暂不可服用' : '服用丹药')}</button>`
+      + renderPotionSaleActions(item.id, item.maxSale, state);
     if (item.kind === 'gear') {
       const equipAction = item.equipped ? 'gear/unequip' : 'equip';
       const quote = item.actions?.[item.equipped ? 'unequip' : 'equip'];
       actions = `<button data-action="${equipAction}" data-id="${esc(item.id)}" ${quote?.enabled === false ? 'disabled' : ''}>${item.equipped ? '卸下' : '装备'}</button>`
         + (!item.inscribed ? `<button data-action="gear/inscribe" data-id="${esc(item.id)}" ${item.actions?.inscribe?.enabled === false ? 'disabled' : ''}>铭刻</button>` : '')
-        + `<button data-action="gear-salvage-preview" data-id="${esc(item.id)}">材料回收预览</button>`;
+        + `<button data-action="gear-salvage-preview" data-id="${esc(item.id)}">材料回收预览</button>`
+        + `<button data-action="sell" data-kind="gear" data-id="${esc(item.id)}" data-count="1" ${item.actions?.sell?.enabled === true ? '' : 'disabled'} title="${esc(item.actions?.sell?.reason || '')}">出售法器</button>`;
     }
     return `<article class="inventory-item" data-inventory-item="${esc(item.id)}"><div class="inventory-item-head"><h4>${esc(item.name)}</h4><span>${esc(label)}</span></div>`
       + (item.kind === 'potion'
         ? `<details class="inventory-pill-details" data-inventory-pill-details="${esc(item.id)}"><summary>查看效果与服用</summary><p>持有 ${item.count} 枚</p>${renderPillEffect(state, item.id)}${renderCraftPricing(item.pricing, { kind: 'potion', compact: true })}<div class="arts-actions">${actions}</div></details>`
         : (item.ability ? renderArtifactAbility(item.ability, { compact: true }) : `<p>${esc(item.desc || '')}</p>`)
           + (item.kind === 'gear' ? renderCraftPricing(item.pricing, { kind: 'gear', compact: true }) : '')
-          + `<div class="arts-actions">${actions}</div>`)
+          + `<div class="arts-actions">${actions}</div>${item.kind === 'gear' ? renderMarketCash(state)
+            + (item.actions?.sell?.reason ? `<p class="trade-limit-reason">${esc(item.actions.sell.reason)}</p>` : '') : ''}`)
       + `</article>`;
   }).join('') || '<div class="empty">该分类没有拥有的物品。</div>';
   return head + layout(panel('随身行囊', `${visible.length} 种`, filters + `<div class="inventory-grid">${cards}</div>`), aside);

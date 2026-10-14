@@ -1,5 +1,6 @@
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
+#include "core/interface/service_views.h"
 #include "core/api_exploration.h"
 #include "core/shop.h"
 #include "data/reference_tables.h"
@@ -18,6 +19,7 @@ Value state(const Game& game, const ViewContext& context) {
     state.set("dungeons", dungeonView(game));
     state.set("cave", caveView(game));
     state.set("checkpoint", checkpointView(game));
+    mfAppendServiceRoutes(game, state);
     appendPlayerState(game, state);
     appendArtsState(game, state);
 
