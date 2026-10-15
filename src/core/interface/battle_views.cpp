@@ -4,6 +4,7 @@
 #include "core/combat/fire_growth.h"
 #include "core/combat/elemental_sword.h"
 #include "core/combat/hand_rules.h"
+#include "core/content/beast_portraits.h"
 #include "core/arts.h"
 #include "core/artifact.h"
 #include "core/battle.h"
@@ -61,7 +62,8 @@ Value battle(const Game& game) {
     const auto enemyNpc = std::find_if(game.npcs.begin(), game.npcs.end(), [&](const Npc& npc) {
         return !battle.npcId.empty() && npc.id == battle.npcId;
     });
-    const string enemyPortrait = battle.enemyBeast ? beastPortrait(battle.enemyStage) :
+    const string enemyPortrait = battle.enemyBeast ? Appearance::mfBeastPortraitPath(
+        battle.enemyDao.empty() ? battle.style : battle.enemyDao, battle.enemyStage) :
         enemyNpc != game.npcs.end() ? npcPortrait(*enemyNpc) :
         npcPortrait(battle.npcId.empty() ? battle.enemy : battle.npcId, battle.enemyGender, battle.enemySect);
     entry.set("enemyPortrait", str(enemyPortrait));

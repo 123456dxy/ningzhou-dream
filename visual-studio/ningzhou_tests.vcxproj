@@ -24,6 +24,7 @@
 <ClCompile Include="..\tests\test_battle_scaling.cpp"/>
 <ClCompile Include="..\tests\test_battle_state.cpp"/>
 <ClCompile Include="..\tests\test_beast_actions.cpp"/>
+<ClCompile Include="..\tests\test_beast_portraits.cpp"/>
 <ClCompile Include="..\tests\test_calendar.cpp"/>
 <ClCompile Include="..\tests\test_catalog_display.cpp"/>
 <ClCompile Include="..\tests\test_cave_api.cpp"/>

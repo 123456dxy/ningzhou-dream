@@ -1,9 +1,9 @@
 {
-  "checks": 256,
-  "count": 40,
-  "uniquePaths": 40,
-  "uniqueHashes": 40,
-  "totalBytes": 2255806,
+  "checks": 263,
+  "count": 41,
+  "uniquePaths": 41,
+  "uniqueHashes": 41,
+  "totalBytes": 2318774,
   "maxBytes": 73886,
   "assets": [
     {
@@ -405,6 +405,16 @@
       "height": 512,
       "bytes": 59516,
       "sha256": "07406f49066f3c8b84080e65ad26d58a3fb49ab2fcde102a4d346b1c657e9050"
+    },
+    {
+      "id": "fiveSword",
+      "name": "五行剑诀",
+      "dao": "阵",
+      "path": "assets/manuals/fiveSword-v1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 62968,
+      "sha256": "78c3fd2bd8ee3f66f93fca126af23edac21b9ed6b8053783bd7fbc58230d6929"
     }
   ]
 }

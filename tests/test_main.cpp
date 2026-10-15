@@ -42,6 +42,7 @@ int main() {
     nztest::mfRunDungeonSweepTests();
     nztest::mfRunDungeonEventTests();
     nztest::mfRunDungeonEncounterTests();
+    nztest::mfRunBeastPortraitTests();
     nztest::mfRunDungeonRewardScalingTests();
     nztest::runMechanicsRegressionTests();
     nztest::runApiTests();

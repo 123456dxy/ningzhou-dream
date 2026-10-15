@@ -3,6 +3,7 @@
 #include "core/character_build.h"
 #include "core/interface/views.h"
 #include "core/json.h"
+#include "core/npc_learning.h"
 #include "core/roster.h"
 #include "core/save.h"
 #include <chrono>
@@ -69,9 +70,53 @@ json::Value draft(const vector<string>& traits = {}) {
 }
 }
 
+// 用途：验证完整人物白名单与玄道专属映射；流程：外观目录轻量回归；使用：不建世界、不存档，仅解析创建选项；返回：无，由harness记录结果。
+void mfRunPortraitCatalogTests() {
+    using namespace nz;
+    std::set<string> Ids, Sources;
+    int MaleCount = 0, FemaleCount = 0;
+    const auto AssetDirectory = std::filesystem::path(__FILE__).parent_path().parent_path() / "web/assets/portraits";
+    for (const auto& Portrait : playerPortraits()) {
+        check(Ids.insert(Portrait.id).second, string(Portrait.id) + "创建立绘ID唯一");
+        check(Sources.insert(Portrait.src).second, string(Portrait.id) + "创建目录没有重复使用同一人物图");
+        check(string(Portrait.gender) == "男" || string(Portrait.gender) == "女", "人物白名单明确合法性别");
+        MaleCount += Portrait.gender == string("男"); FemaleCount += Portrait.gender == string("女");
+        const auto FileName = std::filesystem::path(Portrait.src).filename();
+        check(std::filesystem::is_regular_file(AssetDirectory / FileName), string(Portrait.id) + "实际图片已打包");
+        CreateOptions Input; Input.gender = Portrait.gender; Input.portraitId = Portrait.id;
+        Input.traitsExplicit = Input.allocationExplicit = true; Input.seed = 20261015;
+        const auto Resolved = resolveCreateOptions(Input);
+        checkStr(Resolved.portraitId, Portrait.id, "每张白名单人物图均可提交创建方案");
+        Input.gender = Portrait.gender == string("男") ? "女" : "男";
+        bool Rejected = false;
+        try { static_cast<void>(resolveCreateOptions(Input)); } catch (const std::invalid_argument&) { Rejected = true; }
+        check(Rejected, "新增和既有立绘一律拒绝跨性别提交");
+    }
+    checkEq(MaleCount, 14, "男性创建列表包含既有十三张及玄道专属");
+    checkEq(FemaleCount, 14, "女性创建列表包含既有十三张及玄道专属");
+    if (std::filesystem::is_directory(AssetDirectory)) {
+        for (const auto& Entry : std::filesystem::directory_iterator(AssetDirectory)) {
+            const string FileName = Entry.path().filename().string();
+            if (Entry.path().extension() != ".webp" || FileName.rfind("beast-", 0) == 0) continue;
+            check(Sources.count("/assets/portraits/" + FileName) == 1, FileName + "既有人物资源全部开放创建选择");
+        }
+    }
+    for (const string Gender : {"男", "女"}) {
+        const string Expected = "/assets/portraits/sect-xuandao-" + string(Gender == "女" ? "female" : "male") + "-v1.webp";
+        checkStr(personPortrait(Gender, "xuandao"), Expected, "玄道宗人物原型使用专属立绘");
+        for (const string Identity : {"xuandao-mentor", "xuandao-disciple"})
+            checkStr(npcPortrait(Identity, Gender, "xuandao"), Expected, "玄道NPC固定身份也采用对应性别专属图");
+        Player Selected; Selected.gender = Gender;
+        Selected.portraitId = Gender == "女" ? "xuandao-female-v1" : "xuandao-male-v1";
+        checkStr(playerPortrait(Selected), Expected, "玩家选中玄道外观后人物卡与战斗取同一专属图");
+    }
+}
+
+// 用途：验证创建锁定与外观持久化；流程：建角API定向回归；使用：在独立测试目录绑定临时会话；返回：无，由harness记录结果。
 void runCharacterBuildTests() {
     using namespace nz;
     std::printf("\n===== 建角锁定、真实预览与立绘持久化 =====\n");
+    mfRunPortraitCatalogTests();
     CharacterBuildScope scope;
     const auto initial = saveToJson(scope.session.g);
     std::set<string> ids;

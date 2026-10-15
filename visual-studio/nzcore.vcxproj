@@ -68,6 +68,8 @@
 <ClInclude Include="..\src\core\conflict.h"/>
 <ClCompile Include="..\src\core\content\advanced_builds.cpp"/>
 <ClInclude Include="..\src\core\content\advanced_builds.h"/>
+<ClCompile Include="..\src\core\content\beast_portraits.cpp"/>
+<ClInclude Include="..\src\core\content\beast_portraits.h"/>
 <ClCompile Include="..\src\core\content\game_ids.cpp"/>
 <ClInclude Include="..\src\core\content\game_ids.h"/>
 <ClCompile Include="..\src\core\content\green_bottle_content.cpp"/>

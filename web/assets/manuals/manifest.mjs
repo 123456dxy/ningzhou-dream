@@ -1,5 +1,6 @@
 // 每个正式功法稳定 ID 对应一张独立生成图片；不依赖名称、描述或价格。
 export const MANUAL_ART = Object.freeze({
+  fiveSword: Object.freeze({ name: '五行剑诀', dao: '阵', src: 'assets/manuals/fiveSword-v1.webp' }),
   tuna: Object.freeze({ name: '吐纳功', dao: '气', src: 'assets/manuals/tuna-v1.webp' }),
   bull: Object.freeze({ name: '蛮牛护体功', dao: '体', src: 'assets/manuals/bull-v1.webp' }),
   wood: Object.freeze({ name: '青木诀', dao: '木', src: 'assets/manuals/wood-v1.webp' }),
@@ -44,6 +45,7 @@ export const MANUAL_ART = Object.freeze({
 
 // 正式目录按稳定功法 ID 显式映射，新增当前目录项必须同时交付独立素材。
 export const MANUAL_ART_BY_ID = Object.freeze({
+  fiveSword: 'fiveSword',
   tuna: 'tuna',
   bull: 'bull',
   wood: 'wood',
@@ -86,7 +88,7 @@ export const MANUAL_ART_BY_ID = Object.freeze({
   goldenrain: 'goldenrain',
 });
 
-// 仅未来未知功法或缺少 ID 时使用大道默认图；不会覆盖上述 40 本独立图。
+// 仅未来未知功法或缺少 ID 时使用大道默认图；不会覆盖已登记的逐本独立图。
 export const MANUAL_ART_BY_DAO = Object.freeze({
   "metal": "gold",
   "gold": "gold",

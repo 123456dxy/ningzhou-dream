@@ -15,6 +15,7 @@
 <ClCompile Include="..\tests\test_battle_scaling.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_battle_state.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_beast_actions.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_beast_portraits.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_calendar.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_catalog_display.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_cave_api.cpp"><Filter>Tests</Filter></ClCompile>

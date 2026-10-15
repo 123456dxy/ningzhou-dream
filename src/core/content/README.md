@@ -12,6 +12,7 @@
 | `text_table.h` / `text_table.cpp` | `TextId`、显示名、严格的命名参数格式化 |
 | `npc_combat_profiles.*` | 六宗完整传承模板、稳定流派关联和常态世界传承者初始化 |
 | `advanced_builds.*` | 八种进阶构筑目录；六宗数据直接派生自 NPC 模板，剑/神识保留玩家建议 |
+| `beast_portraits.*` | 六类妖兽主题与五大境界立绘白名单；纯外观映射，不从显示名或外部路径猜图 |
 
 公共头相对 core 根为 `content/game_ids.h`、`content/text_table.h`。入口为 `parseDaoId` / `parseSectId` / `parseSpellKind` / `parseBattleKind`、`stableId`、`legacyDaoKey` / `legacyValue`、`displayName`、`text` 和 `formatText`。
 
@@ -29,6 +30,7 @@ combat、progression、social 和 interface 按需使用本模块。`legacyDaoKe
 - 显示文字可调整，稳定 ID 和兼容值变更需要明确迁移。
 - `SectId::Xuandao` 追加在既有枚举之后，稳定 ID 为 `xuandao`、主传承为阵道。`mfAdvancedBuilds` 沿用八个初始流派 ID，不附加隐藏伤害；测试/装备入口仍按真实境界、辅修与神通槽位裁剪。
 - `mfEnsureSectTransmissions` 只在建角、年度动作和缺第六宗的旧档初始化执行，不能在只读目录查询中调用。六宗至少一名活跃传承者来自既有人物；宗门无人时才补一名确定性的元婴执教。肖像复用已有白名单文件。
+- `Appearance::mfBeastPortraitPath`由真实本命大道与敌方实际境界选图；土/火/木/神/金/体对应六主题，水显式共享凝甲主题、剑共享迅爪主题。未知风格继续使用经典五境立绘，不新增持久字段。正式战斗与独立试炼共用后端视图；前端只在缺少合法权威路径时使用`web/beast-portraits.mjs`，不按妖兽中文名识别。
 
 ## 已有测试
 

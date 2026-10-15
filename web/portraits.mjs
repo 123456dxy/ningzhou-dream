@@ -1,21 +1,23 @@
 // 立绘只负责显示；角色性别、宗门和妖兽境界都由引擎提供。
+import { beastPortraitSource } from './beast-portraits.mjs';
 // 用途：转义插入HTML的文字。
 // 流程：将空值转为空串，再替换五种HTML特殊字符。
 // 调用方式：各渲染函数传入文本。
 // 返回值：安全文本字符串。
 const esc = value => String(value ?? '').replace(/[&<>"']/g,
   ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-const SECTS = { 金虹剑派: 'jinhong', 星河剑派: 'xinghe', 竹山宗: 'zhushan', 离火门: 'lihuo', 化尘教: 'huachen' };
+const SECTS = { 金虹剑派: 'jinhong', 星河剑派: 'xinghe', 竹山宗: 'zhushan', 离火门: 'lihuo', 化尘教: 'huachen', 玄道宗: 'xuandao' };
 
 // 用途：解析人物或妖兽立绘地址。
 // 流程：优先使用权威portrait，再按kind与人物属性选择回退资源。
 // 调用方式：头像渲染传入person与kind。
 // 返回值：图片资源路径字符串。
 export function portraitSource(person = {}, kind = 'npc') {
+  if (kind === 'beast') return beastPortraitSource(person);
   if (person.portrait) return person.portrait;
   if (kind === 'player') return `assets/portraits/player-${person.gender === '女' ? 'female' : 'male'}.webp`;
-  if (kind === 'beast') return `assets/portraits/beast-${Math.max(0, Math.min(4, Math.floor((Number(person.stage) || 0) / 3)))}.webp`;
   const sect = SECTS[person.sectName] || SECTS[person.sect] || person.sect;
+  if (sect === 'xuandao') return `assets/portraits/sect-xuandao-${person.gender === '女' ? 'female' : 'male'}-v1.webp`;
   if (['jinhong', 'xinghe', 'zhushan', 'lihuo', 'huachen'].includes(sect)) {
     const female = person.gender === '女';
     const originalFemale = sect === 'xinghe' || sect === 'zhushan';

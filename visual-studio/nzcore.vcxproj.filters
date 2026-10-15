@@ -72,6 +72,8 @@
 <ClInclude Include="..\src\core\conflict.h"><Filter>Backend</Filter></ClInclude>
 <ClCompile Include="..\src\core\content\advanced_builds.cpp"><Filter>Backend\content</Filter></ClCompile>
 <ClInclude Include="..\src\core\content\advanced_builds.h"><Filter>Backend\content</Filter></ClInclude>
+<ClCompile Include="..\src\core\content\beast_portraits.cpp"><Filter>Backend\content</Filter></ClCompile>
+<ClInclude Include="..\src\core\content\beast_portraits.h"><Filter>Backend\content</Filter></ClInclude>
 <ClCompile Include="..\src\core\content\game_ids.cpp"><Filter>Backend\content</Filter></ClCompile>
 <ClInclude Include="..\src\core\content\game_ids.h"><Filter>Backend\content</Filter></ClInclude>
 <ClCompile Include="..\src\core\content\green_bottle_content.cpp"><Filter>Backend\content</Filter></ClCompile>

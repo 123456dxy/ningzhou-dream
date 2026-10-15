@@ -17,6 +17,7 @@
 <None Include="..\web\battle-lab.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\beast-intent.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\beast-intent.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\beast-portraits.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\build-panel.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\build-preview.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\build-preview.mjs"><Filter>Web UI</Filter></None>

@@ -1,6 +1,7 @@
 import { cardKind, cardRule, cardNumbers, battleStatusRows, cardGenerationHint } from './cards.mjs';
 import { battleImpacts, animateBattleImpacts } from './portraits.mjs';
 import { renderBeastIntent } from './beast-intent.mjs';
+import { beastPortraitSource } from './beast-portraits.mjs';
 
 const daoArt = Object.freeze({
   '金': 'gold', '木': 'wood', '水': 'water', '火': 'fire', '土': 'earth',
@@ -119,7 +120,9 @@ function renderStatuses(battle, enemy) {
 function renderActor(battle, enemy) {
   const player = ui.state?.player || {};
   const name = enemy ? battle.enemy : player.name || '试炼修士';
-  const portrait = enemy ? portraitPath(battle.enemyPortrait, 'assets/portraits/rogue.webp')
+  const portrait = enemy ? (battle.enemyBeast ? beastPortraitSource({ portrait: battle.enemyPortrait,
+    stage: battle.enemyStage, enemyDao: battle.enemyDao, style: battle.style })
+    : portraitPath(battle.enemyPortrait, 'assets/portraits/rogue.webp'))
     : portraitPath(player.portrait, 'assets/portraits/player-male.webp');
   return `<article class="actor${enemy ? ' enemy' : ''}" data-combat-actor="${enemy ? 'enemy' : 'player'}">
     <div class="portrait-wrap"><img src="${escapeHtml(portrait)}" alt="${escapeHtml(name)}立绘" decoding="async"></div>

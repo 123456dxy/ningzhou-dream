@@ -21,6 +21,7 @@
 <None Include="..\web\battle-lab.mjs"/>
 <None Include="..\web\beast-intent.css"/>
 <None Include="..\web\beast-intent.mjs"/>
+<None Include="..\web\beast-portraits.mjs"/>
 <None Include="..\web\build-panel.mjs"/>
 <None Include="..\web\build-preview.css"/>
 <None Include="..\web\build-preview.mjs"/>

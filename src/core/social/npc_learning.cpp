@@ -141,7 +141,8 @@ void refundLesson(Game& g, const Job& job, const string& reason) {
 string personPortrait(const string& gender, const string& sect, bool player) {
     const string root = "/assets/portraits/";
     if (player) return root + (gender == "女" ? "player-female.webp" : "player-male.webp");
-    if (sect.empty() || !findSect(sect) || sect == "xuandao") return root + (gender == "女" ? "rogue-female.webp" : "rogue.webp");
+    if (sect.empty() || !findSect(sect)) return root + (gender == "女" ? "rogue-female.webp" : "rogue.webp");
+    if (sect == "xuandao") return root + "sect-xuandao-" + (gender == "女" ? "female" : "male") + "-v1.webp";
     const auto sectId = content::parseSectId(sect);
     const bool femaleDefault = sectId == content::SectId::Xinghe || sectId == content::SectId::Zhushan;
     return root + "sect-" + sect + ((gender == "女") == femaleDefault ? "" : (gender == "女" ? "-female" : "-male")) + ".webp";

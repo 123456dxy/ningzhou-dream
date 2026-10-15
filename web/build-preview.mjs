@@ -44,7 +44,8 @@ export function defaultBuildPortrait(options, gender) {
 export function renderBuildPortraits(options, selectedId, gender, disabled = false) {
   const portraits = (options?.portraits || []).filter(portrait => !portrait.gender || portrait.gender === gender);
   if (!portraits.length) return '<p class="build-note">立绘目录正在加载。</p>';
-  return `<div class="build-portraits" role="group" aria-label="选择角色立绘">${portraits.map(portrait =>
+  return `<p class="build-note">当前性别共 ${portraits.length} 幅立绘，向下滚动查看完整列表。</p>`
+    + `<div class="build-portraits" role="group" aria-label="选择角色立绘">${portraits.map(portrait =>
     `<button type="button" class="build-portrait-choice ${portrait.id === selectedId ? 'selected' : ''}"`
       + ` data-build-portrait="${escape(portrait.id)}" aria-pressed="${portrait.id === selectedId}"`
       + ` aria-label="选择立绘：${escape(portrait.name)}" ${disabled ? 'disabled' : ''}>`

@@ -1,8 +1,10 @@
 # 宁州一梦 · C++ 版
 
+2026-10-15立绘补齐：开局开放全部28张人物图（男女各14张），新增玄道宗男女专属立绘；新增六类妖兽各五境界共30张独立立绘，以及五行剑诀专属插图。素材已压缩为WebP，正式斗法和人物卡共用后端白名单；详情见[人物与妖兽素材说明](web/assets/portraits/README.md)和[功法插图说明](web/assets/manuals/README.md)。
+
 2026-10-15新增[现有秘境改良与低阶扫荡](docs/DUNGEON_EXPLORATION_V2.md)：六类事件、六型妖兽、可比较路线和按入口境界增长的材料/灵石。高出入口一个大境界可扫荡，直接手选冻结终奖，离境结算一天；不授予沿途掉落。此前特殊秘境首通附魔和天机功法线索改版仍为方案。
 
-独立试战入口见 [斗法试炼场](docs/BATTLE_LAB.md)：在 VS 中构建 `ningzhou_battle_lab`，用内存角色切换八个流派、五个大境界和实际妖兽／修士对手，不影响人生存档。当前已完成五境界4380局诊断及六宗900局互打，结果与限制见 [数值报告](docs/BATTLE_BALANCE_RESULTS_2026_10_15.md) 和 [同组互打](docs/BATTLE_MIRROR_RESULTS_2026_10_15.md)；未推送或部署到现有玩家服务。
+独立试战入口见 [斗法试炼场](docs/BATTLE_LAB.md)：在 VS 中构建 `ningzhou_battle_lab`，用内存角色切换八个流派、五个大境界和实际妖兽／修士对手，不影响人生存档。当前已完成五境界4380局诊断及六宗900局互打，结果与限制见 [数值报告](docs/BATTLE_BALANCE_RESULTS_2026_10_15.md) 和 [同组互打](docs/BATTLE_MIRROR_RESULTS_2026_10_15.md)；未部署到现有玩家服务。
 
 当前源码进度：**2026-10-15 永久小绿瓶、三年坊市与本地流派测试版**。下载或克隆完整仓库后可直接打开 [visual-studio/ningzhou.sln](visual-studio/ningzhou.sln)，选择 Debug/Release、x64，并将 `ningzhou_web` 设为启动项目。项目使用相对路径，可随仓库移动；Backend / Web UI 分组对应实际模块目录，输出位于 `build-vs-share/Debug` 或 `Release`。环境要求与同步方式见 [VS 打开说明](visual-studio/README.md)，本轮改动与验证范围见 [桌面便利功能记录](docs/reviews/2026-10-14-service-convenience.md)，此前试玩修正见 [2026-10-13 记录](docs/reviews/2026-10-13-desktop-test-followups.md)，此前模块整理见 [2026-10-12 版本说明](docs/reviews/2026-10-12-version-delivery.md)。
 
@@ -10,7 +12,9 @@
 
 只测试本地电脑端时，构建后双击 [start-desktop.cmd](start-desktop.cmd)。它使用最新仓库构建、独立 `saves-local`，以 `--local` 跳过登录和联网入口，仅监听本机。已有 8107 服务请先正常关闭；公网部署仍用原启动方式，不传 `--local`。
 
-给朋友的当前离线电脑版为 `dist/宁州一梦-电脑版-离线免注册-20261015.exe`，约26 MiB，包含本轮秘境、永久小绿瓶、三年坊市、流派及五行剑相生强化更新。双击以「本地道友」开局，跳过注册与登录；首次使用独立本机进度，发行包不含作者存档和独立斗法实验页。只需转发EXE，ZIP转发包另附使用说明。素材已使用WebP，并将网页、后端与官方MSVC应用本地运行库一起压入单文件；接收者无需安装VS或另找DLL。
+给朋友的默认发行包为 `dist/宁州一梦-完整服务器版-20261015.zip`。解压后双击 `启动完整服务器.cmd`，打开 http://127.0.0.1:8106/，正常注册、登录并游玩；包内包含当前VS Release EXE、官方x64 CRT DLL和完整网页资源，不含作者存档与独立斗法实验页。局域网共享可使用同包的 `启动局域网服务器.cmd`。打包方式见[完整服务器版说明](tools/release/完整服务器版使用说明.txt)，维护者运行 `tools/release/build-server-folder.ps1 -MsvcRuntimeDirectory "<官方x64 Microsoft.VC143.CRT目录>"` 复现。
+
+可选的离线免注册发行包为 `dist/宁州一梦-电脑版-离线免注册-20261015.exe`，约26 MiB，包含本轮秘境、永久小绿瓶、三年坊市、流派及五行剑相生强化更新。双击以「本地道友」开局，跳过注册与登录；首次使用独立本机进度，发行包不含作者存档和独立斗法实验页。只需转发EXE，ZIP转发包另附使用说明。素材已使用WebP，并将网页、后端与官方MSVC应用本地运行库一起压入单文件；接收者无需安装VS或另找DLL。
 
 复现发行时先构建当前VS Release，再运行 `tools/release/build-release.ps1 -Local -ReleaseName '宁州一梦-电脑版-离线免注册-20261015' -GameBinary 'build-vs-share/Release/ningzhou_web.exe' -MsvcRuntimeDirectory '<VS安装目录>/VC/Redist/MSVC/<版本>/x64/Microsoft.VC143.CRT'`。脚本优先选择VS Release，不再默认误取旧的build目录；MSVC产物缺运行库目录会在打包前拒绝。运行 `./tools/release/verify-local-release.ps1 -ReleaseRecordPath 'build/release-日期时间/release.json'` 可在独立目录、随机端口验收。2026-10-15该包445项发行验收通过，覆盖只带EXE首次启动、资源完整性、保存、续玩和资源修复；另实际浏览器打开发行EXE并推进一天、进入工坊。本地进度位于 `%LOCALAPPDATA%\NingzhouDream\game\runtime\saves\players`，详见[本地版使用说明](tools/release/本地版使用说明.txt)。
 

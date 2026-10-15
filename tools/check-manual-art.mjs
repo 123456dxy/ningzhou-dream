@@ -49,7 +49,17 @@ const source = readFileSync(resolve(root, 'data/reference_tables.h'), 'utf8');
 const baseManuals = source.slice(source.indexOf('inline const vector<BaseManualDef>& BaseManualDef_TABLE()'), source.indexOf('// 基础神通 12 种'));
 const definitions = [...baseManuals.matchAll(/\{"([a-z]+)",\s*"([^"]+)",\s*"([^"]+)"/g)]
   .map(([, id, name, dao]) => ({ id, name, dao }));
-verify(definitions.length === 40, '当前正式目录应包含 40 本功法');
+// 扩展功法由后端 artManuals 登记；按稳定 ID 合并，避免只核对旧基础表而漏掉新增功法。
+const artsSource = readFileSync(resolve(root, 'src/core/progression/arts.cpp'), 'utf8');
+const catalogStart = artsSource.indexOf('const vector<ManualEntry>& artManuals()');
+const catalogEnd = artsSource.indexOf('\n    return data;', catalogStart);
+verify(catalogStart >= 0 && catalogEnd > catalogStart, '能够定位后端扩展功法目录边界');
+const artCatalog = artsSource.slice(catalogStart, catalogEnd);
+for (const [, id, name, dao] of artCatalog.matchAll(/\badd\("([A-Za-z][A-Za-z0-9]*)",\s*"([^"]+)",\s*"([^"]+)"/g)) {
+  if (!definitions.some(manual => manual.id === id)) definitions.push({ id, name, dao });
+}
+const manualCount = definitions.length;
+verify(manualCount === 41 && definitions.some(manual => manual.id === 'fiveSword'), '当前正式目录含五行剑诀共 41 本功法');
 verify(Object.keys(MANUAL_ART_BY_ID).length === definitions.length, '图片 ID 表应与正式功法目录数量一致');
 verify(Object.keys(MANUAL_ART).length === definitions.length, '不存在未映射的旧共享素材定义');
 
@@ -72,7 +82,7 @@ for (const manual of definitions) {
   hashes.add(sha256);
   report.push({ ...manual, path: primary.src, ...dimensions, bytes: bytes.length, sha256 });
 }
-verify(paths.size === 40 && hashes.size === 40, '40 个正式功法对应 40 个路径与 40 份不同内容');
+verify(paths.size === manualCount && hashes.size === manualCount, '所有正式功法均对应独立路径与不同内容');
 verify(manualIllustration({ id: 'wood', dao: '木' }).src !== manualIllustration({ id: 'longlife', dao: '木' }).src,
   '同属木道的青木诀与长生诀仍有不同图片');
 verify(manualIllustration({ id: 'gold', dao: '水' }).src.endsWith('/gold-v1.webp'), '正式功法 ID 不被同道共享回退覆盖');
@@ -87,12 +97,12 @@ handleManualIllustrationError({ target: unrelated });
 handleManualIllustrationError(null);
 verify(own.hidden && !unrelated.hidden, '图片错误只降级功法图片，不影响人物立绘');
 const generated = JSON.parse(readFileSync(resolve(assetDirectory, 'generation-spec.json'), 'utf8'));
-verify(Object.keys(generated.assets).length === 40 && definitions.every(manual => generated.assets[manual.id]?.prompt), '每本正式功法均记录真实生成提示');
-verify(new Set(Object.values(generated.assets).map(asset => asset.generatedSource)).size === 40, '40 本使用独立的图像生成输出');
-verify(readdirSync(assetDirectory).filter(name => name.endsWith('.webp')).length === 40, '发布目录恰好只有 40 张正式成品');
+verify(Object.keys(generated.assets).length === manualCount && definitions.every(manual => generated.assets[manual.id]?.prompt), '每本正式功法均记录真实生成提示');
+verify(new Set(Object.values(generated.assets).map(asset => asset.generatedSource)).size === manualCount, '所有功法使用独立的图像生成输出');
+verify(readdirSync(assetDirectory).filter(name => name.endsWith('.webp')).length === manualCount, '发布目录只包含正式成品');
 verify(!readdirSync(assetDirectory).some(name => /\.png$/i.test(name)), '原始 PNG 未放入发布目录');
 verify(readFileSync(resolve(root, 'web/index.html'), 'utf8').includes('href="manuals-art.css"'), '桌面入口加载功法专用样式');
 const summary = { checks: checkCount, count: report.length, uniquePaths: paths.size, uniqueHashes: hashes.size,
   totalBytes: report.reduce((sum, asset) => sum + asset.bytes, 0), maxBytes: Math.max(...report.map(asset => asset.bytes)), assets: report };
 if (process.argv.includes('--write-report')) writeFileSync(resolve(assetDirectory, 'asset-check.json'), JSON.stringify(summary, null, 2) + '\n');
-console.log(`Manual artwork: ${checkCount} checks passed; 40 unique paths and SHA256; ${summary.totalBytes} bytes total, ${summary.maxBytes} bytes maximum.`);
+console.log(`Manual artwork: ${checkCount} checks passed; ${manualCount} unique paths and SHA256; ${summary.totalBytes} bytes total, ${summary.maxBytes} bytes maximum.`);

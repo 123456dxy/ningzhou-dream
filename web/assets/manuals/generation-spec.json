@@ -3,6 +3,15 @@
   "tool": "built-in image_gen",
   "mode": "8 independent generation calls plus 32 independent edit calls",
   "assets": {
+    "fiveSword": {
+      "name": "五行剑诀",
+      "dao": "阵",
+      "mode": "generate",
+      "prompt": "Use case: stylized-concept. Asset type: square cultivation manual illustration for a Chinese fantasy RPG, 1:1. Original artwork for the Five Element Sword Sutra. One open ancient jade-green silk scroll floating above distant ink-wash mountains, FIVE visually distinct slender ritual swords arranged radially in a flowing generating cycle around a bronze circular formation: metallic gold sword, blue water sword, emerald wooden sword, vermilion fire sword, ochre earth sword. Fine ribbons of their five energies connect in a closed circle. Main book and swords occupy center 80%, readable at thumbnail size; dark pine green background, antique cream paper, restrained luminous gold detailing, painterly Chinese fantasy, rich yet elegant. No people, no legible text, no letters, no watermark, no UI, no border. Opaque background.",
+      "referenceBase": null,
+      "generatedSource": "exec-a816c377-08be-4112-aa8a-e1a979f62b74.png",
+      "generatedOn": "2026-10-15"
+    },
     "tuna": {
       "name": "吐纳功",
       "dao": "气",

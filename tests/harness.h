@@ -61,6 +61,7 @@ void mfRunDiscardTimingTests();
 void mfRunDungeonSweepTests();
 void mfRunDungeonEventTests();
 void mfRunDungeonEncounterTests();
+void mfRunBeastPortraitTests();
 void mfRunDungeonRewardScalingTests();
 void mfRunServiceConvenienceTests();
 void mfRunTradeQuickActionsApiTests();

@@ -21,3 +21,26 @@
 新文件统一命名为 `npc-{jinhong|xinghe|zhushan|lihuo|huachen|rogue}-{male|female}-v1.webp`。生成后按比例缩放并转换为 768×1152 透明 WebP，编码质量 74–80（实际采用 76–80）、method 6。原始 PNG 共 30,140,483 字节，成品共 2,083,244 字节，减少约 93.1%；单张约 104–200 KiB。逐张验证可解码、透明通道和非空人物边界；脸部、发丝、配饰与衣纹在角色卡及战斗尺寸下保持清晰。成品属性与压缩对照见 `manifest-variants.json`，提示词见 `prompts-variants.json`。
 
 `src/core/social/npc_learning.cpp` 的 `npcPortrait` 使用 NPC 现有稳定 id 的 FNV-1a 哈希，在同宗门、同性别的原型与变体中选择一张。角色卡和战斗传入同一身份即可保持一致；读档、导入与重复渲染不消耗随机数，不添加存档字段，也不修改 NPC 数据。实体入口保留妖兽境界选图，旧 `personPortrait` 继续供主角及兼容入口使用。缺失 id 时用姓名作为稳定身份；未知宗门按散修图池处理。
+
+## 2026-10-15 创建目录与玄道宗
+
+创建角色此前只注册最初的14张人物图，12张NPC变体虽已打包，却未进入玩家外观白名单。本轮将其全部开放为同性别的创建选择；新增玄道宗男女专属图后，人物目录共28张，男女各14张。妖兽5张不进入人物创建目录。选择宗门服饰只改变外观，不赋予宗门身份、天赋或属性。
+
+玄道宗文件为 `sect-xuandao-male-v1.webp`、`sect-xuandao-female-v1.webp`，玩家选择ID为 `xuandao-male-v1`、`xuandao-female-v1`。玄道人物原型、NPC详情与斗法均使用对应性别的专属图，不再回退散修。创建目录的权威入口仍为 `src/core/simulation/character_build.cpp`；界面按性别显示完整列表和数量，未知ID、跨性别选择及外部路径继续拒绝。既有立绘ID和保存字段保持原样。
+
+## 2026-10-15 六类妖兽与五境外观
+
+新增30张独立生成妖兽图，按六个稳定主题和实际敌方大境界0～4分别选择。普通怪与同类型首领共享对应境界素材，避免同一主题跨境界套用。经典 `beast-0..4.webp` 保留给未知主题兼容。人物创建目录只包含人物，不含妖兽。
+
+| 稳定主题 | 图像主题 | 对应战斗风格 |
+| --- | --- | --- |
+| stone-guard | 岩甲灵龟 | 土；水系守势共享 |
+| flame-beast | 焰鬃火麟 | 火 |
+| venom-beast | 碧毒巨蝎 | 木毒 |
+| mind-beast | 幻瞳灵狐 | 神识 |
+| rending-beast | 裂风玄豹 | 金；剑系共享 |
+| charging-beast | 雷角冲阵兽 | 体 |
+
+文件为 `beast-<主题>-<0..4>-v1.webp`。后端目录 `src/core/content/beast_portraits.*` 只接收已登记主题/大道ID及实际stage，不按显示名猜图；真实斗法JSON与试炼复用此结果，前端 `web/beast-portraits.mjs` 提供同一白名单的兼容回退。无新增存档字段，不推进随机数。
+
+使用内置 image_gen 逐图生成透明PNG，成品通过Sharp等比例缩放为768×1152透明WebP；只提交压缩成品，不提交原始PNG。生成提示、来源文件名、压缩与哈希见 `manifest-20261015.json`。执行 `node tools/check-beast-portraits.mjs --assets` 验证六主题五境路径、透明通道、尺寸、体积和独立内容。

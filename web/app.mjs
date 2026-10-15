@@ -1602,7 +1602,8 @@ function viewBattle() {
   // 返回值：CSS宽度字符串。
   const bar = (v, m) => `${Math.max(0, Math.min(100, (v / m) * 100))}%`;
   const npc = (S.nearby || []).find(n => n.id === b.npcId);
-  const enemy = { ...(npc || {}), name: b.enemy, portrait: b.enemyPortrait || npc?.portrait, stage: b.enemyStage };
+  const enemy = { ...(npc || {}), name: b.enemy, portrait: b.enemyPortrait || npc?.portrait,
+    stage: b.enemyStage, enemyDao: b.enemyDao, style: b.style };
   const enemyKind = b.enemyBeast ? 'beast' : 'npc';
   const enemyRealm = b.enemyRealmName || npc?.realmName
     || (b.enemyStage != null ? ['炼气', '筑基', '金丹', '元婴', '化神'][Math.floor(b.enemyStage / 3)] : '');

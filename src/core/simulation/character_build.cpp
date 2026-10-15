@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 namespace nz {
+// 用途：提供所有已打包人物立绘的创建白名单；流程：建角选项、请求校验及读档外观；使用：按性别选择稳定ID；返回：只读目录，不将外观与宗门资格绑定。
 const vector<PlayerPortraitDef>& playerPortraits() {
     static const vector<PlayerPortraitDef> portraits = {
         {"player-female", "初入仙途", "女", "/assets/portraits/player-female.webp"},
@@ -19,6 +20,20 @@ const vector<PlayerPortraitDef>& playerPortraits() {
         {"xinghe-male", "星河问道", "男", "/assets/portraits/sect-xinghe-male.webp"},
         {"huachen-female", "花尘清影", "女", "/assets/portraits/sect-huachen-female.webp"},
         {"huachen-male", "花尘清影", "男", "/assets/portraits/sect-huachen.webp"},
+        {"npc-jinhong-female-v1", "金虹·叶簪剑印", "女", "/assets/portraits/npc-jinhong-female-v1.webp"},
+        {"npc-jinhong-male-v1", "金虹·月冠执剑", "男", "/assets/portraits/npc-jinhong-male-v1.webp"},
+        {"npc-xinghe-female-v1", "星河·月簪星盘", "女", "/assets/portraits/npc-xinghe-female-v1.webp"},
+        {"npc-xinghe-male-v1", "星河·银饰执扇", "男", "/assets/portraits/npc-xinghe-male-v1.webp"},
+        {"npc-zhushan-female-v1", "竹山·叶簪竹笛", "女", "/assets/portraits/npc-zhushan-female-v1.webp"},
+        {"npc-zhushan-male-v1", "竹山·竹杖药囊", "男", "/assets/portraits/npc-zhushan-male-v1.webp"},
+        {"npc-lihuo-female-v1", "离火·凤簪铜扇", "女", "/assets/portraits/npc-lihuo-female-v1.webp"},
+        {"npc-lihuo-male-v1", "离火·赤铜火杖", "男", "/assets/portraits/npc-lihuo-male-v1.webp"},
+        {"npc-huachen-female-v1", "化尘·竹卷铜盘", "女", "/assets/portraits/npc-huachen-female-v1.webp"},
+        {"npc-huachen-male-v1", "化尘·石簪拄剑", "男", "/assets/portraits/npc-huachen-male-v1.webp"},
+        {"npc-rogue-female-v1", "散修·行旅轻装", "女", "/assets/portraits/npc-rogue-female-v1.webp"},
+        {"npc-rogue-male-v1", "散修·云游侠客", "男", "/assets/portraits/npc-rogue-male-v1.webp"},
+        {"xuandao-female-v1", "玄道·五行剑意", "女", "/assets/portraits/sect-xuandao-female-v1.webp"},
+        {"xuandao-male-v1", "玄道·五行剑意", "男", "/assets/portraits/sect-xuandao-male-v1.webp"},
     };
     return portraits;
 }
