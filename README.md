@@ -10,7 +10,9 @@
 
 只测试本地电脑端时，构建后双击 [start-desktop.cmd](start-desktop.cmd)。它使用最新仓库构建、独立 `saves-local`，以 `--local` 跳过登录和联网入口，仅监听本机。已有 8107 服务请先正常关闭；公网部署仍用原启动方式，不传 `--local`。
 
-给群友的离线电脑版使用 `dist/宁州一梦-电脑版-离线免注册-上次更新-20261013.exe`，基于 Git `8dadce3` 的上次更新，不包含这次开发中的兽潮扩展和新增功法立绘。双击直接以「本地道友」开局，跳过道号注册和登录。只需转发 EXE；ZIP 转发包另附使用说明。复现该发行请先在 `8dadce3` 的独立目录构建，再使用本地启动器及 `build-release.ps1 -Local` 打包，避免带入当前工作区的业务改动。本地进度保存在 `%LOCALAPPDATA%\NingzhouDream\game\runtime\saves\players`；运行 `./tools/release/verify-local-release.ps1 -ReleaseRecordPath 'build/release-日期时间/release.json'` 可隔离验收本地包。详见 [本地版使用说明](tools/release/本地版使用说明.txt)。
+给朋友的当前离线电脑版为 `dist/宁州一梦-电脑版-离线免注册-20261015.exe`，约26 MiB，包含本轮秘境、永久小绿瓶、三年坊市、流派及五行剑相生强化更新。双击以「本地道友」开局，跳过注册与登录；首次使用独立本机进度，发行包不含作者存档和独立斗法实验页。只需转发EXE，ZIP转发包另附使用说明。素材已使用WebP，并将网页、后端与官方MSVC应用本地运行库一起压入单文件；接收者无需安装VS或另找DLL。
+
+复现发行时先构建当前VS Release，再运行 `tools/release/build-release.ps1 -Local -ReleaseName '宁州一梦-电脑版-离线免注册-20261015' -GameBinary 'build-vs-share/Release/ningzhou_web.exe' -MsvcRuntimeDirectory '<VS安装目录>/VC/Redist/MSVC/<版本>/x64/Microsoft.VC143.CRT'`。脚本优先选择VS Release，不再默认误取旧的build目录；MSVC产物缺运行库目录会在打包前拒绝。运行 `./tools/release/verify-local-release.ps1 -ReleaseRecordPath 'build/release-日期时间/release.json'` 可在独立目录、随机端口验收。2026-10-15该包445项发行验收通过，覆盖只带EXE首次启动、资源完整性、保存、续玩和资源修复；另实际浏览器打开发行EXE并推进一天、进入工坊。本地进度位于 `%LOCALAPPDATA%\NingzhouDream\game\runtime\saves\players`，详见[本地版使用说明](tools/release/本地版使用说明.txt)。
 
 > 在 VS Code 里打开本目录即可获得完整的跳转、补全与 F5 调试（.vscode/ 已配好）。
 > 调试前先跑 .\build.ps1 -Debug 生成带符号的可执行文件。

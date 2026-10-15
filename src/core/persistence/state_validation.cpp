@@ -8,6 +8,7 @@
 #include "core/artifact.h"
 #include "core/battle.h"
 #include "core/combat/elemental_sword.h"
+#include "core/combat/hand_rules.h"
 #include "core/combat/fire_growth.h"
 #include "core/travel.h"
 #include "core/npc_learning.h"
@@ -214,11 +215,12 @@ std::string saveStateError(const Game& game) {
             battle.carryMana < 0 || battle.carryMana > 100000 || battle.carryCap < 0 || battle.carryCap > 100000 ||
             battle.drawNext < 0 || battle.drawNext > 256 || battle.pendingDraw < 0 || battle.pendingDraw > 256 ||
             battle.enemyPower < 0 || battle.turn < 0 || battle.buff < 0 || battle.reduction < 0 || battle.guard < 0 ||
-            battle.deck.size() > 256 || battle.hand.size() > 8 || battle.played < 0 || battle.played > 24 ||
+            battle.deck.size() > 256 || battle.hand.size() > BattleCards::MaximumHandSize || battle.played < 0 || battle.played > 24 ||
             battle.discardPower < 0 || battle.discardPower > 0.3 + 1e-9 ||
             battle.swordSequence < 0 || battle.swordSequence > 24 || battle.comboDraws < 0 || battle.comboDraws > 2 ||
             battle.ElementalSwordManaReturns < 0 || battle.ElementalSwordManaReturns > ElementalSword::ManaReturnLimitPerTurn ||
             battle.ElementalSwordSequence < 0 || battle.ElementalSwordSequence > ElementalSword::SwordChainCycleLength ||
+            battle.ElementalSwordEnhancementLayers < 0 || battle.ElementalSwordEnhancementLayers > ElementalSword::MaximumEnhancementLayers ||
             battle.FireGrowthRounds < 0 || battle.FireGrowthRounds > FireGrowth::MaximumGrowthRounds)
             return "斗法参数无效";
         if (battle.enemyStage < 0 || battle.enemyStage > 12 || battle.playerSpeed < 0 || battle.enemySpeed < 0)
@@ -246,7 +248,7 @@ std::string saveStateError(const Game& game) {
         }
         const EnemyCombat& enemy = battle.enemyCards;
         std::set<string> enemyCards, enemyPlaced, planned;
-        if (enemy.deck.size() > 256 || enemy.hand.size() > 8 || enemy.planned.size() > 24) return "对手牌组过大";
+        if (enemy.deck.size() > 256 || enemy.hand.size() > BattleCards::MaximumHandSize || enemy.planned.size() > 24) return "对手牌组过大";
         for (const auto& c : enemy.deck) {
             const auto* spell = battleSpell(c.spell);
             if (c.uid.empty() || !spell || !enemyCards.insert(c.uid).second ||
@@ -274,6 +276,7 @@ std::string saveStateError(const Game& game) {
                 enemy.swordSequence < 0 || enemy.swordSequence > 24 || enemy.comboDraws < 0 || enemy.comboDraws > 2 ||
                 enemy.ElementalSwordManaReturns < 0 || enemy.ElementalSwordManaReturns > ElementalSword::ManaReturnLimitPerTurn ||
                 enemy.ElementalSwordSequence < 0 || enemy.ElementalSwordSequence > ElementalSword::SwordChainCycleLength ||
+                enemy.ElementalSwordEnhancementLayers < 0 || enemy.ElementalSwordEnhancementLayers > ElementalSword::MaximumEnhancementLayers ||
                 enemy.FireGrowthRounds < 0 || enemy.FireGrowthRounds > FireGrowth::MaximumGrowthRounds ||
                 enemy.swordQi < 0 || enemy.swordQi > 8 || enemy.water < 0 || enemy.water > 6 || enemy.soul < 0 || enemy.soul > 6 ||
                 enemy.poison < 0 || enemy.poison > BATTLE_POISON_CAP || enemy.charge < 0 || enemy.charge > 4 || enemy.lock < 0 || enemy.lock > 2 ||

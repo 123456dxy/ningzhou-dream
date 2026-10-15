@@ -4,6 +4,7 @@
 
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/hand_rules.h"
 #include "core/combat/battle_scaling.h"
 #include "core/save.h"
 #include "core/sim.h"
@@ -62,7 +63,7 @@ bool partitioned(const EnemyCombat& e) {
     map<string, int> all;
     for (const auto* pile : {&e.hand, &e.draw, &e.discard, &e.exhausted})
         for (const auto& uid : *pile) ++all[uid];
-    if (all.size() != e.deck.size() || e.hand.size() > 8) return false;
+    if (all.size() != e.deck.size() || e.hand.size() > BattleCards::MaximumHandSize) return false;
     for (const auto& card : e.deck) if (all[card.uid] != 1) return false;
     return true;
 }

@@ -197,10 +197,13 @@ try {
     Assert-Check 'release executable matches recorded hash' ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -eq $record.sha256) $record.sha256
     Assert-Check 'manifest count matches release record' ($manifest.Count -eq [int]$record.files -and $manifest.Count -gt 0) $manifest.Count
     $manifestByPath = @{}
+    $RuntimeDllPaths = @('concrt140.dll','msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll',
+        'msvcp140_atomic_wait.dll','msvcp140_codecvt_ids.dll','vccorlib140.dll',
+        'vcruntime140.dll','vcruntime140_1.dll','vcruntime140_threads.dll') | ForEach-Object { 'runtime/'+$_ }
     foreach ($entry in $manifest) {
         $relative = ([string]$entry.path).Replace('\','/')
         $null = Assert-Below $dataRoot (Join-Path $dataRoot $relative)
-        $isRuntimeFile = $relative -eq 'runtime/ningzhou_web.exe' -or $relative.StartsWith('runtime/web/',[StringComparison]::Ordinal)
+        $isRuntimeFile = $relative -eq 'runtime/ningzhou_web.exe' -or $relative.StartsWith('runtime/web/',[StringComparison]::Ordinal) -or $RuntimeDllPaths -contains $relative
         $isPrivateFile = $relative -match '(?i)(^|/)(saves|players|feedback)(/|$)|\.(json|jsonl|tsv|log|md|ps1|cmd|bat)$'
         Assert-Check ('payload contains runtime assets only: '+$relative) ($isRuntimeFile -and -not $isPrivateFile -and -not $manifestByPath.ContainsKey($relative))
         $manifestByPath[$relative] = $entry

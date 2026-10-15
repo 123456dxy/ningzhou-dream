@@ -3,6 +3,7 @@
 #include "core/battle.h"
 #include "core/combat/battle_lab.h"
 #include "core/combat/fire_growth.h"
+#include "core/combat/hand_rules.h"
 #include "core/json.h"
 #include "core/save.h"
 #include "core/talents.h"
@@ -29,7 +30,7 @@ nz::string mfHoldFireGrowthCard(nz::Battle& State, const nz::string& SpellId) {
     for (const auto& Card : State.deck) {
         if (Card.spell != SpellId) continue;
         for (auto* Pile : {&State.hand, &State.draw, &State.discard, &State.exhausted}) std::erase(*Pile, Card.uid);
-        if (State.hand.size() >= 8) { State.discard.push_back(State.hand.back()); State.hand.pop_back(); }
+        if (State.hand.size() >= nz::BattleCards::MaximumHandSize) { State.discard.push_back(State.hand.back()); State.hand.pop_back(); }
         State.hand.push_back(Card.uid); State.cooldowns.erase(SpellId); State.mana = State.maxMana;
         return Card.uid;
     }

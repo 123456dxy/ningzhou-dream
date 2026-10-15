@@ -1,4 +1,9 @@
-param([string]$ReleaseName = '宁州一梦-单文件版-20261012-宗门修正版', [switch]$Local)
+param(
+    [string]$ReleaseName = '宁州一梦-单文件版-20261015',
+    [switch]$Local,
+    [string]$GameBinary = '',
+    [string]$MsvcRuntimeDirectory = ''
+)
 $ErrorActionPreference = 'Stop'
 # Keep the escaped -D string arguments compatible with Windows PowerShell 5.1
 # and PowerShell 7. This script-scoped setting does not change the caller.
@@ -8,14 +13,42 @@ $compilerRoot = 'C:/msys64/ucrt64/bin'
 $compiler = Join-Path $compilerRoot 'g++.exe'
 $windres = Join-Path $compilerRoot 'windres.exe'
 $env:PATH = $compilerRoot + ';' + $env:PATH
-$builtGame = Join-Path $workspace 'build/ningzhou_web.exe'
-if (-not (Test-Path -LiteralPath $builtGame)) { throw 'Build the latest game before packaging.' }
+if ([string]::IsNullOrWhiteSpace($GameBinary)) {
+    $GameBinary = Join-Path $workspace 'build-vs-share/Release/ningzhou_web.exe'
+    if (-not (Test-Path -LiteralPath $GameBinary)) { $GameBinary = Join-Path $workspace 'build/ningzhou_web.exe' }
+}
+if (-not (Test-Path -LiteralPath $GameBinary -PathType Leaf)) { throw 'Build the latest game before packaging, or pass -GameBinary.' }
+$builtGame = (Resolve-Path -LiteralPath $GameBinary).Path
+# 运行库只从调用者指定的官方 VC Redist 目录取白名单文件，不复制开发机任意 DLL 或玩家数据。
+$MsvcRuntimeNames = @('concrt140.dll','msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll',
+    'msvcp140_atomic_wait.dll','msvcp140_codecvt_ids.dll','vccorlib140.dll',
+    'vcruntime140.dll','vcruntime140_1.dll','vcruntime140_threads.dll')
+$RequiresMsvcRuntime = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($builtGame)) -match '(?i)(MSVCP140|VCRUNTIME140)(_[A-Za-z0-9_]+)?\.dll'
+if ($RequiresMsvcRuntime -and [string]::IsNullOrWhiteSpace($MsvcRuntimeDirectory)) {
+    throw 'This MSVC build needs app-local runtime DLLs. Pass -MsvcRuntimeDirectory pointing to the official x64 Microsoft.VC143.CRT directory.'
+}
+if (-not [string]::IsNullOrWhiteSpace($MsvcRuntimeDirectory)) {
+    $MsvcRuntimeDirectory = (Resolve-Path -LiteralPath $MsvcRuntimeDirectory).Path
+    foreach ($RequiredDll in @('msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $MsvcRuntimeDirectory $RequiredDll) -PathType Leaf)) {
+            throw ('Missing required x64 MSVC runtime: '+$RequiredDll)
+        }
+    }
+}
 $buildRoot = Join-Path $workspace ('build/release-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $staging = Join-Path $buildRoot 'staging'
 $runtime = Join-Path $staging 'runtime'
 $destination = Join-Path $workspace 'dist'
 New-Item -ItemType Directory -Path $runtime,$destination -Force | Out-Null
 Copy-Item -LiteralPath $builtGame -Destination (Join-Path $runtime 'ningzhou_web.exe')
+if (-not [string]::IsNullOrWhiteSpace($MsvcRuntimeDirectory)) {
+    foreach ($DllName in $MsvcRuntimeNames) {
+        $DllSource = Join-Path $MsvcRuntimeDirectory $DllName
+        if (Test-Path -LiteralPath $DllSource -PathType Leaf) {
+            Copy-Item -LiteralPath $DllSource -Destination (Join-Path $runtime $DllName)
+        }
+    }
+}
 # Only game runtime assets. Generator metadata, private paths, test reports and saves are excluded.
 $assetRoot = Join-Path $workspace 'web'
 $allowed = @('.html','.css','.mjs','.png','.jpg','.jpeg','.webp','.woff','.woff2','.ttf','.ico','.svg','.mp3','.ogg','.wav')
@@ -47,8 +80,8 @@ $resourceText = @'
 101 RCDATA "payload.bin"
 1 24 "app.manifest"
 1 VERSIONINFO
- FILEVERSION 6,2026,10,12
- PRODUCTVERSION 6,2026,10,12
+ FILEVERSION 6,2026,10,15
+ PRODUCTVERSION 6,2026,10,15
  FILEOS 0x40004
  FILETYPE 0x1
  BEGIN
@@ -58,7 +91,7 @@ $resourceText = @'
    BEGIN
     VALUE "FileDescription", "Ningzhou Dream - Single-file Game\0"
     VALUE "ProductName", "Ningzhou Dream\0"
-    VALUE "FileVersion", "6.2026.10.12\0"
+    VALUE "FileVersion", "6.2026.10.15\0"
     VALUE "OriginalFilename", "NingzhouDream.exe\0"
    END
   END
@@ -72,7 +105,7 @@ $resourceText = @'
 $appManifest = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
- <assemblyIdentity version="6.2026.10.12" processorArchitecture="amd64" name="NingzhouDream.Game" type="win32"/>
+ <assemblyIdentity version="6.2026.10.15" processorArchitecture="amd64" name="NingzhouDream.Game" type="win32"/>
  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges><requestedExecutionLevel level="asInvoker" uiAccess="false"/></requestedPrivileges></security></trustInfo>
  <application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings><dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware></windowsSettings></application>
  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1"><application><supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/></application></compatibility>
@@ -99,6 +132,6 @@ $previousPreference = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 try { & $compiler @launcherArgs } finally { $ErrorActionPreference = $previousPreference }
 if ($LASTEXITCODE -ne 0) { throw 'Could not build the single-file launcher.' }
-$record = [ordered]@{exe=$output; size=(Get-Item -LiteralPath $output).Length; sha256=(Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash; payloadId=$packageId; buildRoot=$buildRoot; files=$manifest.Count; gameSha256=(Get-FileHash -LiteralPath $builtGame -Algorithm SHA256).Hash}
+$record = [ordered]@{exe=$output; size=(Get-Item -LiteralPath $output).Length; sha256=(Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash; payloadId=$packageId; buildRoot=$buildRoot; files=$manifest.Count; gameSha256=(Get-FileHash -LiteralPath $builtGame -Algorithm SHA256).Hash; gameBinary=$builtGame; local=[bool]$Local; msvcRuntime=$RequiresMsvcRuntime}
 [IO.File]::WriteAllText((Join-Path $buildRoot 'release.json'),($record | ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
 Write-Output ($record | ConvertTo-Json -Depth 10)

@@ -2,6 +2,8 @@
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
 #include "core/combat/fire_growth.h"
+#include "core/combat/elemental_sword.h"
+#include "core/combat/hand_rules.h"
 #include "core/arts.h"
 #include "core/artifact.h"
 #include "core/battle.h"
@@ -246,6 +248,11 @@ Value battle(const Game& game) {
     entry.set("discardPower", num(battle.discardPower));
     entry.set("swordSequence", num(battle.swordSequence));
     entry.set("elementalSwordSequence", num(battle.ElementalSwordSequence));
+    entry.set("elementalSwordEnhancementLayers", num(battle.ElementalSwordEnhancementLayers));
+    entry.set("elementalSwordEnhancementLimit", num(ElementalSword::MaximumEnhancementLayers));
+    entry.set("elementalSwordEnhancementPercent", num(jsRound((ElementalSword::mfEnhancementMultiplier(talentMods(game.player), battle) - 1.0) * 100)));
+    entry.set("enemyElementalSwordEnhancementLayers", num(battle.enemyCards.ElementalSwordEnhancementLayers));
+    entry.set("handLimit", num(BattleCards::MaximumHandSize));
     entry.set("fireGrowthRounds", num(battle.FireGrowthRounds));
     entry.set("fireGrowthMaxRounds", num(FireGrowth::MaximumGrowthRounds));
     entry.set("enemyFireGrowthRounds", num(battle.enemyCards.FireGrowthRounds));

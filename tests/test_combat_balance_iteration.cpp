@@ -3,6 +3,7 @@
 #include "core/battle.h"
 #include "core/combat/battle_scaling.h"
 #include "core/combat/elemental_sword.h"
+#include "core/combat/hand_rules.h"
 #include "core/combat/fire_growth.h"
 #include "core/json.h"
 #include "core/save.h"
@@ -366,7 +367,7 @@ void mfRunCombatBalanceIterationTests() {
         auto& State = *Encounter.player.arts.battle;
         const string CardUid = mfHoldCard(State, SpellId);
         check(battleTurn(Encounter, CardUid).ok, "补牌经真实卡牌入口施放");
-        check(State.hand.size() <= 8, "补牌仍遵守八张手牌上限");
+        check(State.hand.size() <= BattleCards::MaximumHandSize, "补牌仍遵守统一手牌容量");
         Game Loaded;
         string Error;
         check(loadDetachedFromJson(saveToJson(Encounter), Loaded, &Error), "新补牌业务ID可通过存档白名单往返");
@@ -378,6 +379,7 @@ void mfRunCombatBalanceIterationTests() {
         check(mfManualCatalog().count("fiveSword") == 1, "完整不可变功法目录包含本地新定义");
         Game Encounter = mfElementalEncounter();
         auto& State = *Encounter.player.arts.battle;
+        State.swordQi = 0; // 本段只计量五剑施放所得，不计剑道节点提供的开局剑气。
         int ExpectedSequence = 0;
         for (const auto& SpellId : {string("earthSword"), string("metalSword"), string("waterSword"), string("woodSword"), string("fireSword")}) {
             const auto* Spell = battleSpell(SpellId);
@@ -389,11 +391,11 @@ void mfRunCombatBalanceIterationTests() {
             check(battleTurn(Encounter, CardUid).ok, "有限真实灵力支持正确五剑顺序施放");
             checkEq(State.swordSequence, ++ExpectedSequence, "正确相生连续推进剑链");
             checkEq(State.ElementalSwordSequence, (ExpectedSequence - 1) % 3 + 1, "五行剑独立保存三剑周期进度");
-            check(State.comboDraws <= ElementalSword::DrawLimitPerTurn && State.hand.size() <= 8,
+            check(State.comboDraws <= ElementalSword::DrawLimitPerTurn && State.hand.size() <= BattleCards::MaximumHandSize,
                   "五行手牌引擎不突破补牌及手牌硬上限");
         }
         checkEq(State.ElementalSwordManaReturns, 3, "五行剑诀本轮最多触发三次返灵");
-        checkEq(State.swordQi, 8, "连续五剑与水剑仍遵守八层剑气上限");
+        checkEq(State.swordQi, 6, "五行剑诀不额外送剑气，仅五剑基础积气与水剑自带额外一层");
         const string NextEarthUid = mfHoldCard(State, "earthSword");
         check(battleTurn(Encounter, NextEarthUid).ok, "五剑可从火回土继续有限连锁");
         check(State.guard >= ElementalSword::EarthComboGuardGain, "土剑相生提供当轮守势");

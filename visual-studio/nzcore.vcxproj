@@ -62,6 +62,7 @@
 <ClInclude Include="..\src\core\combat\elemental_sword.h"/>
 <ClCompile Include="..\src\core\combat\fire_growth.cpp"/>
 <ClInclude Include="..\src\core\combat\fire_growth.h"/>
+<ClInclude Include="..\src\core\combat\hand_rules.h"/>
 <None Include="..\src\core\combat\README.md"/>
 <ClCompile Include="..\src\core\combat\sword.cpp"/>
 <ClInclude Include="..\src\core\conflict.h"/>

@@ -26,7 +26,7 @@ const base = `http://127.0.0.1:${port}`;
 const server = spawn(executable, ['--port', String(port), '--web', join(root, 'web'), '--no-open'],
   { cwd: temporary, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
 const serverLog = [], checks = [], runs = [], timings = [], errors = [], posts = [];
-const synergy = { highlightedHands: 0, retainedAcrossTurns: 0, retainedAcrossNeutral: 0 };
+const synergy = { highlightedHands: 0, retainedAcrossTurns: 0, retainedAcrossNeutral: 0, enhancementFrames: 0, maxHandSize: 0 };
 const beastChecks = { frames: 0, multipleActions: 0, siphonSeen: 0, siphonPlayed: 0 };
 server.stdout.on('data', data => serverLog.push(String(data))); server.stderr.on('data', data => serverLog.push(String(data)));
 let browser;
@@ -127,6 +127,17 @@ try {
         }
       }
       if (argument('--mode', 'all') === 'synergy') {
+        assert.equal(battle.handLimit, 12, '真实服务声明扩大后的十二张容量');
+        assert.ok(battle.hand.length <= battle.handLimit, '实际抽牌不超过后端容量');
+        synergy.maxHandSize = Math.max(synergy.maxHandSize, battle.hand.length);
+        assert.ok(battle.elementalSwordEnhancementLayers >= 0 && battle.elementalSwordEnhancementLayers <= 5, '本场强化不越五层');
+        if (battle.elementalSwordEnhancementLayers > 0) {
+          const chip = await page.locator('.status-chip').filter({hasText: /^相生强化 /}).textContent();
+          assert.ok(chip.includes(`${battle.elementalSwordEnhancementLayers} / ${battle.elementalSwordEnhancementLimit}`));
+          assert.ok(chip.includes(`+${battle.elementalSwordEnhancementPercent}%`), '界面直接显示真实功法倍率');
+          if (!synergy.enhancementFrames) await page.screenshot({path: join(temporary, 'elemental-enhancement.png'), fullPage: true});
+          synergy.enhancementFrames++;
+        }
         const highlighted = battle.hand.filter(card => card.elementalGenerationReady === true);
         assert.equal(await page.locator('[data-card-uid][data-elemental-generation-ready="true"]').count(), highlighted.length, '相生圈与后端资格逐张一致');
         if (highlighted.length) {
@@ -160,6 +171,7 @@ try {
         if (!chosen || !['金', '木', '水', '火', '土'].includes(chosen.dao)) {
           assert.equal(current.battle.elementalSwordSequence, battle.elementalSwordSequence, '中性牌与回合边界保持五剑进度');
           assert.equal(current.battle.lastDao, battle.lastDao, '中性牌与回合边界保留相生根基');
+          assert.equal(current.battle.elementalSwordEnhancementLayers, battle.elementalSwordEnhancementLayers, '中性牌与回合边界保留本场强化');
           if (!chosen) synergy.retainedAcrossTurns++; else synergy.retainedAcrossNeutral++;
         }
       }
@@ -175,6 +187,7 @@ try {
     check(synergy.highlightedHands > 0, '真实自然手牌出现相生光圈与文字');
     check(synergy.retainedAcrossTurns > 0, '真实跨回合保持五剑连段');
     check(synergy.retainedAcrossNeutral > 0, '真实中性牌穿插不破五剑连段');
+    check(synergy.enhancementFrames > 0, '真实相生积累强化并展示层数与功法倍率');
   } else if (argument('--mode', 'all') === 'beast') {
     const fire = config.builds.find(build => build.id === 'fire-stack');
     runs.push(await play(fire, 12, 'beast-fire', 73, 'advanced'));

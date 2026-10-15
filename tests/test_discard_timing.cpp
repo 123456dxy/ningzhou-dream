@@ -2,6 +2,7 @@
 #include "core/api.h"
 #include "core/battle.h"
 #include "core/combat/discard_rules.h"
+#include "core/combat/hand_rules.h"
 #include "core/save.h"
 #include "core/talents.h"
 #include <algorithm>
@@ -52,17 +53,17 @@ bool mfArrangeHand(const vector<Card>& Deck, vector<string>& Hand, vector<string
     }
     for (const auto& Entry : Deck)
         if (std::find(Hand.begin(), Hand.end(), Entry.uid) == Hand.end()) Draw.push_back(Entry.uid);
-    return Hand.size() <= 8;
+    return Hand.size() <= BattleCards::MaximumHandSize;
 }
 
-// 用途：校验受控夹具和真实抽牌后的守恒；流程：牌堆合法性断言；用法：传完整牌堆和四分区；返回：唯一、互斥、全部覆盖且手牌未超8。
+// 用途：校验受控夹具和真实抽牌后的守恒；流程：牌堆合法性断言；用法：传完整牌堆和四分区；返回：唯一、互斥、全部覆盖且手牌未超容量。
 bool mfPartitioned(const vector<Card>& Deck, const vector<string>& Hand, const vector<string>& Draw,
                    const vector<string>& Discard, const vector<string>& Exhausted) {
     std::set<string> Known, Seen;
     for (const auto& Entry : Deck) if (!Known.insert(Entry.uid).second) return false;
     for (const auto* Pile : {&Hand, &Draw, &Discard, &Exhausted})
         for (const auto& Uid : *Pile) if (!Known.count(Uid) || !Seen.insert(Uid).second) return false;
-    return Hand.size() <= 8 && Seen == Known;
+    return Hand.size() <= BattleCards::MaximumHandSize && Seen == Known;
 }
 
 // 用途：安排玩家合法手牌并清除一次性状态；流程：动作夹具；用法：传已开战状态和实际神通；返回：无，断言牌堆有效。

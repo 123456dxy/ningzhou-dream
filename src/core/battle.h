@@ -190,7 +190,7 @@ TurnResult battleTurn(Game& g, const string& id, const string& target = "");
 // 抽牌（内部使用，也供测试）
 // 用途：为玩家抽牌并在必要时重洗弃牌。
 // 参与流程：开局、回合开始与抽牌神通。
-// 使用方式：传游戏与数量；过滤已移除牌，手牌最多八张。
+// 使用方式：传游戏与数量；过滤已移除牌，手牌遵守双方统一容量。
 // 返回值：无；修改玩家战斗牌堆、手牌、洗牌次数与 RNG。
 void battleDraw(Game& g, int n);
 

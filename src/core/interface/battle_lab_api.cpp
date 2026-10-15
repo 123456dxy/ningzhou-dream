@@ -6,6 +6,9 @@
 #include "core/character_build.h"
 #include "core/content/advanced_builds.h"
 #include "core/combat/battle_scaling.h"
+#include "core/combat/elemental_sword.h"
+#include "core/combat/hand_rules.h"
+#include "core/talents.h"
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
@@ -107,6 +110,11 @@ JsonValue mfBattleView(const Game& GameState) {
     }
     View.set("hand", JsonValue(std::move(Hands)));
     View.set("elementalSwordSequence", BattleState.ElementalSwordSequence);
+    View.set("elementalSwordEnhancementLayers", BattleState.ElementalSwordEnhancementLayers);
+    View.set("elementalSwordEnhancementLimit", ElementalSword::MaximumEnhancementLayers);
+    View.set("elementalSwordEnhancementPercent", jsRound((ElementalSword::mfEnhancementMultiplier(talentMods(GameState.player), BattleState) - 1.0) * 100));
+    View.set("enemyElementalSwordEnhancementLayers", BattleState.enemyCards.ElementalSwordEnhancementLayers);
+    View.set("handLimit", BattleCards::MaximumHandSize);
     View.set("enemyElementalSwordSequence", BattleState.enemyCards.ElementalSwordSequence);
     // 妖兽使用独立妖力预算；旧档冻结单意图在下一动作开轮前仍显示一次行动。
     View.set("enemyActionLimit", BattleState.enemyCards.enabled

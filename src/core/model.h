@@ -292,6 +292,7 @@ struct EnemyCombat {
     int burn = 0, burnTurns = 0, swordSequence = 0, comboDraws = 0;
     int ElementalSwordManaReturns = 0; // 本回合五行剑诀返灵触发次数，0..3
     int ElementalSwordSequence = 0; // 五行剑独立三剑进度0..3；跨回合/中性牌保留，不混用普通连剑。
+    int ElementalSwordEnhancementLayers = 0; // 五行剑诀本场相生强化，0..5；功法层数决定每层倍率。
     int FireGrowthRounds = 0; // 本场有成长悟道的灼烧已结算回合数，0..5，不随施法次数增长。
     int poisonDamage = -1;         // 精确每跳毒伤；-1仅解释缺少此字段的旧在途层数状态
     double buff = 0, reduction = 0, guard = 0, discardPower = 0;
@@ -395,6 +396,7 @@ struct Battle {
     int comboDraws = 0;            // 本回合相生额外抽牌触发数，最高2
     int ElementalSwordManaReturns = 0; // 本回合五行剑诀返灵触发次数，0..3
     int ElementalSwordSequence = 0; // 五行剑独立三剑进度0..3；跨回合/中性牌保留，不混用普通连剑。
+    int ElementalSwordEnhancementLayers = 0; // 五行剑诀本场相生强化，0..5；功法层数决定每层倍率。
     int FireGrowthRounds = 0; // 玩家本场灼烧成长0..5；回合末有实际灼烧才增加，新战斗归零。
     string last;                   // 最近一张有效五行牌大道，跨回合保留；中性牌不覆盖。
     vector<string> log;

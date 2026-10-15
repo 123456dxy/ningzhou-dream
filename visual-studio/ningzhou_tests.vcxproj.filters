@@ -39,11 +39,13 @@
 <ClCompile Include="..\tests\test_dungeon_reward_scaling.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_dungeon_sweep.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_dungeon_tide_transition.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_elemental_enhancement.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_equipment_task.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_event_rewards.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_fire_growth.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_friendship.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_green_bottle.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_hand_capacity.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_herb_acquisition.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_intel_purchase.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_main.cpp"><Filter>Tests</Filter></ClCompile>

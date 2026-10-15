@@ -5,6 +5,7 @@
 #include "core/battle.h"
 #include "core/combat/battle_scaling.h"
 #include "core/combat/elemental_sword.h"
+#include "core/combat/hand_rules.h"
 #include "core/combat/fire_growth.h"
 #include "core/combat/discard_rules.h"
 #include "core/social/npc_consumables.h"
@@ -519,7 +520,7 @@ static void battleShuffle(Game& g, vector<string>& pile) {
 
 // 用途：为玩家抽牌并在必要时重洗弃牌。
 // 参与流程：开局、回合开始与抽牌神通。
-// 使用方式：传游戏与数量；过滤已移除牌，手牌最多八张。
+// 使用方式：传游戏与数量；过滤已移除牌，手牌遵守双方统一容量。
 // 返回值：无；修改玩家战斗牌堆、手牌、洗牌次数与 RNG。
 void battleDraw(Game& g, int n) {
     if (!g.player.arts.battle.has_value()) return;
@@ -529,7 +530,7 @@ void battleDraw(Game& g, int n) {
     };
     b.draw.erase(std::remove_if(b.draw.begin(), b.draw.end(), removed), b.draw.end());
     b.discard.erase(std::remove_if(b.discard.begin(), b.discard.end(), removed), b.discard.end());
-    while (n-- > 0 && b.hand.size() < 8) {
+    while (n-- > 0 && b.hand.size() < BattleCards::MaximumHandSize) {
         if (b.draw.empty()) {
             if (b.discard.empty()) break;   // 两堆都空，抽不出牌
             b.draw = b.discard;
@@ -1034,6 +1035,8 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
     const int manaCap = battleManaCap(player);
     battle.mana -= cost;
     const bool HasElementalSwordCombo = ElementalSword::mfAdvanceSwordChain(battle, spell);
+    const int EnhancementBefore = battle.ElementalSwordEnhancementLayers;
+    ElementalSword::mfAdvanceEnhancement(battle, modifiers, HasElementalSwordCombo);
 
     string text;
 
@@ -1055,7 +1058,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
         double damage = jsRound(
             DamageBasis * spell.scale * modifiers.attack * elementMul *
             (1 + battle.buff) *
-            (combo ? 1.15 + std::min(0.15, modifiers.combo) : 1.0) *
+            ElementalSword::mfGenerationDamageMultiplier(modifiers, battle, spell, combo) *
             (daoId == DaoId::Fire ? modifiers.fire : 1.0) *
             (daoId == DaoId::Mind ? modifiers.drain : 1.0) *
             ((artHas(arts, dao, 1) && (daoId == DaoId::Metal || daoId == DaoId::Fire)) ? 1.1 : 1.0) *
@@ -1065,6 +1068,11 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
         string statusText;
         const bool swordCard = spellKind == SpellKind::Sword || spellKind == SpellKind::Human;
         const bool IsElementalSword = ElementalSword::mfIsElementalSword(spell);
+        const double ElementalEnhancement = ElementalSword::mfEnhancementMultiplier(modifiers, battle);
+        if (battle.ElementalSwordEnhancementLayers > EnhancementBefore)
+            statusText = "相生强化+1（" + std::to_string(battle.ElementalSwordEnhancementLayers) + "/" +
+                std::to_string(ElementalSword::MaximumEnhancementLayers) + "层，相生附加收益+" +
+                std::to_string(jsRound((ElementalEnhancement - 1.0) * 100)) + "%）。";
         if (!swordCard) battle.swordSequence = 0;
 
         if (spellKind == SpellKind::Mana) {
@@ -1190,7 +1198,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                 } else {
                     const int before = battle.swordQi;
                     battle.swordQi = std::min(8, battle.swordQi + jsRound((1 + jsFloor(modifiers.qiGain)) * spell.statusScale));
-                    statusText = "剑气+" + std::to_string(battle.swordQi - before) + "层（共" +
+                    statusText += "剑气+" + std::to_string(battle.swordQi - before) + "层（共" +
                                  std::to_string(battle.swordQi) + "/8层）。";
                 }
             }
@@ -1240,13 +1248,14 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
             if (spellKind == SpellKind::Steal)
                 battle.mana = std::min(manaCap, battle.mana + 1 + std::min(1, jsFloor(modifiers.steal)));
             if (IsElementalSword) {
-                damage = jsRound(damage * ElementalSword::mfDamageMultiplier(spell, combo));
+                damage = jsRound(damage * ElementalSword::mfDamageMultiplier(spell, combo, ElementalEnhancement));
                 const int QiBeforeExtra = battle.swordQi;
                 const int ManaBeforeExtra = battle.mana;
                 ElementalSword::mfApplyResources(player, modifiers, battle, spell, HasElementalSwordCombo);
-                if (battle.swordQi > QiBeforeExtra || battle.mana > ManaBeforeExtra)
-                    statusText += "五剑衔接：额外剑气+" + std::to_string(battle.swordQi - QiBeforeExtra) +
-                        "，回灵+" + std::to_string(battle.mana - ManaBeforeExtra) + "。";
+                if (battle.swordQi > QiBeforeExtra)
+                    statusText += "水剑固有：额外剑气+" + std::to_string(battle.swordQi - QiBeforeExtra) + "。";
+                if (battle.mana > ManaBeforeExtra)
+                    statusText += "五行剑诀：回灵+" + std::to_string(battle.mana - ManaBeforeExtra) + "。";
             }
 
             // 穿盾与吸收
@@ -1268,7 +1277,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                 battle.hp -= jsRound(absorb * targetCounter);
             if (IsElementalSword)
                 ElementalSword::mfApplyHitBenefits(battle, spell, combo,
-                    std::min(std::max(0, TargetHealthBefore), std::max(0, jsRound(damage) - absorb)));
+                    std::min(std::max(0, TargetHealthBefore), std::max(0, jsRound(damage) - absorb)), ElementalEnhancement);
             text = spell.name + "：打出伤害" + std::to_string(RawDamageValue) + "，实际气血伤害" +
                    std::to_string(jsRound(damage) - absorb) +
                    (combo ? "，相生连击" : "") + "。";
@@ -1349,7 +1358,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
     X(swordQi) X(water) X(soul) X(charge) X(lock) X(carryMana) \
     X(manaBonus) X(manaPenalty) X(drawNext) X(carryCap) X(hpCostPct) \
     X(poison) X(poisonTurns) X(poisonDamage) X(burn) X(burnTurns) X(swordSequence) \
-    X(comboDraws) X(ElementalSwordManaReturns) X(ElementalSwordSequence) X(FireGrowthRounds) X(buff) X(reduction) X(guard) X(discardPower) X(last)
+    X(comboDraws) X(ElementalSwordManaReturns) X(ElementalSwordSequence) X(ElementalSwordEnhancementLayers) X(FireGrowthRounds) X(buff) X(reduction) X(guard) X(discardPower) X(last)
 
 // 用途：构造当前敌方施术者的角色视图。
 // 参与流程：敌方费用、属性与法宝查询。
@@ -1487,10 +1496,10 @@ static void battleSaveEnemyView(Battle& b, const Battle& v, [[maybe_unused]] int
 
 // 用途：为敌方视角抽牌并重洗弃牌。
 // 参与流程：敌方开局、抽牌效果及轮次推进。
-// 使用方式：传游戏、可写敌方视角和请求数量，手牌最多八张。
+// 使用方式：传游戏、可写敌方视角和请求数量，手牌遵守双方统一容量。
 // 返回值：无；修改敌方视角牌堆、洗牌次数与游戏 RNG。
 static void battleEnemyDraw(Game& g, Battle& v, int count) {
-    while (count-- > 0 && v.hand.size() < 8) {
+    while (count-- > 0 && v.hand.size() < BattleCards::MaximumHandSize) {
         if (v.draw.empty()) {
             if (v.discard.empty()) break;
             v.draw = v.discard; v.discard.clear();
@@ -1539,7 +1548,7 @@ static string battleEnemyPlay(Game* rng, const Player& p, Battle& v,
     else {
         // 未洗牌的抽牌堆顺序确定；连招可以衔接这些牌，不预测重新洗牌的结果。
         int count = v.pendingDraw;
-        while (count-- > 0 && v.hand.size() < 8 && !v.draw.empty()) {
+        while (count-- > 0 && v.hand.size() < BattleCards::MaximumHandSize && !v.draw.empty()) {
             v.hand.push_back(v.draw.back()); v.draw.pop_back();
         }
     }
@@ -2126,11 +2135,11 @@ string battlePreviewConditions(const Player& player, const SpellDef& spell) {
     if (spellKind == SpellKind::Human) text += "消耗全部剑气与当前8%气血，气血最低保留1。";
     if (spellKind == SpellKind::Redraw) text = "数字以出牌后剩余4张手牌为示例；实际弃置和抽牌数随手牌变化。";
     if (spellKind == SpellKind::Draw || spellKind == SpellKind::Foresee || spellKind == SpellKind::Redraw || spellKind == SpellKind::Exhaust)
-        text += "抽牌还受手牌8张上限与本场牌组剩余数量限制。";
+        text += "抽牌还受手牌" + std::to_string(BattleCards::MaximumHandSize) + "张上限与本场牌组剩余数量限制。";
     if (spellKind == SpellKind::Store) text = "封存量随扣费后剩余灵力变化，本回合灵力清零。";
     if (spellKind == SpellKind::Heal) text = "单次治疗量受气血上限、治疗功法和悟道影响；实际回复不超过缺失气血。";
     if (daoId == DaoId::Metal || daoId == DaoId::Water || daoId == DaoId::Wood || daoId == DaoId::Fire || daoId == DaoId::Earth)
-        text += "符合五行相生时直伤倍率为" + std::to_string(jsRound((1.15 + std::min(0.15, modifiers.combo)) * 100)) + "%；此处按未触发相生显示。";
+        text += "未积累强化时，符合五行相生的直伤倍率为" + std::to_string(jsRound((1.15 + std::min(0.15, modifiers.combo)) * 100)) + "%；五行剑诀只放大超出100%的相生附加部分；此处按未触发相生显示。";
     return text;
 }
 

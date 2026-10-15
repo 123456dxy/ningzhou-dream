@@ -38,6 +38,7 @@ static Value enemyCombatToJson(const EnemyCombat& enemy) {
     enemyObject.set("comboDraws", num(enemy.comboDraws));
     enemyObject.set("elementalSwordManaReturns", num(enemy.ElementalSwordManaReturns));
     enemyObject.set("elementalSwordSequence", num(enemy.ElementalSwordSequence));
+    enemyObject.set("elementalSwordEnhancementLayers", num(enemy.ElementalSwordEnhancementLayers));
     enemyObject.set("fireGrowthRounds", num(enemy.FireGrowthRounds));
     enemyObject.set("buff", num(enemy.buff));
     enemyObject.set("reduction", num(enemy.reduction));
@@ -92,6 +93,7 @@ static void enemyCombatFromJson(const Value& enemyObject, EnemyCombat& enemy) {
     enemy.comboDraws = enemyObject["comboDraws"].asInt(0);
     enemy.ElementalSwordManaReturns = enemyObject["elementalSwordManaReturns"].asInt(0);
     enemy.ElementalSwordSequence = enemyObject["elementalSwordSequence"].asInt(0);
+    enemy.ElementalSwordEnhancementLayers = enemyObject["elementalSwordEnhancementLayers"].asInt(0);
     enemy.FireGrowthRounds = enemyObject["fireGrowthRounds"].asInt(0);
     enemy.buff = enemyObject["buff"].asNumber();
     enemy.reduction = enemyObject["reduction"].asNumber();
@@ -235,6 +237,7 @@ Value battleToJson(const Battle& battle) {
     battleObject.set("comboDraws", num(battle.comboDraws));
     battleObject.set("elementalSwordManaReturns", num(battle.ElementalSwordManaReturns));
     battleObject.set("elementalSwordSequence", num(battle.ElementalSwordSequence));
+    battleObject.set("elementalSwordEnhancementLayers", num(battle.ElementalSwordEnhancementLayers));
     battleObject.set("fireGrowthRounds", num(battle.FireGrowthRounds));
     battleObject.set("last", str(battle.last));
     {
@@ -360,6 +363,7 @@ void battleFromJson(const Value& battleObject, Battle& battle) {
     battle.comboDraws = battleObject["comboDraws"].asInt();
     battle.ElementalSwordManaReturns = battleObject["elementalSwordManaReturns"].asInt(0);
     battle.ElementalSwordSequence = battleObject["elementalSwordSequence"].asInt(0);
+    battle.ElementalSwordEnhancementLayers = battleObject["elementalSwordEnhancementLayers"].asInt(0);
     battle.FireGrowthRounds = battleObject["fireGrowthRounds"].asInt(0);
     battle.last = battleObject["last"].asString();
     battle.log = jsonToStringVec(battleObject["log"]);

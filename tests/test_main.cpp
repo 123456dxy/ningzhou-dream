@@ -29,6 +29,8 @@ int main() {
     nztest::runCombatDesignTests();
     nztest::runBattleMechanismTests();
     nztest::mfRunBattleLabTests();
+    nztest::mfRunHandCapacityTests();
+    nztest::mfRunElementalEnhancementTests();
     nztest::mfRunCombatBalanceIterationTests();
     nztest::mfRunXuandaoSectTests();
     nztest::mfRunMarketCycleTests();

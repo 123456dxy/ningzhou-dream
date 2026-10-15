@@ -1,4 +1,5 @@
 #include "core/content/text_table.h"
+#include "core/combat/hand_rules.h"
 
 #include <map>
 #include <set>
@@ -41,8 +42,16 @@ std::string_view text(TextId id) {
     switch (id) {
     case TextId::StrikeDescription: return "固定普通招式，消耗1灵力造成直接伤害；不占神通槽位。";
     case TextId::DefendDescription: return "固定普通招式，消耗1灵力获得本回合12%气血护盾；不占神通槽位。";
-    case TextId::DrawDescription: return "立即抽{count}张牌，手牌最多8张。";
-    case TextId::ForeseeDescription: return "下一回合多抽{count}张牌，手牌最多8张。";
+    case TextId::DrawDescription: {
+        static const std::string Description = "立即抽{count}张牌，手牌最多" +
+            std::to_string(BattleCards::MaximumHandSize) + "张。";
+        return Description;
+    }
+    case TextId::ForeseeDescription: {
+        static const std::string Description = "下一回合多抽{count}张牌，手牌最多" +
+            std::to_string(BattleCards::MaximumHandSize) + "张。";
+        return Description;
+    }
     case TextId::RedrawDescription: return "弃置其余手牌，重抽等量牌，再抽{count}张；弃牌可触发金系效果。";
     case TextId::ExhaustDescription: return "选择手牌、抽牌堆或弃牌堆中一张其他神通卡，仅将该卡移出本场，再抽{count}张。同神通其他副本保留，可选普通招式，下场恢复。";
     case TextId::EmpowerDescription: return "本场伤害加成+{percent}%，累计最多30%，不消耗气血。";

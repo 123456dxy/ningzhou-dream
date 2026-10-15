@@ -48,11 +48,13 @@
 <ClCompile Include="..\tests\test_dungeon_reward_scaling.cpp"/>
 <ClCompile Include="..\tests\test_dungeon_sweep.cpp"/>
 <ClCompile Include="..\tests\test_dungeon_tide_transition.cpp"/>
+<ClCompile Include="..\tests\test_elemental_enhancement.cpp"/>
 <ClCompile Include="..\tests\test_equipment_task.cpp"/>
 <ClCompile Include="..\tests\test_event_rewards.cpp"/>
 <ClCompile Include="..\tests\test_fire_growth.cpp"/>
 <ClCompile Include="..\tests\test_friendship.cpp"/>
 <ClCompile Include="..\tests\test_green_bottle.cpp"/>
+<ClCompile Include="..\tests\test_hand_capacity.cpp"/>
 <ClCompile Include="..\tests\test_herb_acquisition.cpp"/>
 <ClCompile Include="..\tests\test_intel_purchase.cpp"/>
 <ClCompile Include="..\tests\test_main.cpp"/>

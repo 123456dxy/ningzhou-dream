@@ -48,6 +48,8 @@ inline void checkStr(const std::string& got, const std::string& want,
 
 // 各模块测试入口
 void mfRunBattleLabTests();
+void mfRunHandCapacityTests();
+void mfRunElementalEnhancementTests();
 void mfRunCombatBalanceIterationTests();
 void mfRunXuandaoSectTests();
 void mfRunMarketCycleTests();

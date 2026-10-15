@@ -267,7 +267,7 @@ const vector<ManualEntry>& artManuals() {
         };
         // ---- 基础 14 部（arts.mjs 中显式写出的）----
         add("fiveSword", "五行剑诀", "阵", 0, 180,
-            "每层修炼+2%；五属性剑相生额外积剑气；剑链可跨回合，非五行牌不打断，每三剑补牌；有效五行错序重开；返灵每轮最多3次，整数收益主满辅半向下取整")->ElementalSwordMastery = ElementalSword::MasteryPerManualLevel;
+            "每层修炼+2%；五剑相生积累本场强化，最多5层；功法每层使单层强化增加4%相生附加收益（主修全额、辅修减半），仅增强五剑相生增伤、火剑追加伤害、木剑相生吸血及土剑守势，不放大基础伤害或资源；不额外给剑气；剑链跨回合、中性牌不打断，每三剑补牌；错序只重开剑链，不清已得强化；返灵每轮最多3次")->ElementalSwordMastery = ElementalSword::MasteryPerManualLevel;
         v.back().cult = 0.02;
         add("tuna", "吐纳功", "气", 0, 0, "每层修炼 +2%")->cult = 0.02;
         add("bull", "蛮牛护体功", "体", 0, 70, "每层斗法气血 +5%")->hp = 0.05;

@@ -204,6 +204,9 @@ bool saveShapesValid(const Value& root) {
         const auto Sequence = CombatState->asObject().find("elementalSwordSequence");
         if (Sequence != CombatState->asObject().end() &&
             !saveInteger(Sequence->second, 0, ElementalSword::SwordChainCycleLength)) return false;
+        const auto Enhancement = CombatState->asObject().find("elementalSwordEnhancementLayers");
+        if (Enhancement != CombatState->asObject().end() &&
+            !saveInteger(Enhancement->second, 0, ElementalSword::MaximumEnhancementLayers)) return false;
     }
     for (const char* key : {"manuals", "cooldowns"})
         for (const auto& [id, value] : enemy[key].asObject()) if (!value.isNumber()) return false;

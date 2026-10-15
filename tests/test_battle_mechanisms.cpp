@@ -4,6 +4,7 @@
 
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/hand_rules.h"
 #include "core/combat/battle_scaling.h"
 #include "core/checkpoint.h"
 #include "core/sim.h"
@@ -65,7 +66,7 @@ bool partitioned(const Battle& b) {
         for (const auto& uid : *pile) occurrences[uid]++;
     if (occurrences.size() != b.deck.size()) return false;
     for (const auto& c : b.deck) if (occurrences[c.uid] != 1) return false;
-    return b.hand.size() <= 8;
+    return b.hand.size() <= BattleCards::MaximumHandSize;
 }
 
 } // namespace
@@ -128,10 +129,11 @@ void runBattleMechanismTests() {
     {
         Game g = fight({"skim", "gold", "wood", "water"});
         Battle& b = *g.player.arts.battle;
-        hand(b, {"skim", "gold", "gold", "wood", "wood", "water", "water", "defend"});
+        hand(b, {"skim", "gold", "gold", "wood", "wood", "water", "water", "defend",
+                 "strike", "strike", "strike", "strike"});
         const string played = b.hand.front();
-        check(battleTurn(g, played).ok, "满8手牌也可打出抽牌卡");
-        checkEq(b.hand.size(), 8, "先移出施放卡，释放的手牌位置正确抽满");
+        check(battleTurn(g, played).ok, "满容量手牌也可打出抽牌卡");
+        checkEq(b.hand.size(), BattleCards::MaximumHandSize, "先移出施放卡，释放的手牌位置正确抽满");
         check(std::find(b.hand.begin(), b.hand.end(), played) == b.hand.end(), "施放中的抽牌卡不会被自己立即重抽");
         check(partitioned(b), "抽牌后四牌堆仍互斥且守恒");
     }

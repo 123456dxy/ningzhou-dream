@@ -101,6 +101,8 @@ export function battleStatusRows(b) {
   if (b.water > 0) add('水势', `${b.water} / 6 层`, '水系爆发消耗后清空');
   if (b.swordSequence > 0) add('连续剑牌', `${b.swordSequence} 张`, '本回合累计；非剑牌会打断');
   if (b.elementalSwordSequence > 0) add('五行剑连段', `${b.elementalSwordSequence} / 3`, '跨回合保留；非五行牌不打断，错序五行重新起段');
+  if (b.elementalSwordEnhancementLayers > 0) add('相生强化', `${b.elementalSwordEnhancementLayers} / ${b.elementalSwordEnhancementLimit ?? '—'} 层 · 相生附加收益 +${b.elementalSwordEnhancementPercent ?? 0}%`, '功法层数决定每层倍率；仅增强五剑相生附加收益，跨回合保留，新战斗归零');
+  if (b.enemyElementalSwordEnhancementLayers > 0) add('敌方相生强化', `${b.enemyElementalSwordEnhancementLayers} / ${b.elementalSwordEnhancementLimit ?? '—'} 层`, '敌方五行剑诀本场积累；不强化抽牌或返灵', 'bad');
   if (b.fireGrowthRounds > 0) add('焰势成长', `${b.fireGrowthRounds} / ${b.fireGrowthMaxRounds ?? '—'} 轮`, '本场实际灼烧结算后积累；强化后续叠焰与引爆，新战斗归零');
   if (b.discardPower > 0) add('弃牌锐势', `下次直接攻击 +${percent(b.discardPower)}`, '只消耗一次；治疗与抽牌不消耗');
   if (b.buff) add('攻击增伤', `${b.buff > 0 ? '+' : ''}${percent(b.buff)}`, '本场持续，可叠加', b.buff > 0 ? 'good' : 'bad');

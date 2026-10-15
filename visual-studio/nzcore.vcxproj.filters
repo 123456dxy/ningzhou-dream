@@ -66,6 +66,7 @@
 <ClInclude Include="..\src\core\combat\elemental_sword.h"><Filter>Backend\combat</Filter></ClInclude>
 <ClCompile Include="..\src\core\combat\fire_growth.cpp"><Filter>Backend\combat</Filter></ClCompile>
 <ClInclude Include="..\src\core\combat\fire_growth.h"><Filter>Backend\combat</Filter></ClInclude>
+<ClInclude Include="..\src\core\combat\hand_rules.h"><Filter>Backend\combat</Filter></ClInclude>
 <None Include="..\src\core\combat\README.md"><Filter>Backend\combat</Filter></None>
 <ClCompile Include="..\src\core\combat\sword.cpp"><Filter>Backend\combat</Filter></ClCompile>
 <ClInclude Include="..\src\core\conflict.h"><Filter>Backend</Filter></ClInclude>

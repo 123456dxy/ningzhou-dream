@@ -4,6 +4,7 @@
 
 #include "core/content/game_ids.h"
 #include "core/content/text_table.h"
+#include "core/combat/hand_rules.h"
 #ifndef NZ_CONTENT_REGISTRY_ONLY
 #include "core/arts.h"
 #include "core/artifact.h"
@@ -64,7 +65,11 @@ void runContentRegistryTests() {
     check(generates(DaoId::Wood, DaoId::Fire) && !generates(DaoId::Fire, DaoId::Wood), "五行相生方向保留");
     check(sectDao(SectId::Lihuo) == DaoId::Fire, "宗门传承按 ID 解析");
     checkStr(formatText(TextId::DrawDescription, {{"count", "3"}}),
-             "立即抽3张牌，手牌最多8张。", "词表参数产生兼容展示文本");
+             "立即抽3张牌，手牌最多" + std::to_string(nz::BattleCards::MaximumHandSize) + "张。",
+             "词表参数与真实手牌容量一致");
+    checkStr(formatText(TextId::ForeseeDescription, {{"count", "2"}}),
+             "下一回合多抽2张牌，手牌最多" + std::to_string(nz::BattleCards::MaximumHandSize) + "张。",
+             "预谋词表同样展示权威手牌容量");
     checkStr(formatTextTemplate("{who}/{who}: {value}", {{"who", "甲"}, {"value", "{count}"}}),
              "甲/甲: {count}", "重复占位符可复用参数且参数内容不二次执行");
     check(invalidText([] { formatText(TextId::DrawDescription); }), "缺少参数明确失败");

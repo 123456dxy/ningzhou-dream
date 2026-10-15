@@ -1711,7 +1711,7 @@ function viewBattle() {
     + cdLine
     + renderBattleArtifacts(b)
     // 手牌：之前 hand 算好了却没插进返回值，战斗界面一张牌都不显示
-    + `<div class="combat-hand">${hand}</div>`
+    + `<p class="subtle">手牌 ${b.hand.length} / ${b.handLimit ?? '—'} 张</p><div class="combat-hand">${hand}</div>`
     + `<footer class="combat-bottom">`
     + `<div class="combat-piles"><span>抽牌堆 ${b.draw}</span>`
     + `<span>弃牌堆 ${b.discard}</span></div>`
