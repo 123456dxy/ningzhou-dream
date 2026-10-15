@@ -115,8 +115,8 @@ std::string_view text(TextId id) {
     case TextId::GardenReserveRequiresBottle: return "持有小绿瓶后才可存入灵田加速储备。";
     case TextId::GardenBottleGrowthRule: return "每格同药材最多99份；每份成熟收获3份。天然每天100成长点，洞府每档+10；格内储备全额负担时灵气每档+30、绿瓶额外+200。日费=尚需加速种苗数×品阶×(灵气档位+绿瓶1)，储备不足自然生长且不扣费。外出照常生长，不自动扣主背包灵石。";
     case TextId::GardenNoBottleGrowthRule: return "每格同药材最多99份；每份成熟收获3份。天然每天100成长点，洞府每档+10；外出照常自然生长。灵气配给沿用原修炼规则，不额外加速灵田。";
-    case TextId::PillCultivationCompleteEffect: return "标称修为 +{NominalValue}；实际吸收受本小境25%及距圆满余量限制。";
-    case TextId::PillCultivationUseLimit: return "；修为增量不超过标称药效（{NominalValue}）、本小境25%（{StageLimit}）及距圆满余量（{RemainingValue}）";
+    case TextId::PillCultivationCompleteEffect: return "标称修为 +{NominalValue}；实际吸收受本小境单次上限及距圆满余量限制。";
+    case TextId::PillCultivationUseLimit: return "；修为增量不超过标称药效（{NominalValue}）、本小境单次上限（{StageLimit}）及距圆满余量（{RemainingValue}）";
     case TextId::DungeonElapsedPaused: return "秘境探索已结束，余下 {RemainingDays} 天探索耗时尚未结算。已回到岁月纪事，请先处理当前抉择并点击继续推进，再迎战兽潮或进行其他安排。";
     }
     throw std::invalid_argument("Invalid text ID");

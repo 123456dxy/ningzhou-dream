@@ -253,6 +253,7 @@ function renderGreenBottle(state) {
     + (upgrade.reason ? `<p class="cave-access-note">${esc(upgrade.reason)}</p>` : '')
     + `<details class="cave-batch-details" data-green-bottle-dungeons><summary>寻找升阶灵材</summary>`
     + (bottle.dungeons || []).map(dungeon => `<div class="cave-bottle-dungeon"><div><strong>${esc(dungeon.name)}</strong>`
+      + (dungeon.realmName ? `<p>固定难度：${esc(dungeon.realmName)}</p>` : '')
       + `<p>通关获得 ${esc(dungeon.materialName)} ×${numberText(dungeon.rewardCount)}</p>`
       + (dungeon.reason ? `<small>${esc(dungeon.reason)}</small>` : '') + '</div>'
       + actionButton('green-bottle-dungeon', '进入秘境', dungeon, `${gradeAttribute} data-material-grade="${esc(dungeon.grade)}"`) + '</div>').join('')

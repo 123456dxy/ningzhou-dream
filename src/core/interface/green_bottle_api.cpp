@@ -44,6 +44,7 @@ json::Value mfGreenBottleView(const Game& State) {
         json::Value Entry(json::Object{}); Entry.set("grade", QuoteEntry.Grade); Entry.set("name", QuoteEntry.Name);
         Entry.set("materialId", QuoteEntry.MaterialId); Entry.set("materialName", QuoteEntry.MaterialName);
         Entry.set("rewardCount", QuoteEntry.RewardCount); Entry.set("minimumBottleGrade", QuoteEntry.MinimumBottleGrade);
+        Entry.set("stage", QuoteEntry.Stage); Entry.set("realmName", realmName(QuoteEntry.Stage));
         Entry.set("enabled", QuoteEntry.Enabled); Entry.set("reason", QuoteEntry.Reason);
         Dungeons.push_back(std::move(Entry));
     }

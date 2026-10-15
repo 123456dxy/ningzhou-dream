@@ -33,9 +33,9 @@ void mfCheckCultivationPillCatalog() {
         checkEq(Pill["catalogEffectValue"].asInt(), NominalValue, "完整修为丹目录提供本地标称值：" + string(RecipeId));
         check(Pill["catalogEffect"].asString().find("+" + std::to_string(NominalValue)) != string::npos,
             "完整修为丹目录不把初炼气28点上限当成药效：" + string(RecipeId));
-        checkNear(Pill["effectValue"].asNumber(), 28, "初炼气当前服用仍受小境25%限制：" + string(RecipeId));
-        check(Pill["usage"].asString().find("25%（28）") != string::npos &&
-            Pill["usage"].asString().find("距圆满余量（110）") != string::npos,
+        checkNear(Pill["effectValue"].asNumber(), 28, "扩大修为单位后初炼气服丹上限仍为28：" + string(RecipeId));
+        check(Pill["usage"].asString().find("本小境单次上限（28）") != string::npos &&
+            Pill["usage"].asString().find("距圆满余量（1100）") != string::npos,
             "当前服用说明列明小境上限与圆满余量：" + string(RecipeId));
         check(saveToJson(State) == Before, "修为丹完整与当前预览不改状态：" + string(RecipeId));
         check(artUsePill(State, RecipeId).empty(), "初炼气实际服用修为丹成功：" + string(RecipeId));
@@ -50,13 +50,13 @@ void mfCheckCultivationPillCatalog() {
         check(artUsePill(State, RecipeId).empty(), "高境界实际服用修为丹成功：" + string(RecipeId));
         checkEq(Player.xp, NominalValue, "高境界真实结算与完整吸收预览一致：" + string(RecipeId));
 
-        Player.xp = 17999;
+        Player.xp = realmOf(Player.stage).need - 1;
         const auto NearFullQuote = artPillUseInfo(Player, *findRecipe(RecipeId));
         checkNear(NearFullQuote.effectValue, 1, "临近圆满只可吸收剩余1点：" + string(RecipeId));
         check(NearFullQuote.usage.find("距圆满余量（1）") != string::npos,
             "临近圆满预览明确剩余可吸收量：" + string(RecipeId));
         check(artUsePill(State, RecipeId).empty(), "临近圆满实际服用成功：" + string(RecipeId));
-        checkEq(Player.xp, 18000, "实际修为不超过圆满：" + string(RecipeId));
+        checkEq(Player.xp, realmOf(Player.stage).need, "实际修为不超过圆满：" + string(RecipeId));
     }
     CreateOptions Options; Options.seed = 20261013; Options.traitsExplicit = true;
     auto State = createGame(Options); State.npcs.clear(); State.pending.reset(); State.job.reset();

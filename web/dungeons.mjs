@@ -14,7 +14,7 @@ const SITE = { wild: '野外秘境', natural: '野外秘境', intel: '情报秘�
 // 流程：按奖励kind查中文标签，未知类型保留其文字。
 // 调用方式：秘境奖励渲染传入kind。
 // 返回值：中文类型字符串。
-const kindName = kind => ({ herb: '药材', material: '炼器材料', spell: '神通', card: '神通', buyCard: '购买神通',
+const kindName = kind => ({ herb: '药材', material: '炼器材料', bottleMaterial: '专属灵材', spell: '神通', card: '神通', buyCard: '购买神通',
   learnSpell: '永久神通', manual: '功法抄本',
   relic: '秘境遗物', buyRelic: '购买遗物', heal: '疗伤', rest: '调息休整', buyHeal: '药浴疗伤', remove: '精简牌组',
   cache: '搜寻遗藏', risk: '破开禁制', eventChoice: '事件抉择', stones: '灵石' }[kind] || '奖励');
@@ -26,6 +26,10 @@ const room = type => ROOM[type] || ['○', '去处'];
 
 // 用途：统一读取后端奖励说明；流程：奖励预览和真实选项；调用方式：传奖励快照；返回值：说明文本。
 const rewardDescription = reward => reward.description ?? reward.desc ?? '';
+
+// 用途：显示入场时冻结的终点材料数量；流程：地图入口、目录、探索与结算共用。
+// 调用方式：传后端site或run快照；返回值：转义后的数量，旧响应缺字段沿用原十份。
+const targetRewardCount = source => esc(source.targetRewardCount ?? 10);
 
 // 用途：展示后端扫荡报价；流程：秘境目录与舆图入口；调用方式：传站点和是否附带原因；返回值：按钮与禁用说明HTML。
 function renderDungeonSweep(site, { reason = true } = {}) {
@@ -68,7 +72,7 @@ export function renderDungeonEntrances(state, location) {
   return `<section class="location-dungeons" data-location-dungeons><h4>秘境入口</h4>`
     + (sites.some(site => site.sweep) ? `<p class="dungeon-sweep-note">扫荡直接选择通关主奖励，不获得沿途收益；离开秘境时结算所示耗时。</p>` : '')
     + sites.map(site => `<div class="location-service"><div><strong>${esc(site.name)}</strong>`
-      + `<p>${esc(site.realmName)} · ${site.targetName ? `${esc(site.targetName)} ×10` : esc(SITE[site.type] || '历练秘境')}</p>`
+      + `<p>${esc(site.realmName)} · ${site.targetName ? `${esc(site.targetName)} ×${targetRewardCount(site)}` : esc(SITE[site.type] || '历练秘境')}</p>`
       + renderDungeonBossPreview(site, { details: true })
       + `<small>${esc(site.reason || (site.cleared ? '已通关' : site.available ? `第 ${site.expiresYear} 年前可探索` : site.nextOpenYear != null ? `下次第 ${site.nextOpenYear} 年开放` : '暂未开放'))}</small></div>`
       + `<div class="dungeon-entrance-actions"><button data-action="dungeon-enter" data-id="${esc(site.id)}" ${site.entryEnabled ? '' : 'disabled'}>进入秘境</button>${renderDungeonSweep(site)}</div></div>`).join('')
@@ -97,7 +101,7 @@ export function renderDungeonDirectory(state) {
         + `<div class="dungeon-site-body"><div class="dungeon-site-head"><span>${esc(SITE[site.type] || '野外秘境')}</span><b>准入 · ${esc(site.realmName)}</b></div>`
         + `<h3>${esc(site.name)}</h3><p>${esc(site.locationName)}${site.available ? ` · 开放至第 ${esc(site.expiresYear)} 年` : ''}</p>`
         + (site.rewardHint ? `<p class="dungeon-reward-hint" data-dungeon-reward-hint>${esc(site.rewardHint)}</p>` : '')
-        + (site.targetName ? `<div class="dungeon-target">终点保底 <b>${esc(site.targetName)} ×10</b><small>${esc(site.targetGrade)}阶${kindName(site.targetKind)}</small></div>` : '')
+        + (site.targetName ? `<div class="dungeon-target">终点保底 <b>${esc(site.targetName)} ×${targetRewardCount(site)}</b><small>${esc(site.targetGrade)}阶${kindName(site.targetKind)}</small></div>` : '')
         + renderDungeonBossPreview(site, { details: true })
         + `<p class="dungeon-site-reason">${esc(site.reason || (site.cleared ? '本处秘境已通关。' : !site.available && site.nextOpenYear != null ? `下次第 ${site.nextOpenYear} 年开放` : here ? '已抵达入口，可开始探索。' : '先前往入口所在地点。'))}</p>`
         + `<div class="dungeon-site-actions"><button class="primary" data-action="dungeon-enter" data-id="${esc(site.id)}" ${site.entryEnabled ? '' : 'disabled'}>${site.entered ? '继续探索' : '进入秘境'}</button>`
@@ -242,7 +246,7 @@ export function renderDungeonRun(state, battleHTML = '') {
   const taken = run.bossRewardTaken;
   const currentPreview = current ? dungeonNodePreview(current) : null;
   return `<div class="dungeon-run" data-dungeon-run="${esc(run.siteId)}">`
-    + `<header class="dungeon-run-heading"><div><span class="dungeon-eyebrow">${esc(run.entryRealmName || run.realmName)} · ${esc(SITE[run.type] || '秘境历练')}</span><h2>${esc(run.siteName)}</h2>`
+    + `<header class="dungeon-run-heading"><div><span class="dungeon-eyebrow">${esc((run.type === 'bottle' ? run.difficultyRealmName : '') || run.entryRealmName || run.realmName)} · ${esc(SITE[run.type] || '秘境历练')}</span><h2>${esc(run.siteName)}</h2>`
     + `<p>${esc(current?.name || '秘境入口')} · 已探索 ${(run.nodes || []).filter(node => node.visited).length} 处 · 入境 ${run.elapsedDays || 0} 天</p>`
     + (run.rewardHint ? `<p class="dungeon-reward-hint" data-dungeon-reward-hint>${esc(run.rewardHint)}</p>` : '') + `</div>`
     + `<div class="dungeon-run-vitals"><span>气血 <b>${health}</b> / 100 · 秘境灵石 ${run.stones || 0}</span><button class="subtle" data-action="save">保存进度</button>`
@@ -250,10 +254,10 @@ export function renderDungeonRun(state, battleHTML = '') {
     + (run.phase !== 'complete' ? `<p class="dungeon-exit-note">提前退出后入口消失，无法再次进入；主动退出带回已得物资，战斗中逃离只带回一半。</p>` : '')
     + (current && (current.encounterName || current.eventName || current.encounterHint || current.eventHint) && !isBossReward && run.phase !== 'route' && run.phase !== 'complete'
       ? `<div class="dungeon-current-preview" data-dungeon-current-preview><strong>${esc(currentPreview.name)}</strong><p>${esc(currentPreview.hint)}</p></div>` : '')
-    + (run.targetName ? `<div class="dungeon-run-target">终点保底 <strong>${esc(run.targetName)} ×10</strong><span>${run.targetGranted ? '已取得目标材料' : '击败守关者后取得，另选通关主奖'}</span></div>` : '')
+    + (run.targetName ? `<div class="dungeon-run-target">终点保底 <strong>${esc(run.targetName)} ×${targetRewardCount(run)}</strong><span>${run.targetGranted ? '已取得目标材料' : '击败守关者后取得，另选通关主奖'}</span></div>` : '')
     + (!isBossReward && run.phase !== 'complete' ? renderDungeonBossPreview(run, { details: true }) : '')
     + (state.battle ? `<div class="dungeon-combat">${battleHTML}</div>` : '')
-    + (run.phase === 'complete' ? `<section class="dungeon-complete"><span>♜</span><h3>秘境已通关</h3><p>${run.targetName ? `已取得${esc(run.targetName)} ×10。` : ''}${taken ? `通关主奖：${esc(taken.name)}${taken.kind === 'stones' ? ` · ${esc(taken.amount)} 灵石` : ' · 永久获得'}。` : ''}点击离开，结算本次战利品。</p><button class="primary" data-action="dungeon-leave">结算战利品并离开</button></section>` : '')
+    + (run.phase === 'complete' ? `<section class="dungeon-complete"><span>♜</span><h3>秘境已通关</h3><p>${run.targetName ? `已取得${esc(run.targetName)} ×${targetRewardCount(run)}。` : ''}${taken ? `通关主奖：${esc(taken.name)}${taken.kind === 'stones' ? ` · ${esc(taken.amount)} 灵石` : ' · 永久获得'}。` : ''}点击离开，结算本次战利品。</p><button class="primary" data-action="dungeon-leave">结算战利品并离开</button></section>` : '')
     + (isReward || isChoice ? `<section class="dungeon-reward-panel${isBossReward ? ' permanent' : ''}" data-dungeon-rewards><div class="dungeon-reward-heading"><span>${esc(current?.name || '本层已完成')}</span>`
       + `<h3>${isBossReward ? '通关主奖励 · 三选一' : ['camp','rest'].includes(current?.type) ? '营地休整' : ['merchant','shop'].includes(current?.type) ? '秘境行商' : current?.type === 'event' ? '眼前的奇遇' : isReward ? '选择一项奖励' : '眼前的抉择'}</h3><p>${esc(isBossReward ? '选择一份永久传承或大量灵石。神通学会后自行携带，功法抄本带回后可修习；这些主奖励会留下。' : run.text || (isEventChoice ? currentPreview?.hint || '选择一项；代价与风险见各选项。' : ['merchant','shop'].includes(current?.type) ? '用本次行囊中的灵石购买一项，或略过行商继续探索。' : isReward ? '沿途神通与遗物只在本次秘境生效，构筑会带入后续斗法。' : current?.text || '做出选择后继续前进。'))}</p></div>`
       + `<div class="dungeon-reward-list">${rewards.map(reward => `<button class="dungeon-reward-card ${esc(reward.kind === 'buyRelic' ? 'relic' : reward.kind || 'choice')}" data-action="dungeon-claim" data-id="${esc(reward.id)}" ${reward.enabled === false ? 'disabled' : ''}>`
@@ -285,5 +289,5 @@ export function renderDungeons(state, { mode = 'sites', intelKind = 'all', intel
     + `<div class="subtabs"><button class="subtab ${mode === 'sites' ? 'on' : ''}" data-dungeon-view="sites">山河秘境</button>`
     + `<button class="subtab ${mode === 'intel' ? 'on' : ''}" data-dungeon-view="intel">天机阁情报</button></div>`
     + (mode === 'intel' ? renderDungeonIntel(state, { kind: intelKind, search: intelSearch, grade: intelGrade }) : renderDungeonDirectory(state))
-    + hintBox(['秘境难度按入境时的境界确定；探索后续房间会沿用当前气血。', '天机阁可购买指定材料的秘境位置，通关终点固定获得材料 ×10。', '天魔眼每 50 年开放 5 年；无尽海每 10 年开放 2 年。']);
+    + hintBox(['敌人难度与奖励以入口说明为准；小绿瓶灵材秘境有固定境界难度，探索后续房间会沿用当前气血。', '天机阁可购买指定材料的秘境位置，通关终点固定获得材料 ×10。', '天魔眼每 50 年开放 5 年；无尽海每 10 年开放 2 年。']);
 }

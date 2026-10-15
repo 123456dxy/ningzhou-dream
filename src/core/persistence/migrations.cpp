@@ -12,10 +12,39 @@
 #include "core/content/npc_combat_profiles.h"
 #include <set>
 #include <algorithm>
+#include <cmath>
 
 namespace nz::persistence {
 
+namespace {
+// 用途：保留旧人物的当前小境修炼比例；流程：旧修为单位载入；用法：只传旧单位人物；返回：无，宽整数中间值防止扩十倍溢出，非法负值留给状态校验拒绝。
+void mfMigratePersonCultivation(Person& PersonState) {
+    if (PersonState.xp < 0) return;
+    const int Requirement = realmOf(PersonState.stage).need;
+    // 化神没有下一阶进度比例，保留终境既有记录，不把合法历史修为清零。
+    if (Requirement == 0) return;
+    const auto Scaled = static_cast<long long>(PersonState.xp) * CultivationUnits::Scale;
+    PersonState.xp = static_cast<int>(std::min(static_cast<long long>(Requirement), Scaled));
+}
+
+// 用途：一次性扩大旧修为与未结算小数；流程：载入动作边界；用法：仅缺标记或旧单位的根对象调用；返回：无，不改时间、资源或RNG，也不重放丹药效果。
+void mfMigrateCultivationUnits(const Value& Root, Game& State) {
+    if (Root["cultivationUnitScale"].asInt(CultivationUnits::LegacyScale) == CultivationUnits::Scale) return;
+    mfMigratePersonCultivation(State.player);
+    for (auto& PersonState : State.npcs) mfMigratePersonCultivation(PersonState);
+    const auto Carry = State.clock.carry.find("xp");
+    if (Carry == State.clock.carry.end() || State.player.xp < 0 || realmOf(State.player.stage).need == 0) return;
+    // 公共加载入口已拒绝非有限/负数/>1000余数；这里的扩展最多10000，不会溢出int。
+    const double Expanded = Carry->second * CultivationUnits::Scale;
+    const int Whole = jsFloor(Expanded + 1e-9);
+    State.player.xp = static_cast<int>(std::min(static_cast<long long>(realmOf(State.player.stage).need),
+        static_cast<long long>(State.player.xp) + Whole));
+    Carry->second = std::max(0.0, Expanded - Whole);
+}
+} // namespace
+
 void migrateLegacySave(const Value& root, Game& game) {
+    mfMigrateCultivationUnits(root, game);
     crafting::mfMigrateGardenRules(game);
     // 旧版本两个聚气神通共用 gather，实际执行总会选到持续聚气。
     // 带版本标记的新档保留基础聚气；旧档只迁移已有牌，不重置斗法。

@@ -10,6 +10,7 @@ Value gameToJson(const Game& game) {
     root.set("format", str(SAVE_FORMAT));
     root.set("version", num(game.version));
     root.set("combatRulesVersion", num(5));
+    root.set("cultivationUnitScale", num(CultivationUnits::Scale));
     root.set("rng", num(static_cast<double>(game.rng)));
     root.set("seed", num(static_cast<double>(game.seed)));
     root.set("year", num(game.year));

@@ -286,7 +286,7 @@ void runMechanicsRegressionTests() {
         Job teaching = *g.job;
         g.job.reset();
         monthComplete(g, teaching);
-        checkEq(pupil.xp, 40, "日常授业给真实弟子修为");
+        checkEq(pupil.xp, 400, "扩大修为单位后日常授业给真实弟子400修为");
         checkEq(pupil.insight, 13, "日常授业给真实弟子悟性");
         Npc& partner = g.npcs[2];
         partner.alive = true;

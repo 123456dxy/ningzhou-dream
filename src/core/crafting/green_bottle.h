@@ -22,7 +22,7 @@ struct GreenBottleUpgradeQuote {
 struct GreenBottleDungeonQuote {
     bool Enabled = false;
     std::string Reason, Name, MaterialId, MaterialName;
-    int Grade = 0, MinimumBottleGrade = 0, RewardCount = 10;
+    int Grade = 0, MinimumBottleGrade = 0, Stage = 0, RewardCount = 0;
 };
 // 用途：取得持有天赋者的真实日增；流程：灵田报价/日结算；返回：0..700，无天赋恒0，不改变阶位。
 int mfGreenBottleDailyBonus(const Player& Owner);
@@ -36,7 +36,9 @@ GreenBottleUpgradeQuote mfQuoteGreenBottleUpgrade(const Game& State);
 std::array<int, 6> mfGreenBottleMaturityDays(int CaveTier, int BottleGrade);
 // 用途：按最新报价永久升级一级；流程：洞府动作；参数ExpectedGrade防重复或过期请求；返回：错误或空，拒绝无部分扣费。
 std::string mfUpgradeGreenBottle(Game& State, int ExpectedGrade);
-// 用途：报价瓶阶解锁的专属秘境；流程：洞府入口/实际进入；返回：资格与固定10份目标，无人物境界硬锁。
+// 用途：查询该阶一次通关应得的灵材；流程：报价、入场冻结和存档校验；用法：传材料品阶；返回：与升阶需求相同的数量，未知阶位为0。
+int mfGreenBottleMaterialRewardCount(int MaterialGrade);
+// 用途：报价瓶阶解锁的专属秘境；流程：洞府入口/实际进入；返回：固定难度、资格和一次升阶足量目标。
 GreenBottleDungeonQuote mfQuoteGreenBottleDungeon(const Game& State, int Grade);
 // 用途：列出已解锁的三类秘境入口；流程：洞府纯查询；返回：仅持有天赋可见，满六阶保留六阶入口。
 std::vector<GreenBottleDungeonQuote> mfGreenBottleDungeonOptions(const Game& State);

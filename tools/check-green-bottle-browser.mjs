@@ -75,6 +75,8 @@ try {
   const herb = initial.herbCatalog.find(item => item.id === '6001'); assert.ok(herb);
   const fixture = JSON.parse((await api('export')).game);
   fixture.player.cave = fixture.player.location = 'wuling'; fixture.player.caveTier = 2; fixture.player.qiSupply = 1;
+  // 专属灵境按金丹/元婴/化神准入；综合升阶夹具具备最高入口资格，低境拒绝由独立专属秘境冒烟覆盖。
+  fixture.player.stage = fixture.player.highestStage = 12; fixture.player.lifespan = 2000; fixture.player.xp = 0;
   fixture.player.renown = 100; fixture.player.stones = 500000;
   fixture.player.arts.herbs[herb.name] = 100; fixture.player.herbs = Object.values(fixture.player.arts.herbs).reduce((sum, amount) => sum + amount, 0);
   await api('import', { game: JSON.stringify(fixture) });

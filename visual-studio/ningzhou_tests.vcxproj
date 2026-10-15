@@ -41,6 +41,7 @@
 <ClCompile Include="..\tests\test_craft_prices.cpp"/>
 <ClCompile Include="..\tests\test_craft_timing.cpp"/>
 <ClCompile Include="..\tests\test_crafting_fixes.cpp"/>
+<ClCompile Include="..\tests\test_cultivation_units.cpp"/>
 <ClCompile Include="..\tests\test_discard_timing.cpp"/>
 <ClCompile Include="..\tests\test_display_contract.cpp"/>
 <ClCompile Include="..\tests\test_dungeon.cpp"/>

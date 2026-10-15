@@ -9,6 +9,8 @@
 #include "core/exploration/dungeon_encounters.h"
 #include "core/exploration/dungeon_events.h"
 #include "core/exploration/dungeon_reward_rules.h"
+#include "core/content/green_bottle_content.h"
+#include <algorithm>
 
 namespace nz::api {
 using json::Value;
@@ -34,11 +36,12 @@ Value counts(const map<string,int>& values) {
 }
 // 用途：格式化秘境情报的目标材料说明。
 // 参与流程：HTTP请求分派、前端状态或动作预览。
-// 使用方式：传入Value& o, const string& kind,const string& id,const string& name,int grade，按本模块入口调用。
+// 使用方式：传入目标身份、品阶与入场冻结数量，按本模块入口调用。
 // 返回值：无；完成说明所述写入或展示操作。
-void target(Value& o, const string& kind,const string& id,const string& name,int grade) {
+void target(Value& o, const string& kind,const string& id,const string& name,int grade,int TargetCount) {
     o.set("targetKind",Value(kind)); o.set("targetId",Value(id));
     o.set("targetName",Value(name)); o.set("targetGrade",num(grade));
+    o.set("targetRewardCount",num(TargetCount));
 }
 // 用途：生成单项秘境奖励的显示对象。
 // 参与流程：HTTP请求分派、前端状态或动作预览。
@@ -98,7 +101,7 @@ Value dungeonView(const Game& g) {
         s.set("entered",Value(wasEntered));
         const int period=site.type=="sea"?10:site.type=="tianmo"?50:0;
         s.set("nextOpenYear",num(period ? (year/period+1)*period : 0));
-        target(s,site.targetKind,site.targetId,site.targetName,site.targetGrade);
+        target(s,site.targetKind,site.targetId,site.targetName,site.targetGrade,site.TargetRewardCount);
         s.set("bossRewards",rewardsView(g,site.bossRewards));
         sites.push_back(std::move(s));
     }
@@ -129,6 +132,10 @@ Value dungeonView(const Game& g) {
     r.set("siteId",Value(run.siteId)); r.set("siteName",Value(run.siteName)); r.set("type",Value(run.type));
     r.set("location",Value(run.location)); r.set("phase",Value(run.phase)); r.set("current",Value(run.current));
     r.set("stage",num(run.stage)); r.set("realmName",Value(realmName(run.stage))); r.set("health",num(run.health));
+    const auto FrozenSite = std::find_if(g.dungeons.sites.begin(), g.dungeons.sites.end(),
+        [&](const DungeonSite& Site) { return Site.id == run.siteId; });
+    const int DifficultyStage = run.type == "bottle" && FrozenSite != g.dungeons.sites.end() ? FrozenSite->stage : run.stage;
+    r.set("difficultyStage",num(DifficultyStage)); r.set("difficultyRealmName",Value(realmName(DifficultyStage)));
     r.set("row",num(run.row)); r.set("elapsedDays",num(run.elapsedDays)); r.set("cleared",Value(run.cleared));
     r.set("layoutVersion", num(run.LayoutVersion));
     const int RewardStage = mfDungeonEntryRewardStage(g, run);
@@ -144,7 +151,7 @@ Value dungeonView(const Game& g) {
     r.set("stones",num(run.stones)); r.set("targetGranted",Value(run.targetGranted));
     r.set("bossRewards",rewardsView(g,run.bossRewards)); r.set("bossRewardClaimed",Value(run.bossRewardClaimed));
     r.set("bossRewardTaken",run.bossRewardTaken?rewardView(g,*run.bossRewardTaken):Value());
-    target(r,run.targetKind,run.targetId,run.targetName,run.targetGrade);
+    target(r,run.targetKind,run.targetId,run.targetName,run.targetGrade,run.TargetRewardCount);
     json::Array nodes;
     for (const auto& node:run.nodes) {
         Value n(json::Object{}); n.set("id",Value(node.id)); n.set("type",Value(node.type));
@@ -203,6 +210,8 @@ Value dungeonView(const Game& g) {
     for (const auto& [id,count]:run.herbs) item("herb",id,id,count);
     for (const auto& [id,count]:run.materials) {
         string name=id; for (const auto& def:data::MaterialDef_TABLE()) if (def.id==id) name=def.name;
+        // 专属灵材不在普通矿材表；战利品显示沿用绿瓶权威目录的名称，不暴露内部ID。
+        if (const auto* Definition = content::mfFindGreenBottleMaterial(id)) name = Definition->Material.name;
         item("material",id,name,count);
     }
     for (const auto& [id,count]:run.potions) {

@@ -40,7 +40,7 @@ double insightMul(const Player& p);
 // 用途：计算功法等常驻修炼系数的基础速度。
 // 参与流程：基础修炼速度第一项。
 // 使用方式：传角色，从 artModsOf 取 cult，缺省保留可修炼基数。
-// 返回值：十八乘以有效 cult 的速度基数。
+// 返回值：旧十八点基数乘统一修为单位倍率，再乘有效 cult；药效不经过此入口。
 double manualBase(const Player& p);
 // 境界系数
 // 用途：按大境界组读取修炼倍率。

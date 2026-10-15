@@ -84,16 +84,24 @@ std::string mfUpgradeGreenBottle(Game& State, int ExpectedGrade) {
     State.eventSeq = Candidate.eventSeq;
     return {};
 }
-// 用途：按当前瓶阶与真实洞府管理资格报价秘境；流程：专属入口/执行；返回：不收费、不生成入口的快照。
+// 用途：统一专属秘境的一次通关产量；流程：报价/冻结奖励/存档校验；使用：传材料品阶；返回：一轮升阶所需数量，非法品阶为0。
+int mfGreenBottleMaterialRewardCount(int MaterialGrade) {
+    if (!content::mfGreenBottleMaterialForGrade(MaterialGrade)) return 0;
+    return GreenBottleUpgradeMaterialCounts[MaterialGrade - 4];
+}
+// 用途：按当前瓶阶、固定境界与真实洞府管理资格报价秘境；流程：专属入口/执行；返回：不收费、不生成入口的快照。
 GreenBottleDungeonQuote mfQuoteGreenBottleDungeon(const Game& State, int Grade) {
     GreenBottleDungeonQuote Quote; Quote.Grade = Grade;
     const auto* Definition = content::mfGreenBottleMaterialForGrade(Grade);
     if (!Definition) { Quote.Reason = "未知的小绿瓶灵材秘境。"; return Quote; }
     Quote.Name = Definition->DungeonName; Quote.MaterialId = Definition->Material.id;
     Quote.MaterialName = Definition->Material.name; Quote.MinimumBottleGrade = Definition->MinimumBottleGrade;
+    Quote.Stage = Definition->DungeonStage;
+    Quote.RewardCount = mfGreenBottleMaterialRewardCount(Grade);
     Quote.Reason = mfGreenBottleStateError(State.player);
     if (Quote.Reason.empty() && !hasTalent(State.player, "greenBottle")) Quote.Reason = "未持有小绿瓶。";
     if (Quote.Reason.empty() && State.player.arts.GreenBottleGrade < Quote.MinimumBottleGrade) Quote.Reason = "小绿瓶至少需要" + std::to_string(Quote.MinimumBottleGrade) + "阶才能定位此秘境。";
+    if (Quote.Reason.empty() && State.player.stage < Quote.Stage) Quote.Reason = "此秘境至少需要" + realmName(Quote.Stage) + "。";
     if (Quote.Reason.empty()) Quote.Reason = mfGardenAccessError(State);
     if (Quote.Reason.empty() && (State.eventSeq < 0 || State.eventSeq >= StateLimits::MaxPersistedInteger))
         Quote.Reason = "纪事编号已达支持范围，无法进入专属秘境。";

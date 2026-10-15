@@ -176,6 +176,7 @@
 <ClInclude Include="..\src\core\play.h"/>
 <ClCompile Include="..\src\core\progression\arts.cpp"/>
 <ClCompile Include="..\src\core\progression\cultivate.cpp"/>
+<ClInclude Include="..\src\core\progression\cultivation_units.h"/>
 <ClCompile Include="..\src\core\progression\legacy.cpp"/>
 <ClCompile Include="..\src\core\progression\manual_study.cpp"/>
 <ClInclude Include="..\src\core\progression\manual_study.h"/>

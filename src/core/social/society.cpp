@@ -456,7 +456,7 @@ BondActionInfo bondActionInfo(const Game& g, const string& kind) {
         info.npcId = g.bonds.master;
     } else if (kind == "teach") {
         info.name = "传道授业";
-        info.desc = "指点同地弟子，弟子修为 +40、悟性 +3，每月一次。";
+        info.desc = "指点同地弟子，弟子修为 +" + std::to_string(40 * CultivationUnits::Scale) + "、悟性 +3，每月一次。";
         info.days = 10;
         info.cost = 10;
     } else if (kind == "together") {
@@ -587,7 +587,8 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
             for (auto& n : g.npcs) {
                 if (n.id != id || !n.alive || n.location != p.location) continue;
                 const int need = realmOf(n.stage).need;
-                n.xp = std::min(need, n.xp + 40);
+                n.xp = static_cast<int>(std::min(static_cast<long long>(need),
+                    static_cast<long long>(n.xp) + 40 * CultivationUnits::Scale));
                 n.insight = std::min(INSIGHT_MAX, n.insight + 3);
                 npcHistory(g, n, "受师尊" + p.name + "指点，修为与悟性有所增长。");
             }

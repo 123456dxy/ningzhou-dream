@@ -8,6 +8,7 @@ namespace nz::content {
 struct GreenBottleMaterialDefinition {
     data::MaterialDef Material;
     int MinimumBottleGrade = 0;
+    int DungeonStage = 0; // 四/五/六阶灵材固定对应金丹/元婴/化神秘境。
     std::string DungeonName;
 };
 // 用途：读取三种真实专属灵材；流程：升瓶/秘境/炼器/背包；返回：不可变静态目录，无交易或随机副作用。

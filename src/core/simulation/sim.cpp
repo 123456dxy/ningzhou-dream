@@ -226,7 +226,7 @@ double cultivationRate(const Player& p) {
 double cultivationRateFor(int stage, int apt) {
     static const double groupMul[5] = {1.0, 1.38, 3.2, 4.5, 8.0};
     const int group = std::min(4, stage / 3);
-    return (6.0 + apt * 0.2) * groupMul[group];
+    return (6.0 + apt * 0.2) * groupMul[group] * CultivationUnits::Scale;
 }
 
 // NPC 用的闭关开销：按它自己的境界与宗门
@@ -545,7 +545,8 @@ static void killNpc(Game& g, Npc& n, const string& reason) {
 // 返回值：无；完成说明所述写入或展示操作。
 static void gainXp(Person& p, double n) {
     const int need = realmOf(p.stage).need;
-    p.xp = std::min(need, p.xp + std::max(0, jsRound(n)));
+    p.xp = static_cast<int>(std::min(static_cast<long long>(need),
+        static_cast<long long>(p.xp) + std::max(0, jsRound(n))));
 }
 
 // 用途：减少人物气血并限制有效范围。
@@ -638,7 +639,7 @@ static void npcTurn(Game& g, Npc& n) {
     if (n.health < 55) {
         n.goal = "休养调息";
         n.health = std::min(100, n.health + 20);
-        gainXp(n, 4);
+        gainXp(n, 4 * CultivationUnits::Scale);
         return;
     }
 
@@ -660,7 +661,7 @@ static void npcTurn(Game& g, Npc& n) {
         n.goal = "坊市营生";
         n.stones += jsRound(randIntOf(g, 22, 35) * (1 + group * 0.18) *
                             g.world.market);
-        gainXp(n, 3 + group);
+        gainXp(n, (3 + group) * CultivationUnits::Scale);
     } else if (n.personality == "潜心问道" || n.lifespan - n.age < 25 ||
                roll < 0.54) {
         n.goal = "闭关修炼";
@@ -707,7 +708,7 @@ static void npcTurn(Game& g, Npc& n) {
             } else {
                 n.goal = "同道论道";
                 n.insight = std::min(500, n.insight + 2);
-                gainXp(n, 5 + group);
+                gainXp(n, (5 + group) * CultivationUnits::Scale);
                 n.relations[other->id] = other->relations[n.id] =
                     clampInt(n.relations[other->id] + 5, -100, 100);
                 npcHistory(g, n, "与" + other->name + "论道，交情渐深。");
@@ -717,7 +718,7 @@ static void npcTurn(Game& g, Npc& n) {
             const int harvest = std::min(1, g.world.herbs);
             g.world.herbs -= harvest;
             n.herbs += harvest;
-            gainXp(n, 6);
+            gainXp(n, 6 * CultivationUnits::Scale);
         }
     }
 
@@ -1121,7 +1122,7 @@ Game createGame(const CreateOptions& source) {
     g.npcs[0].stage = 0;
     g.npcs[0].age = 21;
     g.npcs[0].lifespan = 100;
-    g.npcs[0].xp = 25;
+    g.npcs[0].xp = 25 * CultivationUnits::Scale;
     g.npcs[1].location = "wuling";
     g.npcs[1].personality = "重情重义";
 
@@ -1231,7 +1232,8 @@ void monthComplete(Game& g, const Job& job) {
 
     auto gainXpP = [&](double n) {
         const int need = realmOf(p.stage).need;
-        p.xp = std::min(need, p.xp + calendarTake(g, "xp", std::max(0.0, n)));
+        p.xp = static_cast<int>(std::min(static_cast<long long>(need),
+            static_cast<long long>(p.xp) + calendarTake(g, "xp", std::max(0.0, n))));
     };
 
     // 营生类行动（含主城的战斗任务「猎妖委托」）统一交给 ecoComplete。

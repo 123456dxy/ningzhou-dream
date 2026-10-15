@@ -41,7 +41,7 @@ Value dungeonWorldToJson(const DungeonWorld& world) {
         item.set("id", str(site.id)); item.set("name", str(site.name)); item.set("type", str(site.type)); item.set("location", str(site.location));
         item.set("openedYear", num(site.openedYear)); item.set("expiresYear", num(site.expiresYear)); item.set("stage", num(site.stage));
         item.set("revealed", Value(site.revealed)); item.set("cleared", Value(site.cleared));
-        item.set("targetKind", str(site.targetKind)); item.set("targetId", str(site.targetId)); item.set("targetName", str(site.targetName)); item.set("targetGrade", num(site.targetGrade));
+        item.set("targetKind", str(site.targetKind)); item.set("targetId", str(site.targetId)); item.set("targetName", str(site.targetName)); item.set("targetGrade", num(site.targetGrade)); item.set("targetRewardCount", num(site.TargetRewardCount));
         item.set("bossRewards", dungeonRewardsToJson(site.bossRewards));
         sites.push_back(std::move(item));
     }
@@ -57,7 +57,7 @@ Value dungeonWorldToJson(const DungeonWorld& world) {
         item.set("herbs", mapToJson(run.herbs)); item.set("materials", mapToJson(run.materials)); item.set("potions", mapToJson(run.potions));
         item.set("stones", num(run.stones)); item.set("cores", num(run.cores)); item.set("insight", num(run.insight)); item.set("cleared", Value(run.cleared));
         item.set("targetKind", str(run.targetKind)); item.set("targetId", str(run.targetId)); item.set("targetName", str(run.targetName));
-        item.set("targetGrade", num(run.targetGrade)); item.set("targetGranted", Value(run.targetGranted));
+        item.set("targetGrade", num(run.targetGrade)); item.set("targetRewardCount", num(run.TargetRewardCount)); item.set("targetGranted", Value(run.targetGranted));
         item.set("bossRewards", dungeonRewardsToJson(run.bossRewards));
         item.set("bossRewardClaimed", Value(run.bossRewardClaimed));
         item.set("bossRewardTaken", run.bossRewardTaken ? dungeonRewardToJson(*run.bossRewardTaken) : Value());
@@ -84,7 +84,7 @@ void dungeonWorldFromJson(const Value& value, DungeonWorld& world) {
         site.id = item["id"].asString(); site.name = item["name"].asString(); site.type = item["type"].asString(); site.location = item["location"].asString();
         site.openedYear = item["openedYear"].asInt(); site.expiresYear = item["expiresYear"].asInt(); site.stage = item["stage"].asInt();
         site.revealed = item["revealed"].asBool(true); site.cleared = item["cleared"].asBool();
-        site.targetKind = item["targetKind"].asString(); site.targetId = item["targetId"].asString(); site.targetName = item["targetName"].asString(); site.targetGrade = item["targetGrade"].asInt(1);
+        site.targetKind = item["targetKind"].asString(); site.targetId = item["targetId"].asString(); site.targetName = item["targetName"].asString(); site.targetGrade = item["targetGrade"].asInt(1); site.TargetRewardCount = item["targetRewardCount"].asInt(DefaultDungeonTargetRewardCount);
         site.bossRewards = dungeonRewardsFromJson(item["bossRewards"]);
         world.sites.push_back(std::move(site));
     }
@@ -98,7 +98,7 @@ void dungeonWorldFromJson(const Value& value, DungeonWorld& world) {
     run.herbs = jsonToMap<int>(item["herbs"]); run.materials = jsonToMap<int>(item["materials"]); run.potions = jsonToMap<int>(item["potions"]);
     run.stones = item["stones"].asInt(); run.cores = item["cores"].asInt(); run.insight = item["insight"].asInt(); run.cleared = item["cleared"].asBool();
     run.targetKind = item["targetKind"].asString(); run.targetId = item["targetId"].asString(); run.targetName = item["targetName"].asString();
-    run.targetGrade = item["targetGrade"].asInt(1); run.targetGranted = item["targetGranted"].asBool();
+    run.targetGrade = item["targetGrade"].asInt(1); run.TargetRewardCount = item["targetRewardCount"].asInt(DefaultDungeonTargetRewardCount); run.targetGranted = item["targetGranted"].asBool();
     run.bossRewards = dungeonRewardsFromJson(item["bossRewards"]);
     run.bossRewardClaimed = item["bossRewardClaimed"].asBool();
     if (item["bossRewardTaken"].isObject()) run.bossRewardTaken = dungeonRewardFromJson(item["bossRewardTaken"]);

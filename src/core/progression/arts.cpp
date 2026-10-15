@@ -1073,9 +1073,9 @@ int mfPillCultivationNominalValue(const data::RecipeDef& Recipe) {
     return jsRound(jsSqrt(static_cast<double>(Recipe.value)) * CultivationPillValueScale);
 }
 
-// 用途：查询角色小境单次吸收上限；流程：当前服丹预览与结算限制；返回：本小境修为需求的25%，沿用既有四舍五入。
+// 用途：保留改单位前的小境单次吸收上限；流程：当前服丹预览与结算；返回：旧单位需求的25%，不因正常修炼扩单位而提高丹药原有效果。
 int mfPillCultivationStageLimit(const Player& Player) {
-    return jsRound(realmOf(Player.stage).need * CultivationPillStageRatio);
+    return jsRound(realmOf(Player.stage).need / CultivationUnits::Scale * CultivationPillStageRatio);
 }
 
 // 用途：以稳定丹方 ID 确定既有战斗准备；流程：玩家/NPC服丹；用法：传目录 RecipeId；返回：现有六类准备之一。
@@ -1151,7 +1151,7 @@ PillEffect artPillEffect(const Player& p, const data::RecipeDef& r) {
 
     if (r.kind == "xp")
         e.text = hasTalent(p, "oddMeridian") ? "先天异脉：丹药无法提升修为" :
-            "修为 +" + std::to_string(e.value) + "（不超过本小境25%）";
+            "修为 +" + std::to_string(e.value) + "（本小境单次上限 " + std::to_string(mfPillCultivationStageLimit(p)) + "）";
     else if (r.kind == "dao")
         e.text = r.dao + "道经验 +" + std::to_string(e.value);
     else if (r.kind == "body")

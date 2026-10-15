@@ -105,7 +105,8 @@ DungeonEncounter mfDescribeDungeonEncounter(const Game& State, const DungeonRun&
     Enemy.kind = content::legacyValue(content::BattleKind::Dungeon);
     Enemy.dungeonSite = Run.siteId;
     Enemy.dungeonNode = Node.id;
-    Enemy.stage = std::max(0, Site->stage - (Node.type == RegularNodeType ? 1 : 0));
+    const bool IsFixedBottleChallenge = Site->type == "bottle" && Site->TargetRewardCount != DefaultDungeonTargetRewardCount;
+    Enemy.stage = std::max(0, Site->stage - (Node.type == RegularNodeType && !IsFixedBottleChallenge ? 1 : 0));
     Enemy.health = Node.type == BossNodeType ? BossHealthPercent :
         Node.type == EliteNodeType ? EliteHealthPercent : RegularHealthPercent;
     const auto Selection = mfEncounterHash(Run.siteId, Node.id);

@@ -12,6 +12,7 @@
 
 #include "core/base.h"
 #include "core/combat/beast_actions.h"
+#include "core/progression/cultivation_units.h"
 
 namespace nz {
 
@@ -27,8 +28,10 @@ struct RealmDef {
     int power;
 };
 
+// 用途：发布统一单位下的境界需求；流程：修炼/突破/预览与存档迁移；用法：只读取表；返回：需求已乘单位倍率的静态表，其它境界属性保持原值。
 inline const std::vector<RealmDef>& REALMS() {
-    static const std::vector<RealmDef> data = {
+    static const std::vector<RealmDef> data = [] {
+        std::vector<RealmDef> Result = {
         {"炼气初期", 110, 100, 14},    {"炼气中期", 190, 100, 24},
         {"炼气后期", 320, 100, 39},    {"筑基初期", 900, 200, 65},
         {"筑基中期", 1600, 200, 95},   {"筑基后期", 2800, 200, 140},
@@ -36,7 +39,10 @@ inline const std::vector<RealmDef>& REALMS() {
         {"金丹后期", 8000, 500, 440},  {"元婴初期", 18000, 1000, 660},
         {"元婴中期", 30000, 1000, 900},{"元婴后期", 46000, 1000, 1250},
         {"化神", 0, 2000, 1800},
-    };
+        };
+        for (auto& Realm : Result) Realm.need *= CultivationUnits::Scale;
+        return Result;
+    }();
     return data;
 }
 
@@ -800,12 +806,16 @@ struct DungeonReward {
     string id, kind, name, desc, spell, relic, manual;
     int amount = 0, grade = 1;
 };
+inline constexpr int DefaultDungeonTargetRewardCount = 10;
+inline constexpr int MaximumDungeonTargetRewardCount = 1000;
+
 struct DungeonSite {
     string id, name, type, location;
     int openedYear = 0, expiresYear = 0, stage = 0;
     bool revealed = true, cleared = false;
     string targetKind, targetId, targetName;
     int targetGrade = 1;
+    int TargetRewardCount = DefaultDungeonTargetRewardCount; // 入场冻结的目标奖励数量；旧档缺省10份。
     vector<DungeonReward> bossRewards;
 };
 struct DungeonNode {
@@ -830,6 +840,7 @@ struct DungeonRun {
     bool cleared = false;
     string targetKind, targetId, targetName;
     int targetGrade = 1;
+    int TargetRewardCount = DefaultDungeonTargetRewardCount; // 入场冻结的目标奖励数量；旧档缺省10份。
     bool targetGranted = false;
 };
 struct DungeonWorld {

@@ -456,7 +456,7 @@ void runSocietyTests() {
         societyBondComplete(g, "teach", nullptr);
         for (const auto& n : g.npcs) {
             if (n.id != "npc-9") continue;
-            checkEq(n.xp, 40, "授业给弟子修为 +40");
+            checkEq(n.xp, 400, "扩大修为单位后授业给弟子修为 +400");
             checkEq(n.insight, 13, "授业给弟子悟性 +3");
             checkEq(n.apt, 50, "授业不增加弟子资质");
         }

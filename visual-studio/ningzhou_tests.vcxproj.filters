@@ -32,6 +32,7 @@
 <ClCompile Include="..\tests\test_craft_prices.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_craft_timing.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_crafting_fixes.cpp"><Filter>Tests</Filter></ClCompile>
+<ClCompile Include="..\tests\test_cultivation_units.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_discard_timing.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_display_contract.cpp"><Filter>Tests</Filter></ClCompile>
 <ClCompile Include="..\tests\test_dungeon.cpp"><Filter>Tests</Filter></ClCompile>

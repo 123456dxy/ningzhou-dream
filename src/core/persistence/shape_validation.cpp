@@ -69,6 +69,7 @@ bool dungeonShapesValid(const Value& world, bool modern) {
             {"intelMonth", Type::Number}, {"intelPurchases", Type::Number}, {"sites", Type::Array}, {"run", Type::Object}})) return false;
     for (const auto& site : world["sites"].asArray()) {
         if (!site.isObject()) return false;
+        if (site.asObject().count("targetRewardCount") && !saveInteger(site["targetRewardCount"], 1, MaximumDungeonTargetRewardCount)) return false;
         for (const char* name : {"id", "name", "type", "location", "targetKind", "targetId", "targetName"}) if (!site[name].isString()) return false;
         for (const char* name : {"openedYear", "expiresYear", "stage", "targetGrade"}) if (!site[name].isNumber()) return false;
         for (const char* name : {"revealed", "cleared"}) if (!site[name].isBool()) return false;
@@ -76,6 +77,7 @@ bool dungeonShapesValid(const Value& world, bool modern) {
     }
     const auto& run = world["run"];
     if (!run.isObject()) return true;
+    if (run.asObject().count("targetRewardCount") && !saveInteger(run["targetRewardCount"], 1, MaximumDungeonTargetRewardCount)) return false;
     if (run.asObject().count("layoutVersion") && !saveInteger(run["layoutVersion"], 1, 2)) return false;
     for (const char* name : {"siteId", "siteName", "type", "location", "phase", "current", "targetKind", "targetId", "targetName"}) if (!run[name].isString()) return false;
     for (const char* name : {"stage", "health", "row", "seq", "elapsedDays", "stones", "cores", "insight", "targetGrade"}) if (!run[name].isNumber()) return false;
@@ -103,6 +105,10 @@ bool dungeonShapesValid(const Value& world, bool modern) {
 } // namespace
 
 bool saveShapesValid(const Value& root) {
+    if (root.asObject().contains("cultivationUnitScale") &&
+        (!saveInteger(root["cultivationUnitScale"], CultivationUnits::LegacyScale, CultivationUnits::Scale) ||
+         (root["cultivationUnitScale"].asInt() != CultivationUnits::LegacyScale &&
+          root["cultivationUnitScale"].asInt() != CultivationUnits::Scale))) return false;
     const auto MarketCycle = root["economy"].asObject().find("marketCycleIndex");
     if (MarketCycle != root["economy"].asObject().end() &&
         !saveInteger(MarketCycle->second, -1, StateLimits::MaxPersistedInteger)) return false;
