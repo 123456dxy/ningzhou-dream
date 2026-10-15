@@ -6,6 +6,7 @@
 // 设计原则：这一层只做「翻译」，不写任何规则。
 // 所有数值都来自 core，保证和自测覆盖的是同一套代码。
 #include "core/api.h"
+#include "core/interface/green_bottle_api.h"
 #include "core/character_build.h"
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
@@ -796,10 +797,16 @@ http::Response handle(const http::Request& req) {
 
     // ---- 斗法 ----
     if (route == RouteId::DungeonEnter || route == RouteId::DungeonChoose ||
-        route == RouteId::DungeonClaim || route == RouteId::DungeonLeave || route == RouteId::DungeonIntel) {
+        route == RouteId::DungeonClaim || route == RouteId::DungeonLeave || route == RouteId::DungeonIntel || route == RouteId::DungeonSweep) {
         string error;
         const int restores=gameState.checkpoint.restores;
-        if (route == RouteId::DungeonEnter) error = dungeonEnter(gameState,strOf(in,"id"));
+        if (route == RouteId::DungeonSweep) {
+            if (!in.isObject() || !in["id"].isString() || in["id"].asString().empty()) return jsonError("请提供有效的秘境入口ID。");
+            for (const auto& [Key, Value] : in.asObject())
+                if (Key != "id") return jsonError("扫荡请求包含未知参数。");
+            error = mfSweepDungeon(gameState, in["id"].asString());
+        }
+        else if (route == RouteId::DungeonEnter) error = dungeonEnter(gameState,strOf(in,"id"));
         else if (route == RouteId::DungeonChoose) error = dungeonChoose(gameState,strOf(in,"id"));
         else if (route == RouteId::DungeonClaim) error = dungeonClaim(gameState,strOf(in,"id"));
         else if (route == RouteId::DungeonLeave) error = dungeonLeave(gameState);
@@ -916,6 +923,12 @@ http::Response handle(const http::Request& req) {
         if (!AccessError.empty()) return jsonError(AccessError);
         const auto r = shop::caveUpgrade(gameState);
         if (!r.ok) return jsonError(r.error);
+        return jsonOk(okWithState(gameState));
+    }
+
+    if (route == RouteId::CaveGreenBottleUpgrade || route == RouteId::CaveGreenBottleDungeon) {
+        const string Error = mfExecuteGreenBottleCommand(gameState, route, in);
+        if (!Error.empty()) return jsonError(Error);
         return jsonOk(okWithState(gameState));
     }
 

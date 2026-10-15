@@ -87,6 +87,10 @@ int battleEnergy(const Player& p);
 // 使用方式：传角色，容量至少十二并叠加有效天赋收益。
 // 返回值：本场可持有的最大灵力。
 int battleManaCap(const Player& p);
+// 用途：查询敌方本回合可规划的最大神通次数；流程：真实修士连招规划及战况说明。
+// 使用方式：传只读游戏与该场战斗；普通宗门2+大境界，完整传承3+大境界，散修和留影沿旧预算。
+// 返回值：动作数量上限，仍受灵力、手牌与冷却限制；不修改状态、RNG或存档。
+[[nodiscard]] int mfBattleEnemyActionLimit(const Game& GameState, const Battle& BattleState);
 // 用途：预测下一轮会恢复到的灵力总量。
 // 参与流程：结束回合赋值及 nextMana 界面预览。
 // 使用方式：传回合结束前状态，计入锁定、封存、静息和容量。
@@ -193,8 +197,10 @@ void battleDraw(Game& g, int n);
 // 出牌预览（不改动真实状态）
 struct Preview {
     bool valid = false;
+    bool ElementalGenerationReady = false; // 当前牌能接最近有效五行且真实获得相生收益，由共享施术路径给出。
     string spellName;
     int cost = 0;
+    int RawDamage = 0;      // 含施术者全部加成，进入目标减伤和护盾前的直接伤害
     int damage = 0;
     int shield = 0;
     int heal = 0;
@@ -248,7 +254,11 @@ struct EnemyPreview {
     int damage = 0;
     int shield = 0;
     int heal = 0;
+    vector<BeastCombat::ActionResult> BeastActions;
 };
+// 用途：按当前可见手牌、资源和状态评分NPC候选神通；流程：敌方规划/隔离赛事同规则决策。
+// 使用：传施术者、施术者视角战况和已校验神通；返回：优先级，负值表示暂不施放；不抽牌不改状态。
+int mfBattleNpcCardPriority(const Player& Foe, const Battle& State, const SpellDef& Spell);
 // 用途：只读试算回合末持续状态及敌方完整连招。
 // 参与流程：战况意图展示。
 // 使用方式：传游戏，在副本上执行已计划行动，不重洗未知牌。

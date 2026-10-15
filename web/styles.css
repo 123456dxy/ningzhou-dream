@@ -1,4 +1,6 @@
 
+@import url('./beast-intent.css');
+@import url('./dungeons-ui.css');
 :root{--paper:#f5f3ec;--surface:#fdfcf8;--ink:#263e36;--green:#234b40;--muted:#858779;--line:#dedfd3;--gold:#aa8650;--red:#ab6856;--sans:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;--serif:"STSong","SimSun","Songti SC",serif}
 
 /* Cultivation workshop */

@@ -3,8 +3,12 @@
 #include "core/arts.h"
 #include "core/character_build.h"
 #include "core/crafting/cave_garden.h"
+#include "core/crafting/market_cycle.h"
+#include "core/foundation/state_limits.h"
 #include "core/artifact.h"
 #include "core/battle.h"
+#include "core/combat/elemental_sword.h"
+#include "core/combat/fire_growth.h"
 #include "core/travel.h"
 #include "core/npc_learning.h"
 #include "core/location_services.h"
@@ -33,6 +37,9 @@ bool nonnegativeMap(const map<string, int>& values) {
 } // namespace
 
 std::string saveStateError(const Game& game) {
+    if (game.economy.MarketCycleIndex < -1 || game.economy.MarketCycleIndex > game.clock.days / crafting::MarketCycleDurationDays ||
+        game.economy.marketCash < 0 || game.economy.marketCash > StateLimits::MaxPersistedInteger)
+        return "坊市账期或收购资金无效";
     if (const auto Error = crafting::mfGardenStateError(game); !Error.empty()) return Error;
     if (const auto error=tideStateError(game); !error.empty()) return error;
     if (!validPerson(game.player)) return "角色属性、境界或地点无效";
@@ -209,10 +216,14 @@ std::string saveStateError(const Game& game) {
             battle.enemyPower < 0 || battle.turn < 0 || battle.buff < 0 || battle.reduction < 0 || battle.guard < 0 ||
             battle.deck.size() > 256 || battle.hand.size() > 8 || battle.played < 0 || battle.played > 24 ||
             battle.discardPower < 0 || battle.discardPower > 0.3 + 1e-9 ||
-            battle.swordSequence < 0 || battle.swordSequence > 24 || battle.comboDraws < 0 || battle.comboDraws > 2)
+            battle.swordSequence < 0 || battle.swordSequence > 24 || battle.comboDraws < 0 || battle.comboDraws > 2 ||
+            battle.ElementalSwordManaReturns < 0 || battle.ElementalSwordManaReturns > ElementalSword::ManaReturnLimitPerTurn ||
+            battle.ElementalSwordSequence < 0 || battle.ElementalSwordSequence > ElementalSword::SwordChainCycleLength ||
+            battle.FireGrowthRounds < 0 || battle.FireGrowthRounds > FireGrowth::MaximumGrowthRounds)
             return "斗法参数无效";
         if (battle.enemyStage < 0 || battle.enemyStage > 12 || battle.playerSpeed < 0 || battle.enemySpeed < 0)
             return "斗法境界或遁速无效";
+        if (const auto Error = BeastCombat::mfPlanStateError(battle); !Error.empty()) return Error;
         if (battle.poisonDamage < -1 || battle.poisonDamage > BATTLE_BURN_CAP ||
             battle.enemyCards.poisonDamage < -1 || battle.enemyCards.poisonDamage > BATTLE_BURN_CAP)
             return "斗法毒伤数值无效";
@@ -261,11 +272,14 @@ std::string saveStateError(const Game& game) {
                 enemy.carryMana < 0 || enemy.carryCap < 0 || enemy.carryCap > manaCap || enemy.carryMana > enemy.carryCap ||
                 enemy.played < 0 || enemy.played > 24 || enemy.drawNext < 0 || enemy.drawNext > 256 ||
                 enemy.swordSequence < 0 || enemy.swordSequence > 24 || enemy.comboDraws < 0 || enemy.comboDraws > 2 ||
+                enemy.ElementalSwordManaReturns < 0 || enemy.ElementalSwordManaReturns > ElementalSword::ManaReturnLimitPerTurn ||
+                enemy.ElementalSwordSequence < 0 || enemy.ElementalSwordSequence > ElementalSword::SwordChainCycleLength ||
+                enemy.FireGrowthRounds < 0 || enemy.FireGrowthRounds > FireGrowth::MaximumGrowthRounds ||
                 enemy.swordQi < 0 || enemy.swordQi > 8 || enemy.water < 0 || enemy.water > 6 || enemy.soul < 0 || enemy.soul > 6 ||
                 enemy.poison < 0 || enemy.poison > BATTLE_POISON_CAP || enemy.charge < 0 || enemy.charge > 4 || enemy.lock < 0 || enemy.lock > 2 ||
                 enemy.poisonTurns < 0 || enemy.poisonTurns > 3 || enemy.burn < 0 || enemy.burn > BATTLE_BURN_CAP || enemy.burnTurns < 0 || enemy.burnTurns > 3 ||
                 enemy.buff < 0 || enemy.buff > 0.3 + 1e-9 || enemy.reduction < 0 || enemy.reduction > 0.2 + 1e-9 ||
-                enemy.guard < 0 || enemy.guard > 0.1 + 1e-9 || enemy.discardPower < 0 || enemy.discardPower > 0.3 + 1e-9)
+                enemy.guard < 0 || enemy.guard > ElementalSword::TemporaryGuardCap + 1e-9 || enemy.discardPower < 0 || enemy.discardPower > 0.3 + 1e-9)
                 return "对手斗法参数无效";
             for (const int value : {enemy.speed, enemy.body, enemy.mind, enemy.shuffles, enemy.manaBonus, enemy.manaPenalty, enemy.hpCostPct})
                 if (value < 0 || value > 100000) return "对手斗法属性无效";

@@ -122,7 +122,7 @@ export function brewRequirements(state, recipe, batch = 1) {
 export function renderBrewIncome(recipe = {}) {
   const quoted = value => Number.isFinite(value) ? esc(Number(value.toFixed(2))) : '待报价';
   return `<div class="craft-cost">成功每炉 ${quoted(recipe.output)} 枚 · 收购 ${quoted(recipe.sellPrice)} 灵石/枚 · 全部售出时每炉期望毛收入 ${quoted(recipe.expectedSaleIncome)} 灵石</div>`
-    + '<p class="panel-note">期望不是保底；未扣材料与炉费，也不代表本月能全部售出。实际可收数量见下方渠道报价。</p>'
+    + '<p class="panel-note">期望不是保底；未扣材料与炉费，也不代表本期能全部售出。实际可收数量见下方渠道报价。</p>'
     + renderCraftPricing(recipe.pricing, { kind: 'potion', compact: true });
 }
 // 用途：展示炼成丹药在当前角色身上的真实服用效果。

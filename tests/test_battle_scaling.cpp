@@ -32,10 +32,10 @@ Player mfScalingPlayer(int Stage) {
 void mfRunBattleScalingTests() {
     std::printf("\n--- 统一战斗伤害尺度回归 ---\n");
     struct Sample { int Stage, Health, Strike, Fire, Burn, Poison, Shield, Mana; };
-    for (const auto& Row : {Sample{0,144,11,16,2,2,17,3}, Sample{1,168,12,18,3,3,20,3},
-                           Sample{2,204,14,21,3,3,24,3}, Sample{3,266,18,27,4,4,32,4},
-                           Sample{6,614,39,58,8,9,74,5}, Sample{9,1694,104,156,22,23,203,6},
-                           Sample{12,4430,268,402,56,59,532,7}}) {
+    for (const auto& Row : {Sample{0,144,11,16,2,3,17,3}, Sample{1,168,12,18,2,3,20,3},
+                           Sample{2,204,14,21,2,4,24,3}, Sample{3,266,18,27,3,5,32,4},
+                           Sample{6,614,39,58,6,11,74,5}, Sample{9,1694,104,156,17,29,203,6},
+                           Sample{12,4430,268,402,45,75,532,7}}) {
         const Player PlayerState = mfScalingPlayer(Row.Stage);
         const Battle Reference = battleReferenceState(PlayerState);
         checkEq(Reference.max, Row.Health, "伤害调整不改变各阶段斗法气血");
@@ -82,8 +82,8 @@ void mfRunBattleScalingTests() {
         if (!GameState.player.arts.battle) return;
         const auto& BattleState = *GameState.player.arts.battle;
         checkEq(BattleState.enemyMax, 6424, "妖兽气血一点四五乘区保持不变");
-        check(BattleState.intentRaw >= 446 && BattleState.intentRaw <= 503,
-              "化神妖兽普击采用558乘零点八五及原随机浮动区间");
+        check(BattleState.intentRaw >= 1445 && BattleState.intentRaw <= 1631 && BattleState.BeastActions.size() == 4,
+              "化神妖兽558基底按整轮2.9乘0.95系数分配三次攻击与凝甲，不逐段复制整轮伤害");
         const int BeforeHealth = BattleState.hp;
         const int PredictedDamage = battleEnemyPreview(GameState).damage;
         const int IntentDamage = BattleState.intentRaw;

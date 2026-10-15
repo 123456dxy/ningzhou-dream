@@ -4,6 +4,8 @@
 #include "core/save.h"
 #include "core/json.h"
 #include "core/sim.h"
+#include "core/interface/views.h"
+#include "core/content/npc_combat_profiles.h"
 #include <array>
 #include <limits>
 
@@ -21,9 +23,12 @@ void mfRunTideStockRewardTests() {
     for (const auto& Sample : std::array{
         StockSample{0,3,0}, StockSample{299,3,0}, StockSample{300,3,1},
         StockSample{2999,3,9}, StockSample{2999,4,0}, StockSample{3000,3,10},
-        StockSample{3000,4,1}, StockSample{3300,3,11}, StockSample{3300,4,2},
-        StockSample{5699,4,9}, StockSample{5699,5,0}, StockSample{5700,3,19},
-        StockSample{5700,4,10}, StockSample{5700,5,1}, StockSample{6000,5,2}}) {
+        StockSample{3000,4,1}, StockSample{3300,3,11}, StockSample{3300,4,1},
+        StockSample{3899,4,1}, StockSample{3900,4,2},
+        StockSample{5699,4,3}, StockSample{5699,5,0}, StockSample{5700,3,19},
+        StockSample{5700,4,4}, StockSample{5700,5,1}, StockSample{6000,5,1},
+        StockSample{8399,5,1}, StockSample{8400,5,2},
+        StockSample{11400,3,38}, StockSample{11400,4,10}, StockSample{11400,5,3}}) {
         checkEq(tide::rules::stockPerItem(Sample.Score, Sample.Grade), Sample.ExpectedCount,
             std::to_string(Sample.Score) + "分的" + std::to_string(Sample.Grade) + "阶库存符合阶梯且低阶继续累积");
     }
@@ -36,7 +41,7 @@ void mfRunTideStockRewardTests() {
     checkEq(tide::rules::EliteNpcBattlePace.BattleChanceDenominator, 4, "精英修士日出战频率提高至四分之一");
     checkEq(tide::rules::mfStockUnlockScore(3), 300, "三阶首次库存门槛三百分");
     checkEq(tide::rules::mfStockUnlockScore(4), 3000, "三阶十份时首次解锁四阶");
-    checkEq(tide::rules::mfStockUnlockScore(5), 5700, "四阶十份时首次解锁五阶");
+    checkEq(tide::rules::mfStockUnlockScore(5), 5700, "五阶保留原解锁门槛，后续供给增速独立计算");
     checkEq(tide::rules::mfRewardRenown(0), 0, "无有效排名不具有声望奖资格");
     checkEq(tide::rules::mfRewardRenown(1), 50, "榜首声望五十");
     checkEq(tide::rules::mfRewardRenown(3), 20, "前三声望二十");
@@ -80,5 +85,47 @@ void mfRunTideStockRewardTests() {
     InvalidSave.asObject().at("tide").set("rewardRenown", json::Value(51));
     check(!loadFromJson(InvalidSave.dump(), Restored, &Error), "拒绝超出最高奖档的声望回执");
     checkEq(Restored.player.renown, SavedRenown, "非法导入不部分改变当前声望");
+
+    Game ViewState = SavedState;
+    Npc Champion;
+    Champion.id = "supply-view-champion";
+    Champion.name = "高手展示";
+    Champion.sect = "jinhong";
+    Champion.dao = "金";
+    Champion.combatProfileId = "jinhong-complete";
+    Champion.location = ViewState.player.location;
+    Npc Ordinary = Champion;
+    Ordinary.id = "supply-view-ordinary";
+    Ordinary.name = "普通展示";
+    Ordinary.combatProfileId.clear();
+    ViewState.npcs = {Champion, Ordinary};
+    TideParticipant ChampionEntry;
+    ChampionEntry.actorId = Champion.id;
+    ChampionEntry.name = Champion.name;
+    ChampionEntry.sect = Champion.sect;
+    ChampionEntry.combatProfileId = Champion.combatProfileId;
+    ChampionEntry.elite = true;
+    ChampionEntry.score = 27;
+    ChampionEntry.entryStage = 9;
+    ViewState.tide.participants = {ChampionEntry};
+    ViewState.tide.totalScore = 11400;
+    const auto ViewStateBefore = saveToJson(ViewState);
+    const auto TideView = api::view::tideState(ViewState);
+    checkEq(TideView["market"]["stockRules"][1]["incrementScore"].asInt(), 900, "四阶展示读取真实900分增量门槛");
+    checkEq(TideView["market"]["stockRules"][2]["incrementScore"].asInt(), 2700, "五阶展示读取真实2700分增量门槛");
+    bool ShowsChampion = false;
+    for (const auto& Row : TideView["leaderboard"].asArray())
+        if (Row["actorId"].asString() == Champion.id)
+            ShowsChampion = Row["elite"].asBool() && Row["buildName"].asString() == "金虹弃牌锐势";
+    check(ShowsChampion, "金榜显示真实流派高手及中文构筑名");
+    json::Value SocialView(json::Object{});
+    api::view::appendSocialState(ViewState, SocialView);
+    bool NearbyChampion = false, NearbyOrdinary = false;
+    for (const auto& Row : SocialView["nearby"].asArray()) {
+        if (Row["id"].asString() == Champion.id) NearbyChampion = Row["isChampion"].asBool();
+        if (Row["id"].asString() == Ordinary.id) NearbyOrdinary = !Row["isChampion"].asBool();
+    }
+    check(NearbyChampion && NearbyOrdinary, "当地仙友仅给合法完整构筑高手身份，普通弟子不冒充");
+    checkStr(saveToJson(ViewState), ViewStateBefore, "高阶库存及高手展示查询不修改存档状态或随机数");
 }
 } // namespace nztest

@@ -10,6 +10,8 @@ Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "ningzhou", "ningzhou.vcxpro
 EndProject
 Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "ningzhou_tests", "ningzhou_tests.vcxproj", "{75A89F83-4014-562C-A557-D849D7DC4EB5}"
 EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "ningzhou_battle_lab", "ningzhou_battle_lab.vcxproj", "{9CA08692-4CB7-5F6A-87F0-73DF7C75F64B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -32,5 +34,9 @@ Global
 		{75A89F83-4014-562C-A557-D849D7DC4EB5}.Debug|x64.Build.0 = Debug|x64
 		{75A89F83-4014-562C-A557-D849D7DC4EB5}.Release|x64.ActiveCfg = Release|x64
 		{75A89F83-4014-562C-A557-D849D7DC4EB5}.Release|x64.Build.0 = Release|x64
+		{9CA08692-4CB7-5F6A-87F0-73DF7C75F64B}.Debug|x64.ActiveCfg = Debug|x64
+		{9CA08692-4CB7-5F6A-87F0-73DF7C75F64B}.Debug|x64.Build.0 = Debug|x64
+		{9CA08692-4CB7-5F6A-87F0-73DF7C75F64B}.Release|x64.ActiveCfg = Release|x64
+		{9CA08692-4CB7-5F6A-87F0-73DF7C75F64B}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal

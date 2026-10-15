@@ -43,7 +43,7 @@ void runBattleStateTests() {
     g.player.arts.battle->mana = 10;
     check(battleTurn(g, "purge", "strike").ok, "移除普通攻击可正常执行");
     Battle& b = *g.player.arts.battle;
-    checkEq(b.exhausted.size(), 5, "所有普通攻击副本均进入本场移除堆");
+    checkEq(b.exhausted.size(), 1, "忘机仅把所选一张普通攻击移入本场移除堆");
     b.discardPower = 0.125;
     b.swordSequence = 2;
     b.comboDraws = 1;
@@ -52,7 +52,7 @@ void runBattleStateTests() {
     check(loadFromJson(saveToJson(g), back, &err), "新战斗四个牌堆可读回：" + err);
     if (back.player.arts.battle) {
         const Battle& restored = *back.player.arts.battle;
-        check(restored.exhausted == b.exhausted, "读档保留本场移除的全部副本");
+        check(restored.exhausted == b.exhausted, "读档保留本场移除的单张UID");
         checkNear(restored.discardPower, 0.125, "弃牌增伤小数保存完整");
         checkEq(restored.swordSequence, 2, "读档保留连续剑牌计数");
         checkEq(restored.comboDraws, 1, "读档保留当回合相生触发次数");
@@ -61,9 +61,14 @@ void runBattleStateTests() {
         for (const auto& uid : back.player.arts.battle->hand) {
             const auto found = std::find_if(back.player.arts.battle->deck.begin(),
                 back.player.arts.battle->deck.end(), [&](const Card& c) { return c.uid == uid; });
-            check(found == back.player.arts.battle->deck.end() || found->spell != "strike",
-                  "存读后洗牌不会抽回本场已移除神通");
+            check(found != back.player.arts.battle->deck.end() &&
+                  std::find(back.player.arts.battle->exhausted.begin(), back.player.arts.battle->exhausted.end(), uid) == back.player.arts.battle->exhausted.end(),
+                  "存读后洗牌不会抽回本场已移除UID");
         }
+        checkEq(std::count_if(back.player.arts.battle->deck.begin(), back.player.arts.battle->deck.end(),
+            [&](const Card& CardEntry) { return CardEntry.spell == "strike" &&
+                std::find(restored.exhausted.begin(), restored.exhausted.end(), CardEntry.uid) == restored.exhausted.end(); }),
+            4, "移除一张普攻后其余四张副本保留");
     }
 
     auto corrupt = json::Value::parse(saveToJson(g));

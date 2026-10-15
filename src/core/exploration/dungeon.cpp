@@ -6,6 +6,14 @@
 #include "core/battle.h"
 #include "core/calendar.h"
 #include "core/crafting/herb_acquisition.h"
+#include "core/crafting/green_bottle.h"
+#include "core/content/green_bottle_content.h"
+#include "core/exploration/dungeon_encounters.h"
+#include "core/exploration/dungeon_events.h"
+#include "core/exploration/dungeon_reward_rules.h"
+#include "core/foundation/state_limits.h"
+#include <limits>
+#include <type_traits>
 #include "core/sim.h"
 
 namespace nz {
@@ -43,8 +51,8 @@ int mfTargetStage(const string& Kind, const string& TargetId, int Grade) {
     if (Kind == "material") return minimumStage(Grade);
     return -1;
 }
-// 用途：按境界计算药材或矿材的匹配品阶。
-// 参与流程：秘境伴随材料和状态校验。
+// 用途：读取旧版沿途材料携带上限，仅用于旧loot兼容。
+// 参与流程：秘境持久状态校验；新掉落使用dungeon_reward_rules入口档位。
 // 使用方式：传境界和 herb/material 种类，分别受六/五阶限制。
 // 返回值：匹配品阶整数。
 int matchedGrade(int stage, const string& kind) {
@@ -135,7 +143,7 @@ bool ownsManual(const Game& g, const string& id) {
 // 使用方式：传境界与类型，海域/魔眼沿用额外收益。
 // 返回值：永久灵石奖励数。
 int bossStones(int stage, const string& type) {
-    return 250 + clampInt(stage, 0, 12) * 80 + (type == "sea" ? 100 : type == "tianmo" ? 180 : 0);
+    return mfDungeonRewardRulesForStage(stage, type).MainStones;
 }
 // 用途：读取冻结首领奖励中可折算的灵石数。
 // 参与流程：已知神通或已有抄本的奖励替代。
@@ -276,6 +284,17 @@ void createRoute(const Game& g, DungeonRun& run) {
     Rng rng = localRng(g, run.siteId + ":route:" + std::to_string(run.stage));
     const int floors = 9 + run.stage / 3;
     for (int row = 0; row < floors; ++row) {
+        vector<string> RowTypes;
+        if (run.LayoutVersion >= 2 && row > 0 && row < floors - 2) {
+            if (row == 1) RowTypes = {"event", "chest", "battle"};
+            else if (row == 2) RowTypes = {"elite", "battle", "merchant"};
+            else if (row == 3) RowTypes = {"event", "battle", "chest"};
+            else if (row == 4) RowTypes = {"camp", "elite", "battle"};
+            else RowTypes = {"battle", pick(rng, vector<string>{"event", "camp", "chest"}),
+                pick(rng, vector<string>{"elite", "merchant", "event"})};
+            const int Rotation = randInt(rng, 0, 2);
+            std::rotate(RowTypes.begin(), RowTypes.begin() + Rotation, RowTypes.end());
+        }
         for (int lane = 0; lane < 3; ++lane) {
             if (row == floors - 1 && lane != 1) continue;
             DungeonNode node;
@@ -283,12 +302,18 @@ void createRoute(const Game& g, DungeonRun& run) {
             node.row = row; node.lane = lane;
             if (row == floors - 1) node.type = "boss";
             else if (row == 0) node.type = "battle";
+            else if (!RowTypes.empty()) node.type = RowTypes[lane];
             else if (row == floors - 2 || row == 4) node.type = "camp";
             else if (row == 1) node.type = vector<string>{"event", "chest", "battle"}[lane];
             else if (row == 2) node.type = lane == 1 ? "elite" : "battle";
             else if (row == 3) node.type = vector<string>{"merchant", "battle", "chest"}[lane];
             else node.type = pick(rng, vector<string>{"battle", "battle", "elite", "event", "chest", "merchant"});
             node.name = nodeName(node.type);
+            if (run.LayoutVersion >= 2) {
+                if (node.type == "event") node.name = mfDescribeDungeonEvent(run, node).Name;
+                else if (const auto Encounter = mfDescribeDungeonEncounter(g, run, node); Encounter.Enabled)
+                    node.name = Encounter.Name;
+            }
             node.text = "第" + std::to_string(row + 1) + "层 · " + node.name;
             if (row < floors - 1) {
                 if (row == floors - 2) node.next.push_back("floor-" + std::to_string(row + 1) + "-1");
@@ -320,11 +345,13 @@ void cardChoices(const Game& g, DungeonRun& run, bool merchant = false) {
     if (run.deck.size() >= 60) return;
     Rng rng = localRng(g, run.siteId + ":cards:" + run.current + ":" + std::to_string(run.seq));
     vector<const SpellDef*> pool;
-    for (const auto& spell : allSpells()) if (spell.id != "strike" && spell.id != "defend" && spell.stage <= run.stage) pool.push_back(&spell);
+    const int RewardStage = mfDungeonEntryRewardStage(g, run);
+    const auto Rules = mfDungeonRewardRulesForStage(RewardStage, run.type);
+    for (const auto& spell : allSpells()) if (spell.id != "strike" && spell.id != "defend" && spell.stage <= RewardStage) pool.push_back(&spell);
     for (int i = 0; i < 3 && !pool.empty(); ++i) {
         const size_t selected = static_cast<size_t>(rng.next() * pool.size());
         const auto* spell = pool[selected]; pool.erase(pool.begin() + selected);
-        auto reward = makeReward(run, merchant ? "buyCard" : "card", spell->name, "将1张加入本次秘境的临时牌组；离开后消失。", merchant ? 18 + run.stage * 3 : 1);
+        auto reward = makeReward(run, merchant ? "buyCard" : "card", spell->name, "将1张加入本次秘境的临时牌组；离开后消失。", merchant ? 18 * Rules.CurrencyScale : 1);
         reward.spell = spell->id; run.rewards.push_back(std::move(reward));
     }
 }
@@ -333,33 +360,32 @@ void cardChoices(const Game& g, DungeonRun& run, bool merchant = false) {
 // 使用方式：传游戏、run 和是否商人，空候选可转为休整奖励。
 // 返回值：无；修改 run.rewards/seq，不消费游戏 RNG。
 void relicChoices(const Game& g, DungeonRun& run, bool merchant = false) {
+    const auto Rules = mfDungeonRewardRulesForStage(mfDungeonEntryRewardStage(g, run), run.type);
     Rng rng = localRng(g, run.siteId + ":relics:" + run.current + ":" + std::to_string(run.seq));
     vector<const DungeonRelicDef*> pool;
     for (const auto& relic : dungeonRelics()) if (!hasRelic(run, relic.id)) pool.push_back(&relic);
     for (int i = 0; i < (merchant ? 1 : 3) && !pool.empty(); ++i) {
         const size_t selected = static_cast<size_t>(rng.next() * pool.size());
         const auto* relic = pool[selected]; pool.erase(pool.begin() + selected);
-        auto reward = makeReward(run, merchant ? "buyRelic" : "relic", relic->name, relic->desc, merchant ? 35 + run.stage * 5 : 1);
+        auto reward = makeReward(run, merchant ? "buyRelic" : "relic", relic->name, relic->desc, merchant ? 35 * Rules.CurrencyScale : 1);
         reward.relic = relic->id; run.rewards.push_back(std::move(reward));
     }
     if (run.rewards.empty()) run.rewards.push_back(makeReward(run, "rest", "灵泉余韵", "恢复20%气血。", 20));
 }
-// 用途：把附带低阶材料存入探索行囊。
+// 用途：把入口适阶材料存入探索行囊。
 // 参与流程：沿途宝箱、风险选项和战胜奖励。
-// 使用方式：传只读游戏、run 与份数，药材/矿材品阶最多二阶。
+// 使用方式：传只读游戏、run 与份数；药材保留取得用途限制，同阶缺货才向下降档。
 // 返回值：无；更新 run.herbs 或 materials，使用局部 RNG。
 void bankMaterial(const Game& g, DungeonRun& run, int count) {
+    const int EntryStage = mfDungeonEntryRewardStage(g, run);
+    if (EntryStage < 0) return;
     Rng rng = localRng(g, run.siteId + ":materials:" + run.current);
     const bool herb = rng.next() < 0.5;
-    const int grade = std::min(2, matchedGrade(run.stage, herb ? "herb" : "material"));
     if (herb) {
-        vector<const data::HerbDef*> pool;
-        for (const auto& item : data::HerbDef_TABLE()) if (item.grade == grade &&
-            crafting::mfIsPlantHerb(item.id) && crafting::mfHerbAcquisitionStage(item.id) <= run.stage) pool.push_back(&item);
+        const auto pool = mfDungeonHerbRewardPool(EntryStage);
         if (!pool.empty()) run.herbs[pick(rng, pool)->name] += count;
     } else {
-        vector<const data::MaterialDef*> pool;
-        for (const auto& item : data::MaterialDef_TABLE()) if (item.grade == grade) pool.push_back(&item);
+        const auto pool = mfDungeonMaterialRewardPool(EntryStage);
         if (!pool.empty()) run.materials[pick(rng, pool)->id] += count;
     }
 }
@@ -370,7 +396,7 @@ void bankMaterial(const Game& g, DungeonRun& run, int count) {
 void grantTarget(DungeonRun& run) {
     if (run.targetGranted) return;
     if (run.targetKind == "herb") run.herbs[run.targetName] += 10;
-    else if (run.targetKind == "material") run.materials[run.targetId] += 10;
+    else if (run.targetKind == "material" || run.targetKind == "bottleMaterial") run.materials[run.targetId] += 10;
     run.targetGranted = true;
 }
 // 用途：移除未通关探索对应的入口。
@@ -414,6 +440,10 @@ void settleRun(Game& g, bool lost) {
 // 使用方式：传种类、ID、名称和品阶。
 // 返回值：与静态药材或材料定义一致时为真。
 bool validTarget(const string& kind, const string& id, const string& name, int grade) {
+    if (kind == "bottleMaterial") {
+        const auto* Definition = content::mfFindGreenBottleMaterial(id);
+        return Definition && Definition->Material.name == name && Definition->Material.grade == grade;
+    }
     if (kind == "herb") { const auto* item = findHerbById(id); return item && item->name == name && item->grade == grade; }
     if (kind == "material") for (const auto& item : data::MaterialDef_TABLE()) if (item.id == id) return item.name == name && item.grade == grade;
     return false;
@@ -436,11 +466,34 @@ string bossRewardsError(const vector<DungeonReward>& rewards, int stage, const s
             if (reward.id != "boss-manual" || !findManualInfo(reward.manual, info) || info.stage > stage || !reward.spell.empty() ||
                 reward.amount != 0 || reward.name != "功法抄本·" + info.name) return "永久抄本通关奖励无效。";
         } else if (reward.kind == "stones") {
-            if (reward.id != "boss-stones" || !reward.spell.empty() || !reward.manual.empty() || reward.amount != bossStones(stage, type) ||
+            if (reward.id != "boss-stones" || !reward.spell.empty() || !reward.manual.empty() || !mfIsFrozenDungeonStoneReward(stage, type, reward.amount) ||
                 reward.name != "灵石宝藏·" + std::to_string(reward.amount)) return "通关灵石宝藏数量无效。";
         } else return "永久通关奖励不能包含临时卡牌或材料。";
     }
     return kinds.count("stones") ? "" : "通关奖励缺少灵石兜底。";
+}
+
+// 用途：原子提交已完成验证的秘境入场写集；流程：小绿瓶专属入场与越境扫荡。
+// 使用：活动run必须为空、候选run必须存在；返回：无，构造失败仍保持活动状态不变。
+void mfCommitDungeonEntry(Game& State, Game& Candidate) {
+    // MSVC的map移动构造可能分配哨兵，不能假设Game/空optional整体移动无抛。
+    // 先构造活动空run；失败时optional仍为空，成功后只做已证明无抛的赋值/交换。
+    static_assert(std::is_nothrow_move_assignable_v<DungeonRun>);
+    static_assert(noexcept(State.dungeons.sites.swap(Candidate.dungeons.sites)));
+    static_assert(noexcept(State.flags.swap(Candidate.flags)));
+    static_assert(noexcept(State.logs.swap(Candidate.logs)));
+    State.dungeons.run.emplace();
+    *State.dungeons.run = std::move(*Candidate.dungeons.run);
+    State.dungeons.sites.swap(Candidate.dungeons.sites);
+    State.flags.swap(Candidate.flags);
+    State.logs.swap(Candidate.logs);
+    State.dungeons.initialized = Candidate.dungeons.initialized;
+    State.dungeons.lastSpawnYear = Candidate.dungeons.lastSpawnYear;
+    State.dungeons.seq = Candidate.dungeons.seq;
+    State.dungeons.intelMonth = Candidate.dungeons.intelMonth;
+    State.dungeons.intelPurchases = Candidate.dungeons.intelPurchases;
+    State.eventSeq = Candidate.eventSeq;
+    State.rng = Candidate.rng;
 }
 
 } // namespace
@@ -523,6 +576,10 @@ void dungeonAbandon(Game& g) {
 // 返回值：拒绝原因；可进入时为空。
 string dungeonEnterError(const Game& g, const DungeonSite& site) {
     if (const string error = busyError(g); !error.empty()) return error;
+    if (site.type == "bottle") {
+        const auto Quote = crafting::mfQuoteGreenBottleDungeon(g, site.targetGrade);
+        if (!Quote.Enabled) return Quote.Reason;
+    }
     if (!site.revealed) return "尚未定位此秘境。";
     if (site.cleared) return "此秘境已通关。";
     if (g.flags.count("dungeon-enter:" + site.id)) return "此处秘境已经探索过，不能重复进入刷取奖励。";
@@ -561,6 +618,7 @@ string dungeonEnter(Game& g, const string& siteId) {
     if (!site) return "此秘境不存在。";
     if (const string error = dungeonEnterError(g, *site); !error.empty()) return error;
     DungeonRun run;
+    run.LayoutVersion = 2;
     run.siteId = site->id; run.siteName = site->name; run.type = site->type; run.location = site->location;
     run.stage = g.player.stage; run.health = g.player.health;
     run.targetKind = site->targetKind; run.targetId = site->targetId; run.targetName = site->targetName; run.targetGrade = site->targetGrade;
@@ -582,7 +640,87 @@ string dungeonEnter(Game& g, const string& siteId) {
     string rewards;
     for (const auto& reward : site->bossRewards) { if (!rewards.empty()) rewards += "、"; rewards += reward.name; }
     logEvent(g, "self", "进入「" + site->name + "」。通关后从「" + rewards + "」中选一项永久奖励。" +
-        (site->type == "intel" ? "另保底获得「" + site->targetName + "」×10。" : "") + "沿途神通牌与遗物仅供本次探索。", true);
+        ((site->type == "intel" || site->type == "bottle") ? "另保底获得「" + site->targetName + "」×10。" : "") + "沿途神通牌与遗物仅供本次探索。", true);
+    return "";
+}
+
+// 用途：依据入口境界和真实入场限制报价扫荡；流程：目录与执行共用。
+// 使用：只查已经存在的site，不生成秘境或推进RNG/日历；返回：资格、最低大境界和一天耗时。
+DungeonSweepQuote mfQuoteDungeonSweep(const Game& State, const string& SiteId) {
+    DungeonSweepQuote Quote; Quote.SiteId = SiteId;
+    const auto Site = std::find_if(State.dungeons.sites.begin(), State.dungeons.sites.end(),
+        [&](const DungeonSite& Entry) { return Entry.id == SiteId; });
+    if (Site == State.dungeons.sites.end()) { Quote.Reason = "此秘境不存在或已经消失。"; return Quote; }
+    Quote.SiteStage = Site->stage;
+    if (Site->stage < 0 || Site->stage > 12 || State.player.stage < 0 || State.player.stage > 12) {
+        Quote.Reason = "秘境或人物境界无效。"; return Quote;
+    }
+    Quote.RequiredStage = (Site->stage / 3 + 1) * 3;
+    Quote.Reason = dungeonEnterError(State, *Site);
+    if (Quote.Reason.empty() && State.player.stage / 3 <= Site->stage / 3)
+        Quote.Reason = Quote.RequiredStage > 12 ? "此入口已属最高大境界，无法越境扫荡。" :
+            "扫荡需要至少达到" + realmName(Quote.RequiredStage) + "，比入口高一个大境界。";
+    if (Quote.Reason.empty() && (State.eventSeq < 0 || State.eventSeq > StateLimits::MaxPersistedInteger - 2))
+        Quote.Reason = "纪事编号空间不足，无法记录入场和扫荡。";
+    if (Quote.Reason.empty()) Quote.Reason = dungeonStateError(State);
+    Quote.Enabled = Quote.Reason.empty();
+    return Quote;
+}
+
+// 用途：高境界跳过逐层玩法并保留真实最终奖励选择；流程：秘境目录扫荡命令。
+// 使用：先按同一报价校验，再在副本复用真实入场和合法逐层连线；返回：空为成功，失败不部分提交。
+string mfSweepDungeon(Game& State, const string& SiteId) {
+    const auto Quote = mfQuoteDungeonSweep(State, SiteId);
+    if (!Quote.Enabled) return Quote.Reason;
+    Game Candidate = State;
+    if (const string Error = dungeonEnter(Candidate, SiteId); !Error.empty()) return Error;
+    if (!Candidate.dungeons.run || State.dungeons.run) return "秘境状态已变化，请重新查看入口。";
+    auto& Run = *Candidate.dungeons.run;
+    bool ReachedBoss = false;
+    for (std::size_t Step = 0; Step < Run.nodes.size(); ++Step) {
+        const auto Node = std::find_if(Run.nodes.begin(), Run.nodes.end(),
+            [&](const DungeonNode& Entry) { return dungeonNodeAvailable(Run, Entry.id); });
+        if (Node == Run.nodes.end()) return "秘境路线缺少合法终点，无法扫荡。";
+        Node->visited = true; Run.row = Node->row; Run.current = Node->id;
+        if (Node->type == "boss") { ReachedBoss = true; break; }
+    }
+    if (!ReachedBoss) return "秘境路线未抵达终点，无法扫荡。";
+    // 扫荡不调用节点选择或战斗收口，不产生沿途资源、战斗额外掉落或击杀统计。
+    if (Run.type == "intel" || Run.type == "bottle") grantTarget(Run);
+    Run.cleared = true; Run.phase = "reward"; Run.rewards = Run.bossRewards;
+    Run.elapsedDays = Quote.Days;
+    auto* Site = siteOf(Candidate, SiteId);
+    if (!Site) return "秘境入口已变化，请重新查看。";
+    Site->cleared = true;
+    logEvent(Candidate, "self", "凭高境界扫荡「" + Run.siteName + "」，略过沿途探索。请选择一项原定最终奖励；" +
+        ((Run.type == "intel" || Run.type == "bottle") ? "目标「" + Run.targetName + "」×10已存入探索行囊；" : "") +
+        "离境后结算一天耗时。", true);
+    if (const string Error = dungeonStateError(Candidate); !Error.empty()) return Error;
+    mfCommitDungeonEntry(State, Candidate);
+    return "";
+}
+
+// 用途：从合法洞府创建一次专属灵材秘境；流程：小绿瓶实际入口；返回：错误或空，候选成功后仅提交建境/入场写集。
+string mfOpenBottleMaterialDungeon(Game& State, int MaterialGrade) {
+    const auto Quote = crafting::mfQuoteGreenBottleDungeon(State, MaterialGrade);
+    if (!Quote.Enabled) return Quote.Reason;
+    Game Candidate = State;
+    ensureDungeons(Candidate); pruneSites(Candidate);
+    if (Candidate.dungeons.seq >= std::numeric_limits<int>::max() || Candidate.dungeons.sites.size() >= 160)
+        return "秘境目录或编号已达上限。";
+    DungeonSite Site;
+    Site.id = "bottle-" + std::to_string(MaterialGrade) + "-" + std::to_string(++Candidate.dungeons.seq);
+    Site.name = Quote.Name; Site.type = "bottle"; Site.location = Candidate.player.cave;
+    Site.openedYear = currentYear(Candidate); Site.expiresYear = Site.openedYear + 1;
+    Site.stage = Candidate.player.stage;
+    Site.targetKind = "bottleMaterial"; Site.targetId = Quote.MaterialId;
+    Site.targetName = Quote.MaterialName; Site.targetGrade = MaterialGrade;
+    freezeBossRewards(Candidate, Site);
+    const string SiteId = Site.id;
+    Candidate.dungeons.sites.push_back(std::move(Site));
+    if (const string Error = dungeonEnter(Candidate, SiteId); !Error.empty()) return Error;
+    if (State.dungeons.run || !Candidate.dungeons.run) return "专属秘境入场状态已变化，请重试。";
+    mfCommitDungeonEntry(State, Candidate);
     return "";
 }
 // 用途：进入可达节点并开始战斗或形成节点奖励。
@@ -595,6 +733,9 @@ string dungeonChoose(Game& g, const string& nodeId) {
     auto& run = *g.dungeons.run;
     if (!dungeonNodeAvailable(run, nodeId)) return "只能沿连线前往下一层，且需先完成当前节点。";
     auto* node = nodeOf(run, nodeId);
+    const bool IsCombat = node->type == "battle" || node->type == "elite" || node->type == "boss";
+    const auto Encounter = run.LayoutVersion >= 2 && IsCombat ? mfDescribeDungeonEncounter(g, run, *node) : DungeonEncounter{};
+    if (run.LayoutVersion >= 2 && IsCombat && !Encounter.Enabled) return Encounter.Reason;
     run.current = node->id; run.row = node->row; node->visited = true;
     run.rewards.clear();
     if (node->type == "battle" || node->type == "elite" || node->type == "boss") {
@@ -605,9 +746,10 @@ string dungeonChoose(Game& g, const string& nodeId) {
         enemy.health = node->type == "boss" ? 115 : node->type == "elite" ? 90 : 65;
         enemy.name = realmName(enemy.stage) + "·" + node->name;
         enemy.beast = run.type == "sea" || run.type == "tianmo" || node->type != "elite";
-        enemy.sect = enemy.beast ? "" : vector<string>{"jinhong", "xinghe", "zhushan", "lihuo", "huachen"}[hashText(run.siteId + node->id) % 5];
+        enemy.sect = enemy.beast ? "" : SECTS()[hashText(run.siteId + node->id) % SECTS().size()].id;
         enemy.style = run.type == "sea" ? "水" : run.type == "tianmo" ? "神" : "体";
         enemy.dungeonSite = run.siteId; enemy.dungeonNode = node->id;
+        if (run.LayoutVersion >= 2) enemy = Encounter.Enemy;
         // 上下文与 phase 必须先登记，敌方抢先出手可能立即结束战斗。
         g.player.health = run.health; battleStart(g, enemy);
         return "";
@@ -621,14 +763,19 @@ string dungeonChoose(Game& g, const string& nodeId) {
             reward.spell = card.uid; run.rewards.push_back(std::move(reward));
         }
     } else if (node->type == "chest") {
-        run.stones += 15 + run.stage * 4; bankMaterial(g, run, 1); relicChoices(g, run);
+        const auto Rules = mfDungeonRewardRulesForStage(mfDungeonEntryRewardStage(g, run), run.type);
+        run.stones += Rules.CacheStones; bankMaterial(g, run, 1); relicChoices(g, run);
     } else if (node->type == "merchant") {
         relicChoices(g, run, true); cardChoices(g, run, true);
-        run.rewards.push_back(makeReward(run, "buyHeal", "灵泉药浴", "消耗本次探索获得的灵石，恢复30%气血；购买一项后离开。", 15 + run.stage * 2));
+        const auto Rules = mfDungeonRewardRulesForStage(mfDungeonEntryRewardStage(g, run), run.type);
+        run.rewards.push_back(makeReward(run, "buyHeal", "灵泉药浴", "消耗本次探索获得的灵石，恢复30%气血；购买一项后离开。", 15 * Rules.CurrencyScale));
+    } else if (node->type == "event" && run.LayoutVersion >= 2) {
+        run.rewards = mfDungeonEventRewards(g, run, *node);
     } else {
         run.rewards.push_back(makeReward(run, "rest", "汲取灵泉", "恢复12%气血。", 12));
-        run.rewards.push_back(makeReward(run, "cache", "搜寻遗藏", "获得灵石与1份一二阶附带材料。", 15 + run.stage * 4));
-        run.rewards.push_back(makeReward(run, "risk", "破开禁制", "付出12%气血（不致死），获得3份一二阶附带材料。", 12));
+        const auto Rules = mfDungeonRewardRulesForStage(mfDungeonEntryRewardStage(g, run), run.type);
+        run.rewards.push_back(makeReward(run, "cache", "搜寻遗藏", "获得灵石与1份本秘境境界对应的附带材料。", Rules.CacheStones));
+        run.rewards.push_back(makeReward(run, "risk", "破开禁制", "付出12%气血（不致死），获得3份本秘境境界对应的附带材料。", 12));
     }
     return "";
 }
@@ -641,6 +788,13 @@ string dungeonClaim(Game& g, const string& rewardId) {
     if (g.player.arts.battle) return "请先结束当前斗法。";
     auto& run = *g.dungeons.run;
     if (run.phase != "reward") return "当前没有可选择的节点奖励。";
+    if (const string Error = mfDungeonEventStateError(g); !Error.empty()) return Error;
+    if (const auto* Current = nodeOf(run, run.current); Current && Current->type == "event" && run.LayoutVersion >= 2 && !run.cleared && rewardId != "skip") {
+        const auto Found = std::find_if(run.rewards.begin(), run.rewards.end(), [&](const auto& Reward) { return Reward.id == rewardId; });
+        if (Found == run.rewards.end()) return "请选择当前事件的一项选项。";
+        if (const string Error = mfClaimDungeonEvent(g, rewardId); !Error.empty()) return Error;
+        return "";
+    }
     if (run.cleared) {
         if (run.bossRewardClaimed) return "通关奖励已经领取。";
         const auto found = std::find_if(run.bossRewards.begin(), run.bossRewards.end(), [&](const auto& reward) {
@@ -712,6 +866,11 @@ string dungeonLeave(Game& g) {
     if (const string error = runError(g); !error.empty()) return error;
     if (g.player.arts.battle || g.dungeons.run->phase == "battle") return "斗法中须通过撤离行动逃出，不能直接离开秘境。";
     if (g.dungeons.run->cleared && !g.dungeons.run->bossRewardClaimed) return "请先选择一项永久通关奖励，再离开秘境。";
+    if (g.dungeons.run->type == "bottle" && g.dungeons.run->targetGranted) {
+        const auto Found = g.dungeons.run->materials.find(g.dungeons.run->targetId);
+        if (Found == g.dungeons.run->materials.end() || Found->second != 10) return "小绿瓶通关材料记录无效。";
+        if (const auto Error = crafting::mfGreenBottleMaterialCapacityError(g.player, Found->first, Found->second); !Error.empty()) return Error;
+    }
     settleRun(g, false); return "";
 }
 // 用途：报价高阶定向材料秘境情报。
@@ -777,20 +936,23 @@ void dungeonBattleComplete(Game& g, const Battle& battle, bool won) {
     if (run.phase != "battle" || run.siteId != battle.dungeonSite || run.current != battle.dungeonNode) return;
     const auto* node = nodeOf(run, run.current);
     if (!node || !node->visited) return;
+    const int EntryStage = mfDungeonEntryRewardStage(g, run);
+    if (EntryStage < 0) return;
+    const auto Rewards = mfDungeonRewardRulesForStage(EntryStage, run.type);
     run.health = clampInt(jsRound(battle.hp * 100.0 / std::max(1, battle.max)), 1, 100);
     g.player.health = run.health;
     if (!won || battle.retreat) { settleRun(g, true); return; }
     for (const auto& id : run.relics) if (const auto* relic = relicOf(id)) run.health = std::min(100, run.health + relic->heal);
     g.player.health = run.health;
-    run.stones += 12 + run.stage * 5 + (node->type == "elite" ? 18 + run.stage * 3 : 0);
+    run.stones += Rewards.BattleStones + (node->type == "elite" ? Rewards.EliteBonusStones : 0);
     if (node->type == "boss") {
-        if (run.type == "intel") grantTarget(run);
-        run.stones += 50 + run.stage * 10; run.insight += 3;
-        if (run.stage >= 3) run.cores += run.type == "sea" || run.type == "tianmo" ? 3 : 1;
+        if (run.type == "intel" || run.type == "bottle") grantTarget(run);
+        run.stones += Rewards.BossBonusStones; run.insight += 3;
+        if (EntryStage >= 3) run.cores += run.type == "sea" || run.type == "tianmo" ? 3 : 1;
         run.cleared = true; run.phase = "reward"; run.rewards = run.bossRewards;
         if (auto* site = siteOf(g, run.siteId)) site->cleared = true;
         logEvent(g, "self", "通关「" + run.siteName + "」！请选择一项永久神通、功法抄本或灵石宝藏。" +
-            (run.type == "intel" ? "「" + run.targetName + "」×10保底已存入探索行囊，离开时带出。" : "沿途材料只是附带收获。"), true);
+            ((run.type == "intel" || run.type == "bottle") ? "「" + run.targetName + "」×10保底已存入探索行囊，离开时带出。" : "沿途材料只是附带收获。"), true);
     } else {
         bankMaterial(g, run, node->type == "elite" ? 2 : 1);
         run.phase = "reward"; run.rewards.clear();
@@ -822,12 +984,21 @@ string dungeonStateError(const Game& g) {
             if (!validTarget(site.targetKind, site.targetId, site.targetName, site.targetGrade) ||
                 mfTargetStage(site.targetKind, site.targetId, site.targetGrade) < 0 ||
                 mfTargetStage(site.targetKind, site.targetId, site.targetGrade) > site.stage) return "定向秘境材料目标无效或超过对应境界。";
+        } else if (site.type == "bottle") {
+            if (site.targetKind != "bottleMaterial" || !validTarget(site.targetKind, site.targetId, site.targetName, site.targetGrade))
+                return "小绿瓶秘境的专属灵材目标无效。";
         } else if (!site.targetKind.empty() || !site.targetId.empty() || !site.targetName.empty() || site.targetGrade != 1) return "普通秘境不能以材料十份作为主奖励。";
         if (const string error = bossRewardsError(site.bossRewards, site.stage, site.type); !error.empty()) return error;
-        if (site.type != "wild" && site.type != "intel" && site.type != "sea" && site.type != "tianmo") return "秘境类型无效。";
+        if (site.type != "wild" && site.type != "intel" && site.type != "sea" && site.type != "tianmo" && site.type != "bottle") return "秘境类型无效。";
     }
     if (!world.run) return "";
     const auto& run = *world.run;
+    if (run.type == "bottle") {
+        const auto* Definition = content::mfGreenBottleMaterialForGrade(run.targetGrade);
+        if (!Definition || !hasTalent(g.player, "greenBottle") || g.player.arts.GreenBottleGrade < Definition->MinimumBottleGrade)
+            return "小绿瓶秘境探索与天赋或瓶阶不符。";
+        if (const auto Error = crafting::mfGreenBottleMaterialCapacityError(g.player, run.targetId, 10); !Error.empty()) return Error;
+    }
     const auto site = std::find_if(world.sites.begin(), world.sites.end(), [&](const auto& item) { return item.id == run.siteId; });
     if (site == world.sites.end() || run.location != site->location || run.siteName != site->name || run.type != site->type ||
         run.stage < site->stage || run.stage > 12 || run.health < 1 || run.health > 100 || run.row < -1 || run.row > 12 || run.seq < 10 || run.elapsedDays < 0 || run.elapsedDays > 100 ||
@@ -840,7 +1011,7 @@ string dungeonStateError(const Game& g) {
     if (run.phase != "route" && run.phase != "reward" && run.phase != "battle" && run.phase != "complete") return "秘境阶段无效。";
     if (site->cleared != run.cleared || run.bossRewardClaimed != (run.phase == "complete") ||
         (run.cleared ? run.phase != "reward" && run.phase != "complete" : run.phase == "complete") ||
-        run.targetGranted != (run.type == "intel" && run.cleared)) return "秘境通关奖励状态无效。";
+        run.targetGranted != ((run.type == "intel" || run.type == "bottle") && run.cleared)) return "秘境通关奖励状态无效。";
     if (run.bossRewardClaimed != run.bossRewardTaken.has_value()) return "永久通关奖励领取记录缺失或提前发放。";
     if (run.bossRewardTaken) {
         const auto& taken = *run.bossRewardTaken;
@@ -849,9 +1020,10 @@ string dungeonStateError(const Game& g) {
             (taken.kind == "manual" && !ownsManual(g, taken.manual)) ||
             (taken.kind == "stones" && run.stones < taken.amount)) return "永久通关奖励实取记录与角色收获不一致。";
     }
+    if (run.LayoutVersion < 1 || run.LayoutVersion > 2) return "秘境路线版本无效。";
     const int floors = 9 + run.stage / 3;
     if (run.nodes.size() != static_cast<size_t>((floors - 1) * 3 + 1)) return "秘境路线层数无效。";
-    DungeonRun expectedRoute; expectedRoute.siteId = run.siteId; expectedRoute.stage = run.stage;
+    DungeonRun expectedRoute; expectedRoute.siteId = run.siteId; expectedRoute.stage = run.stage; expectedRoute.LayoutVersion = run.LayoutVersion;
     createRoute(g, expectedRoute);
     std::set<string> nodeIds, cardIds, relicIds, rewardIds;
     vector<int> visits(floors, 0), widths(floors, 0);
@@ -862,6 +1034,7 @@ string dungeonStateError(const Game& g) {
         const auto* expected = nodeOf(expectedRoute, node.id);
         if (!expected || node.row != expected->row || node.lane != expected->lane || node.type != expected->type || node.next != expected->next)
             return "秘境路线不能通过读档重绘或改写。";
+        if (run.LayoutVersion >= 2 && (node.name != expected->name || node.text != expected->text)) return "秘境节点预告不能通过读档改写。";
         if (node.type != "battle" && node.type != "elite" && node.type != "camp" && node.type != "event" && node.type != "chest" && node.type != "merchant" && node.type != "boss") return "秘境节点类型无效。";
         if ((node.type == "boss") != (node.row == floors - 1) || (node.row == floors - 1 && node.lane != 1)) return "秘境终点无效。";
         if ((node.row == floors - 1) != node.next.empty() || node.next.size() > 2) return "秘境路线缺少出口。";
@@ -900,6 +1073,7 @@ string dungeonStateError(const Game& g) {
     if (strike != 5 || defend != 5) return "秘境必须携带五张普通攻击与五张普通防御。";
     for (const auto& id : run.relics) if (!relicOf(id) || !relicIds.insert(id).second) return "秘境遗物无效。";
     if (run.rewards.size() > 61 || (run.phase != "reward" && !run.rewards.empty())) return "秘境奖励与阶段冲突。";
+    if (const string Error = mfDungeonEventStateError(g); !Error.empty()) return Error;
     for (const auto& reward : run.rewards) {
         if (reward.id.empty() || !rewardIds.insert(reward.id).second || reward.amount < 0 || reward.amount > 100000 || reward.grade < 1 || reward.grade > 6) return "秘境奖励标识或数量无效。";
         if (reward.kind == "learnSpell" || reward.kind == "manual" || reward.kind == "stones") {
@@ -912,17 +1086,26 @@ string dungeonStateError(const Game& g) {
         } else if (reward.kind == "remove") {
             const auto card = std::find_if(run.deck.begin(), run.deck.end(), [&](const auto& item) { return item.uid == reward.spell; });
             if (card == run.deck.end() || card->spell == "strike" || card->spell == "defend") return "秘境删牌选项无效。";
-        } else if (reward.kind != "rest" && reward.kind != "cache" && reward.kind != "risk" && reward.kind != "buyHeal") return "秘境奖励类型无效。";
+        } else if (reward.kind != "rest" && reward.kind != "cache" && reward.kind != "risk" && reward.kind != "buyHeal" && reward.kind != "eventChoice") return "秘境奖励类型无效。";
     }
     for (const auto& [id, count] : run.herbs) {
         const auto* item = findHerbByName(id);
         if (!item || count < 0 || count > 100000 || (crafting::mfHerbAcquisitionStage(item->id) > run.stage &&
             !(run.targetGranted && run.targetKind == "herb" && item->id == run.targetId))) return "秘境药材行囊无效。";
     }
+    // 新loot按入口适阶；旧高境进低阶曾产出至多二阶材料，继续保留其已取得的合法库存。
+    const int NewMaterialGrade = mfDungeonRewardRulesForStage(site->stage, site->type).MaterialGrade;
+    const int CompatibleMaterialGrade = std::max(NewMaterialGrade, std::min(2, matchedGrade(run.stage, "material")));
     for (const auto& [id, count] : run.materials) {
+        if (content::mfFindGreenBottleMaterial(id)) {
+            if (run.type != "bottle" || !run.targetGranted || id != run.targetId || count != 10)
+                return "小绿瓶秘境灵材行囊无效或提前发放。";
+            continue;
+        }
         const auto item = std::find_if(data::MaterialDef_TABLE().begin(), data::MaterialDef_TABLE().end(), [&](const auto& def) { return def.id == id; });
-        if (item == data::MaterialDef_TABLE().end() || count < 0 || count > 100000 || item->grade > matchedGrade(run.stage, "material")) return "秘境矿材行囊无效。";
+        if (item == data::MaterialDef_TABLE().end() || count < 0 || count > 100000 || item->grade > CompatibleMaterialGrade) return "秘境矿材行囊无效。";
     }
+    if (run.type == "bottle" && run.targetGranted && !run.materials.count(run.targetId)) return "小绿瓶秘境通关保底材料缺失。";
     for (const auto& [id, count] : run.potions) if (!findRecipe(id) || count < 0 || count > 100000) return "秘境丹药行囊无效。";
     return "";
 }

@@ -35,6 +35,8 @@ enum class RouteId {
     CaveGardenDeposit,
     CaveGardenWithdraw,
     CaveGardenClear,
+    CaveGreenBottleUpgrade,
+    CaveGreenBottleDungeon,
     CheckpointRestore,
     Choose,
     Conflict,
@@ -99,6 +101,7 @@ enum class RouteId {
     Travel,
     UsePill,
     Wild,
+    DungeonSweep,
 };
 struct RouteInfo {
     RouteId id;

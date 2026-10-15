@@ -4,9 +4,13 @@
 // 所以本文件是重写而非修补。旧的逐回合数值对照测试也随之更新。
 #include "core/battle.h"
 #include "core/combat/battle_scaling.h"
+#include "core/combat/elemental_sword.h"
+#include "core/combat/fire_growth.h"
+#include "core/combat/discard_rules.h"
 #include "core/social/npc_consumables.h"
 #include "core/content/game_ids.h"
 #include "core/content/text_table.h"
+#include "core/content/npc_combat_profiles.h"
 #include "core/artifact.h"
 #include "core/dungeon.h"
 #include "core/checkpoint.h"
@@ -39,6 +43,23 @@ using content::TextId;
 // 使用方式：传游戏、敌人规格和是否初始化开局属性。
 // 返回值：无；修改 battle.enemyCards、敌人属性、牌堆及 RNG。
 static void battleEnemyInit(Game& g, const EnemySpec& spec, bool opening = true);
+// 用途：按宗门与完整传承身份提供连招次数上限；流程：规划与只读界面说明。
+// 使用方式：传当前游戏和战斗，身份沿用已登记的NPC模板；返回：上限整数，无状态或随机副作用。
+int mfBattleEnemyActionLimit(const Game& GameState, const Battle& BattleState) {
+    if (BattleState.shadowPlayer) return 24;
+    const auto& EnemyState = BattleState.enemyCards;
+    const int EnemyStage = clampInt(EnemyState.stage, 0, 12);
+    if (EnemyState.sect.empty()) return 2 + EnemyStage / 6;
+    bool HasCompleteProfile = false;
+    if (!BattleState.npcId.empty()) {
+        const auto Opponent = std::find_if(GameState.npcs.begin(), GameState.npcs.end(),
+            [&](const Npc& Entry) { return Entry.id == BattleState.npcId; });
+        HasCompleteProfile = Opponent != GameState.npcs.end() && content::isChampion(*Opponent);
+    }
+    const int BaseActionCount = HasCompleteProfile ? ChampionSectActionBase : CommonSectActionBase;
+    return std::min(NpcSectActionLimit, BaseActionCount + EnemyStage / 3);
+}
+
 // 用途：从敌方已抽到的牌和可用法宝规划本轮连招。
 // 参与流程：真实修士开局及每轮敌方计划。
 // 使用方式：传游戏，以优先级和实际费用在副本上选择行动。
@@ -57,6 +78,18 @@ static int battleIncomingLoss(const Player& p, const Battle& b, int& blocked);
 
 const int BATTLE_POWER[13] = {14, 24, 39, 65, 95, 140, 210, 310, 440,
                               660, 900, 1250, 1800};
+
+// 用途：由毒层计算新施加或增长后的精确每跳伤害；流程：双方施毒、增长及预览。
+// 使用方式：传统一伤害基底和毒层；返回：合计后取整的毒伤，不读写状态。
+static int mfPoisonTickFromLayers(double DamageBasis, int PoisonLayerCount) {
+    return jsRound(DamageBasis * PoisonTickBasisCoefficient * std::max(0, PoisonLayerCount));
+}
+
+// 用途：解释缺少精确缓存的旧在途毒；流程：只读预演及下一动作的视角转换。
+// 使用方式：传当场基底和保存毒层；返回：历史每跳伤害，避免更新系数后重算旧伤。
+static int mfLegacyPoisonTickFromLayers(double DamageBasis, int PoisonLayerCount) {
+    return jsRound(DamageBasis * LegacyPoisonTickBasisCoefficient * std::max(0, PoisonLayerCount));
+}
 
 // ------------------------------------------------------------
 // 神通表（基础 12 种 + 拓展 28 种）
@@ -106,6 +139,22 @@ const vector<SpellDef>& allSpells() {
         add("swordFocus", "剑意激发", "剑", 2, "empower", 0.10, 0, 2);
         add("aegis", "厚土护身", "土", 2, "ward", 0.05, 3, 2);
         add("fireburst", "引焰爆", "火", 4, "fireBurst", 0.65, 3, 1);
+        // 金道减1后再折半仍为2灵力，避免原始3在御金后成为1费重击；无御金的土修仍为原2费。
+        add("goldslash", "金罡斩", "金", 4, "heavy", 0.95, 0);
+        // 历史定义费用会折半；6对应实际3灵力，不能误填3变成实战2费。
+        add("fireSiphon", "噬焰回生", "火", 6, "fireSiphon", 0, 3, 2);
+        // 补牌仍支付真实费用与冷却；剑系补牌属于经营牌，应在连剑前使用。
+        add("metalRedraw", "回锋换念", "金", 2, "redraw", 1.0, 3, 1);
+        add("waterDraw", "回澜诀", "水", 3, "draw", 2.0, 3, 1);
+        add("fireDraw", "照焰诀", "火", 2, "draw", 2.0, 3, 1);
+        add("woodDraw", "探叶诀", "木", 2, "draw", 2.0, 3, 1);
+        add("earthDraw", "静岳诀", "土", 2, "draw", 2.0, 3, 1);
+        add("swordDraw", "观剑诀", "剑", 2, "draw", 2.0, 3, 1);
+        add("earthSword", "土元剑", "土", 2, "sword", 0.65, 0);
+        add("metalSword", "金元剑", "金", 2, "sword", 0.65, 0);
+        add("waterSword", "水元剑", "水", 2, "sword", 0.35, 0);
+        add("woodSword", "木元剑", "木", 3, "sword", 0.55, 0);
+        add("fireSword", "火元剑", "火", 3, "sword", 0.70, 0);
         for (const auto& bs : data::SpellDef_TABLE()) {
             SpellDef s;
             s.id = bs.id; s.name = bs.name; s.dao = bs.dao;
@@ -206,8 +255,12 @@ string battleSpellDescription(const SpellDef& spell) {
     case SpellKind::PoisonBurst: description = plain(TextId::PoisonBurstDescription); break;
     case SpellKind::Fire: description = plain(TextId::FireDescription); break;
     case SpellKind::FireBurst: description = plain(TextId::FireBurstDescription); break;
+    case SpellKind::FireSiphon: description = plain(TextId::FireSiphonDescription); break;
     case SpellKind::Soul: description = plain(TextId::SoulDescription); break;
-    case SpellKind::SoulBurst: description = plain(TextId::SoulBurstDescription); break;
+    case SpellKind::SoulBurst: description = content::formatText(TextId::SoulBurstDescription,
+        {{"bonus_percent", std::to_string(jsRound(SoulBurstPerLayerBonus * 100))},
+         {"pierce_percent", std::to_string(jsRound(SoulBurstPiercePerLayer * 100))},
+         {"max_pierce_percent", std::to_string(jsRound(SoulBurstMaximumPierceFraction * 100))}}); break;
     case SpellKind::BodyBurst: description = plain(TextId::BodyBurstDescription); break;
     case SpellKind::Drain: description = plain(TextId::DrainDescription); break;
     case SpellKind::Steal: description = plain(TextId::StealDescription); break;
@@ -341,7 +394,7 @@ Intent spellToIntent(const SpellDef& spell) {
     if (spellKind == SpellKind::Guard || spellKind == SpellKind::Shield || spellKind == SpellKind::Float) {
         intent.kind = "guard";
         intent.scale = 0;
-    } else if (spellKind == SpellKind::Heal) {
+    } else if (spellKind == SpellKind::Heal || spellKind == SpellKind::FireSiphon) {
         intent.kind = "heal";
     } else if (spellKind == SpellKind::Poison) {
         intent.kind = "poison";
@@ -499,6 +552,39 @@ static const Card* findCard(const Battle& b, const string& uid) {
     return nullptr;
 }
 
+// 用途：解析忘机咒的单张目标；流程：玩家移除校验；使用：优先UID，旧神通ID兼容选首个仍在场副本。
+// 返回：合法目标UID或空；只接受手牌/抽牌/弃牌中的非忘机卡，不读取随机数或改变状态。
+static string mfResolveExhaustTargetUid(const Battle& State, const SpellDef& ExhaustSpell, const string& RequestedTarget) {
+    const auto IsActiveUid = [&](const string& Uid) {
+        if (std::find(State.exhausted.begin(), State.exhausted.end(), Uid) != State.exhausted.end()) return false;
+        for (const auto* Pile : {&State.hand, &State.draw, &State.discard})
+            if (std::find(Pile->begin(), Pile->end(), Uid) != Pile->end()) return true;
+        return false;
+    };
+    if (const auto* TargetCard = findCard(State, RequestedTarget)) {
+        if (TargetCard->spell == ExhaustSpell.id || !IsActiveUid(TargetCard->uid)) return "";
+        return TargetCard->uid;
+    }
+    if (!battleSpell(RequestedTarget) || RequestedTarget == ExhaustSpell.id) return "";
+    for (const auto* Pile : {&State.hand, &State.draw, &State.discard})
+        for (const auto& Uid : *Pile) {
+            const auto* TargetCard = findCard(State, Uid);
+            if (TargetCard && TargetCard->spell == RequestedTarget && IsActiveUid(Uid)) return Uid;
+        }
+    return "";
+}
+
+// 用途：将已校验的一张卡移入本场移除堆；流程：玩家与NPC忘机咒共用。
+// 使用：目标必须先经校验且尚未移动；返回：无，仅移除这一UID，保留同神通其他副本和下场牌组。
+static void mfExhaustOneCard(Battle& State, const string& TargetUid) {
+    // 先完成可能分配内存的追加，再改原牌堆；失败不会半途删除目标。
+    State.exhausted.push_back(TargetUid);
+    for (auto* Pile : {&State.hand, &State.draw, &State.discard}) {
+        const auto Position = std::find(Pile->begin(), Pile->end(), TargetUid);
+        if (Position != Pile->end()) { Pile->erase(Position); return; }
+    }
+}
+
 // 确定并存下敌方本回合意图（含已算好的原始伤害）
 // 用途：规划并登记下一次敌方行动。
 // 参与流程：开局及下一轮抽牌后的意图展示。
@@ -508,6 +594,10 @@ static void battlePlan(Game& g) {
     Battle& b = *g.player.arts.battle;
     if (b.enemyCards.enabled) {
         battleEnemyPlan(g);
+        return;
+    }
+    if (b.enemyBeast) {
+        BeastCombat::mfPlanActions(g);
         return;
     }
     const Intent it = battleIntent(b);
@@ -664,6 +754,7 @@ void battleStart(Game& game, const EnemySpec& enemy) {
     Arts& arts = player.arts;
     const int enemyBase = BATTLE_POWER[clampInt(enemy.stage, 0, 12)];
     Battle battle = battleReferenceState(player);
+    battle.poisonDamage = 0;
     const int maxHp = battle.max;
 
     // Demo07：对手气血额外 ×1.45
@@ -761,6 +852,7 @@ void battleStart(Game& game, const EnemySpec& enemy) {
     if (!arts.battle->playerFirst) {
         arts.battle->log.push_back("对方遁速更快，抢先施放首轮神通。");
         if (arts.battle->enemyCards.enabled) battleEnemyAct(game);
+        else if (!arts.battle->BeastActions.empty()) BeastCombat::mfExecuteActions(player, *arts.battle, true);
         else {
             int blocked = 0;
             const int loss = battleIncomingLoss(player, *arts.battle, blocked);
@@ -915,10 +1007,11 @@ static int battleAddShield(const Player& p, Battle& b, int amount) {
 // 参与流程：换念诀、双方回合末弃牌。
 // 使用方式：传角色、对应战斗视角与弃牌数；不负责移动牌堆。
 // 返回值：无；修改护盾、蓄势及下一击锐势。
-static void battleDiscard(const Player& p, Battle& b, int count) {
+static void battleDiscard(const Player& p, Battle& b, int count, DiscardRules::Timing Timing = DiscardRules::Timing::Active) {
     if (count <= 0) return;
     const ArtMods m = talentMods(p);
-    battleAddShield(p, b, jsRound(b.max * m.discardShield * count));
+    const double ShieldScale = Timing == DiscardRules::Timing::RoundEnd ? DiscardRules::RoundEndShieldPercent / 100.0 : 1.0;
+    battleAddShield(p, b, jsRound(b.max * m.discardShield * count * ShieldScale));
     b.discardPower = std::min(0.30, b.discardPower + m.discardPower * count);
 }
 
@@ -927,7 +1020,10 @@ static void battleDiscard(const Player& p, Battle& b, int count) {
 // 使用方式：传施术者、可写战斗、神通及目标减伤/反震。
 // 返回值：效果战报；修改灵力、攻防、状态和抽牌请求，不直接抽牌。
 static string battleEffect(const Player& player, Battle& battle, const SpellDef& spell,
-                          double targetReduction = 0, double targetCounter = 0) {
+                          double targetReduction = 0, double targetCounter = 0, int* RawDamageOutput = nullptr,
+                          bool* ElementalGenerationOutput = nullptr) {
+    if (RawDamageOutput) *RawDamageOutput = 0;
+    if (ElementalGenerationOutput) *ElementalGenerationOutput = false;
     if (!content::parseSpellKind(spell.kind) || !content::parseDaoId(spell.dao)) return "";
     const Arts& arts = player.arts;
     const ArtMods modifiers = talentMods(player);
@@ -937,6 +1033,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
     const int manaBefore = battle.mana;
     const int manaCap = battleManaCap(player);
     battle.mana -= cost;
+    const bool HasElementalSwordCombo = ElementalSword::mfAdvanceSwordChain(battle, spell);
 
     string text;
 
@@ -949,13 +1046,8 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
         const auto spellKind = content::parseSpellKind(spell.kind);
         const string dao = spell.dao;
         const auto daoId = content::parseDaoId(dao);
-        const string previous = battle.last;
-
-        // 五行相生连击
-        const auto previousDao = content::parseDaoId(previous);
-        bool combo = previousDao && daoId && content::generates(*previousDao, *daoId);
-        // fireSeal is the existing composite wood/fire protocol marker.
-        if (previous == "木火" && daoId == DaoId::Fire) combo = true;
+        // 相生只比较最近有效五行牌，非五行经营牌和回合边界不改写轨迹。
+        const bool combo = ElementalSword::mfHasGeneratingCombo(battle, spell);
 
         const int ei = daoIndex(dao);
         const double elementMul = (ei >= 0) ? modifiers.elements[ei] : 1.0;
@@ -972,6 +1064,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
         bool direct = false;
         string statusText;
         const bool swordCard = spellKind == SpellKind::Sword || spellKind == SpellKind::Human;
+        const bool IsElementalSword = ElementalSword::mfIsElementalSword(spell);
         if (!swordCard) battle.swordSequence = 0;
 
         if (spellKind == SpellKind::Mana) {
@@ -1030,7 +1123,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
         } else if (spellKind == SpellKind::Exhaust) {
             const int n = std::max(1, jsRound(spell.scale)) + jsFloor(modifiers.drawBonus);
             battle.pendingDraw += n;
-            text = spell.name + "：将所选神通的全部副本移出本场牌组，抽" + std::to_string(n) + "张。";
+            text = spell.name + "：将所选的一张卡移出本场牌组，抽" + std::to_string(n) + "张。";
         } else if (spellKind == SpellKind::Empower) {
             const double before = battle.buff;
             battle.buff = std::max(before, std::min(0.30, before + spell.scale));
@@ -1043,6 +1136,13 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
             battle.mana = std::min(manaCap, battle.mana + 2);
             battle.lock = 2;
             text = "悬灵术：恢复2灵力，随后两回合灵力−1。";
+        } else if (spellKind == SpellKind::FireSiphon) {
+            const int Converted = FireGrowth::mfExplosionAmount(modifiers, battle.FireGrowthRounds, battle.burn, battle.burnTurns);
+            const int Restored = std::min(std::max(0, battle.max - battle.hp), Converted);
+            battle.hp += Restored;
+            battle.burn = 0; battle.burnTurns = 0;
+            text = spell.name + "：消耗全部灼烧，转化治疗" + std::to_string(Converted) +
+                "，实际气血+" + std::to_string(Restored) + "，不造成伤害。";
         } else if (spellKind == SpellKind::Heal) {
             const int before = battle.hp;
             const int heal = jsRound(
@@ -1068,6 +1168,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                    std::to_string(battle.shield - before) + "。";
         } else {
             direct = true;
+            int ConsumedSoulLayers = 0;
             // 扰灵只削弱下一次直接攻击，治疗、抽牌不会消耗它。
             if (battle.enemyWeaken > 0) {
                 damage = jsRound(damage * std::max(0.5, 1.0 - battle.enemyWeaken * 0.15));
@@ -1111,15 +1212,16 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
             if (spellKind == SpellKind::PoisonBurst) {
                 damage += jsRound(DamageBasis * battle.poison * 0.18);
                 battle.poison = 0;
-                if (battle.poisonDamage >= 0) battle.poisonDamage = 0;
+                battle.poisonDamage = 0;
                 battle.poisonTurns = 0;
             }
             if (spellKind == SpellKind::SoulBurst) {
-                damage = jsRound(damage * (1 + battle.soul * 0.15));
+                ConsumedSoulLayers = clampInt(battle.soul, 0, 6);
+                damage = jsRound(damage * (1 + ConsumedSoulLayers * SoulBurstPerLayerBonus));
                 battle.soul = 0;
             }
             if (spellKind == SpellKind::FireBurst) {
-                damage += jsRound(battle.burn * battle.burnTurns * (1 + modifiers.burnExplosion));
+                damage += FireGrowth::mfExplosionAmount(modifiers, battle.FireGrowthRounds, battle.burn, battle.burnTurns);
                 battle.burn = 0;
                 battle.burnTurns = 0;
             }
@@ -1137,20 +1239,37 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                                  (artHas(arts, "神", 2) ? 1.2 : 1.0));
             if (spellKind == SpellKind::Steal)
                 battle.mana = std::min(manaCap, battle.mana + 1 + std::min(1, jsFloor(modifiers.steal)));
+            if (IsElementalSword) {
+                damage = jsRound(damage * ElementalSword::mfDamageMultiplier(spell, combo));
+                const int QiBeforeExtra = battle.swordQi;
+                const int ManaBeforeExtra = battle.mana;
+                ElementalSword::mfApplyResources(player, modifiers, battle, spell, HasElementalSwordCombo);
+                if (battle.swordQi > QiBeforeExtra || battle.mana > ManaBeforeExtra)
+                    statusText += "五剑衔接：额外剑气+" + std::to_string(battle.swordQi - QiBeforeExtra) +
+                        "，回灵+" + std::to_string(battle.mana - ManaBeforeExtra) + "。";
+            }
 
             // 穿盾与吸收
+            const int RawDamageValue = std::max(0, jsRound(damage));
+            if (RawDamageOutput) *RawDamageOutput = RawDamageValue;
             damage = jsRound(damage * (1 - clamp(targetReduction, -0.10, 0.35)));
             const int pierce = (spellKind == SpellKind::Drain) ? battle.enemyShield
                                : (id == "goldblade")
                                    ? jsRound(battle.enemyShield * 0.5)
                                    : 0;
+            const int SoulPiercingDamage = spellKind == SpellKind::SoulBurst
+                ? jsRound(damage * std::min(SoulBurstMaximumPierceFraction, ConsumedSoulLayers * SoulBurstPiercePerLayer)) : 0;
             const int absorb =
-                std::min(std::max(0, battle.enemyShield - pierce), jsRound(damage));
+                std::min(std::max(0, battle.enemyShield - pierce), std::max(0, jsRound(damage) - SoulPiercingDamage));
+            const int TargetHealthBefore = battle.enemyHp;
             battle.enemyShield -= absorb;
             battle.enemyHp -= jsRound(damage) - absorb;
             if (absorb > 0 && targetCounter > 0)
                 battle.hp -= jsRound(absorb * targetCounter);
-            text = spell.name + "：伤害" +
+            if (IsElementalSword)
+                ElementalSword::mfApplyHitBenefits(battle, spell, combo,
+                    std::min(std::max(0, TargetHealthBefore), std::max(0, jsRound(damage) - absorb)));
+            text = spell.name + "：打出伤害" + std::to_string(RawDamageValue) + "，实际气血伤害" +
                    std::to_string(jsRound(damage) - absorb) +
                    (combo ? "，相生连击" : "") + "。";
             text += statusText;
@@ -1170,7 +1289,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                 const int before = battle.poison;
                 battle.poison = std::min(BATTLE_POISON_CAP, battle.poison + jsRound((add + jsFloor(modifiers.poison)) * spell.statusScale));
                 battle.poisonTurns = 3;
-                if (battle.poisonDamage >= 0) battle.poisonDamage = jsRound(DamageBasis * 0.035 * battle.poison);
+                battle.poisonDamage = mfPoisonTickFromLayers(DamageBasis, battle.poison);
                 if (battle.hp > 0)
                     battle.hp = std::min(battle.max, battle.hp + jsRound(battle.max * (battle.poison - before) * modifiers.poisonHeal));
                 text += "毒+" + std::to_string(battle.poison - before) + "层（共" + std::to_string(battle.poison) +
@@ -1182,10 +1301,9 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
                 text += "震荡+" + std::to_string(battle.soul - before) + "层（共" + std::to_string(battle.soul) + "/6层）。";
             }
             if (spellKind == SpellKind::Fire) {
-                const double added = DamageBasis * 0.1 * (1 + modifiers.burnBonus) *
+                const double added = DamageBasis * BurnTickBasisCoefficient * (1 + modifiers.burnBonus) *
                                      (combo ? 1.5 : 1.0) *
-                                     (artHas(arts, "火", 2) ? 2.0 : 1.0) *
-                                     (1 + std::max(0.0, modifiers.burnStack)) * spell.statusScale;
+                                     (1 + FireGrowth::mfBurnStackBonus(modifiers, battle.FireGrowthRounds)) * spell.statusScale;
                 const int burn = jsRound(std::min<double>(BATTLE_BURN_CAP, added));
                 const int before = battle.burn;
                 battle.burn = std::min(BATTLE_BURN_CAP,
@@ -1197,10 +1315,15 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
         }
 
         if (combo) {
+            const int ManaBeforeGeneration = battle.mana;
+            const int DrawBeforeGeneration = battle.pendingDraw;
             battle.mana = std::min(manaCap, battle.mana + jsFloor(modifiers.comboMana));
             const int draws = std::min(2 - battle.comboDraws, jsFloor(modifiers.comboDraw));
             battle.pendingDraw += std::max(0, draws);
             battle.comboDraws += std::max(0, draws);
+            // 高亮直接读取真实生效事实：直伤相生或实际获得返灵/补牌；不让前端复制能力、容量和次数条件。
+            if (ElementalGenerationOutput)
+                *ElementalGenerationOutput = direct || battle.mana > ManaBeforeGeneration || battle.pendingDraw > DrawBeforeGeneration;
         }
 
         battle.attacked = battle.attacked || direct;
@@ -1214,7 +1337,8 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
 
     // 冷却按完整回合结算，所以这里 +1 补偿本回合
     if (spell.cooldown) battle.cooldowns[id] = spell.cooldown + 1;
-    battle.last = (id == "fireSeal") ? "木火" : string(content::legacyDaoKey(*content::parseDaoId(spell.dao)));
+    if (ElementalSword::mfIsElementalSpell(spell))
+        battle.last = (id == "fireSeal") ? "木火" : string(content::legacyDaoKey(*content::parseDaoId(spell.dao)));
     return text;
 }
 
@@ -1225,7 +1349,7 @@ static string battleEffect(const Player& player, Battle& battle, const SpellDef&
     X(swordQi) X(water) X(soul) X(charge) X(lock) X(carryMana) \
     X(manaBonus) X(manaPenalty) X(drawNext) X(carryCap) X(hpCostPct) \
     X(poison) X(poisonTurns) X(poisonDamage) X(burn) X(burnTurns) X(swordSequence) \
-    X(comboDraws) X(buff) X(reduction) X(guard) X(discardPower) X(last)
+    X(comboDraws) X(ElementalSwordManaReturns) X(ElementalSwordSequence) X(FireGrowthRounds) X(buff) X(reduction) X(guard) X(discardPower) X(last)
 
 // 用途：构造当前敌方施术者的角色视图。
 // 参与流程：敌方费用、属性与法宝查询。
@@ -1269,10 +1393,12 @@ static ArtMods battleEnemyMods(const Battle& b) {
 static void battleTickStatuses(const Player& p, Battle& b, bool log) {
     const ArtMods m = talentMods(p);
     const double DamageBasis = mfBattleDamageBasis(p.stage);
+    const int PlayerBurnTick = b.burnTurns > 0 ? b.burn : 0;
     const int dot =
-        (b.poisonTurns > 0 ? (b.poisonDamage >= 0 ? b.poisonDamage : jsRound(DamageBasis * 0.035 * b.poison)) : 0) +
+        (b.poisonTurns > 0 ? (b.poisonDamage >= 0 ? b.poisonDamage : mfLegacyPoisonTickFromLayers(DamageBasis, b.poison)) : 0) +
         (b.burnTurns > 0 ? b.burn : 0);
     b.enemyHp -= dot;
+    FireGrowth::mfAdvanceAfterBurnTick(m, PlayerBurnTick, b.FireGrowthRounds);
     if (log && dot) b.log.push_back("回合结束：持续伤害" + std::to_string(dot) + "。");
     if (b.poisonTurns > 0 && --b.poisonTurns == 0) {
         b.poison = 0;
@@ -1281,8 +1407,8 @@ static void battleTickStatuses(const Player& p, Battle& b, bool log) {
     if (b.poisonTurns > 0) {
         const int growth = jsFloor(m.poisonGrowth);
         b.poison = std::min(BATTLE_POISON_CAP, b.poison + growth);
-        if (growth > 0 && b.poisonDamage >= 0)
-            b.poisonDamage = jsRound(DamageBasis * 0.035 * b.poison);
+        if (growth > 0)
+            b.poisonDamage = mfPoisonTickFromLayers(DamageBasis, b.poison);
     }
     if (b.burnTurns > 0 && --b.burnTurns == 0) b.burn = 0;
     if (b.enemyHp <= 0 && !b.shadowPlayer) return;
@@ -1292,6 +1418,7 @@ static void battleTickStatuses(const Player& p, Battle& b, bool log) {
     if (b.playerPoisonTurns <= 0 && burning <= 0) return;
     const int poisonLoss = b.playerPoisonTurns > 0 ? b.playerPoison : 0;
     b.hp -= poisonLoss + burning;
+    FireGrowth::mfAdvanceAfterBurnTick(battleEnemyMods(b), burning, b.enemyCards.FireGrowthRounds);
     if (log) b.log.push_back("毒与灼烧：气血−" + std::to_string(poisonLoss + burning) + "。");
     if (b.enemyCards.burnTurns > 0 && --b.enemyCards.burnTurns == 0)
         b.enemyCards.burn = 0;
@@ -1304,8 +1431,8 @@ static void battleTickStatuses(const Player& p, Battle& b, bool log) {
         const int growth = jsFloor(battleEnemyMods(b).poisonGrowth);
         if (growth > 0) {
             b.enemyCards.poison = std::min(BATTLE_POISON_CAP, b.enemyCards.poison + growth);
-            b.playerPoison = jsRound(mfBattleDamageBasisFromPower(b.enemyPower) * 0.035 * b.enemyCards.poison);
-            if (b.enemyCards.poisonDamage >= 0) b.enemyCards.poisonDamage = b.playerPoison;
+            b.playerPoison = mfPoisonTickFromLayers(mfBattleDamageBasisFromPower(b.enemyPower), b.enemyCards.poison);
+            b.enemyCards.poisonDamage = b.playerPoison;
         }
     }
 }
@@ -1323,8 +1450,11 @@ static Battle battleEnemyView(const Battle& b, int playerStage) {
     v.enemyHp = b.hp; v.enemyMax = b.max; v.enemyShield = b.shield;
     v.playerPoison = b.poisonTurns > 0
         ? (b.poisonDamage >= 0 ? b.poisonDamage :
-           jsRound(mfBattleDamageBasis(playerStage) * 0.035 * b.poison)) : 0;
+           mfLegacyPoisonTickFromLayers(mfBattleDamageBasis(playerStage), b.poison)) : 0;
     v.playerPoisonTurns = b.poisonTurns;
+    // 旧敌方状态已有玩家每跳伤害；复制该冻结值，不能再从整层反推或遗漏清毒余量。
+    if (v.poisonDamage < 0)
+        v.poisonDamage = b.playerPoisonTurns > 0 ? b.playerPoison : 0;
     return v;
 }
 
@@ -1332,7 +1462,7 @@ static Battle battleEnemyView(const Battle& b, int playerStage) {
 // 参与流程：敌方出牌、回灵与抽牌后保存。
 // 使用方式：传主战斗、已执行的敌方视角及玩家境界。
 // 返回值：无；更新双方气血护盾和敌方牌组、状态、冷却。
-static void battleSaveEnemyView(Battle& b, const Battle& v, int playerStage) {
+static void battleSaveEnemyView(Battle& b, const Battle& v, [[maybe_unused]] int playerStage) {
     const int oldPoison = b.enemyCards.poison;
     const int oldPoisonTurns = b.enemyCards.poisonTurns;
 #define ENEMY_WRITE(field) b.enemyCards.field = v.field;
@@ -1343,19 +1473,14 @@ static void battleSaveEnemyView(Battle& b, const Battle& v, int playerStage) {
     if (v.poison <= 0 || v.poisonTurns <= 0) b.playerPoison = 0;
     else if (v.poisonDamage >= 0) b.playerPoison = v.poisonDamage;
     else if (oldPoison != v.poison || oldPoisonTurns != v.poisonTurns)
-        b.playerPoison = jsRound(mfBattleDamageBasisFromPower(b.enemyPower) * 0.035 * v.poison);
+        b.playerPoison = mfLegacyPoisonTickFromLayers(mfBattleDamageBasisFromPower(b.enemyPower), v.poison);
     b.playerPoisonTurns = v.poisonTurns;
     b.enemyCd = v.cooldowns;
-    if (b.poisonDamage >= 0) {
-        b.poisonDamage = v.playerPoison;
-        if (b.poisonDamage == 0 || v.playerPoisonTurns == 0) {
-            b.poisonDamage = 0; b.poison = 0; b.poisonTurns = 0;
-        }
-    } else if (b.poisonTurns > 0) {
-        const double quantum = mfBattleDamageBasis(playerStage) * 0.035;
-        if (v.playerPoison < jsRound(quantum * b.poison))
-            b.poison = clampInt(jsFloor(v.playerPoison / quantum), 0, b.poison);
-        if (b.poison == 0) b.poisonTurns = 0;
+    // 治疗平减的是每跳伤害点数，毒层仍供引毒咒使用。把旧层数模式在动作边界
+    // 转成精确缓存，禁止floor反推层数将清两点放大为清一整层。
+    b.poisonDamage = v.playerPoison;
+    if (b.poisonDamage == 0 || v.playerPoisonTurns == 0) {
+        b.poisonDamage = 0; b.poison = 0; b.poisonTurns = 0;
     }
 }
 #undef ENEMY_FIELDS
@@ -1375,17 +1500,17 @@ static void battleEnemyDraw(Game& g, Battle& v, int count) {
     }
 }
 
-// 用途：为敌方移除牌神通选择基础卡种类。
+// 用途：为敌方移除牌神通选择一张基础卡。
 // 参与流程：敌方忘机咒合法性与实际执行。
 // 使用方式：传敌方视角和待用神通，先选守势再选攻击。
-// 返回值：可移除神通 ID；不需目标或无目标时为空。
+// 返回值：可移除卡UID；不需目标或无目标时为空。
 static string enemyRemoveTarget(const Battle& v, const SpellDef& spell) {
     if (!battleNeedsTarget(spell)) return "";
     for (const auto& wanted : {string("defend"), string("strike")})
         for (const auto* pile : {&v.hand, &v.draw, &v.discard})
             for (const auto& uid : *pile) {
                 const Card* card = findCard(v, uid);
-                if (card && card->spell == wanted) return wanted;
+                if (card && card->spell == wanted) return uid;
             }
     return "";
 }
@@ -1406,16 +1531,8 @@ static string battleEnemyPlay(Game* rng, const Player& p, Battle& v,
         v.mana < battleCost(p, *sp)) return "";
     const string target = enemyRemoveTarget(v, *sp);
     if (battleNeedsTarget(*sp) && target.empty()) return "";
-    if (!artifact) v.hand.erase(held);
-    if (!target.empty()) {
-        auto removed = [&](const string& id) {
-            const Card* c = findCard(v, id); return c && c->spell == target;
-        };
-        for (auto* pile : {&v.hand, &v.draw, &v.discard}) {
-            for (const auto& id : *pile) if (removed(id)) v.exhausted.push_back(id);
-            pile->erase(std::remove_if(pile->begin(), pile->end(), removed), pile->end());
-        }
-    }
+    if (!target.empty()) mfExhaustOneCard(v, target);
+    if (!artifact) v.hand.erase(std::find(v.hand.begin(), v.hand.end(), uid));
     v.pendingDraw = 0;
     const string text = battleEffect(p, v, *sp, reduction, counter);
     if (rng && v.pendingDraw > 0) battleEnemyDraw(*rng, v, v.pendingDraw);
@@ -1432,13 +1549,36 @@ static string battleEnemyPlay(Game* rng, const Player& p, Battle& v,
     return text;
 }
 
+// 用途：只看当前手牌估计从一剑起能接多少种五行剑；流程：敌方起手选择；返回：1..5，不读抽牌堆、洗牌或RNG。
+static int mfHeldElementalSwordPathLength(const Battle& State, const SpellDef& First) {
+    const SpellDef* Current = &First;
+    vector<string> Visited{First.id};
+    for (int Step = 1; Step < 5; ++Step) {
+        const SpellDef* Next = nullptr;
+        for (const auto& Uid : State.hand) {
+            const auto* Card = findCard(State, Uid);
+            const auto* Candidate = Card ? battleSpell(Card->spell) : nullptr;
+            if (!Candidate || !ElementalSword::mfIsElementalSword(*Candidate) ||
+                std::find(Visited.begin(), Visited.end(), Candidate->id) != Visited.end()) continue;
+            const auto From = content::parseDaoId(Current->dao), To = content::parseDaoId(Candidate->dao);
+            if (From && To && content::generates(*From, *To)) { Next = Candidate; break; }
+        }
+        if (!Next) break;
+        Visited.push_back(Next->id); Current = Next;
+    }
+    return static_cast<int>(Visited.size());
+}
 // 用途：按当前资源和状态为敌方候选神通评分。
 // 参与流程：敌方连招顺序规划。
 // 使用方式：传敌方视角与已验证可用的神通。
 // 返回值：优先级整数；负数表示此刻不值得施放。
-static int enemyCardPriority(const Battle& v, const SpellDef& sp) {
+int mfBattleNpcCardPriority(const Player& Foe, const Battle& v, const SpellDef& sp) {
     const auto spellKind = content::parseSpellKind(sp.kind);
     if (spellKind == SpellKind::Heal) return v.hp < v.max * 0.75 ? 95 : -1;
+    if (spellKind == SpellKind::FireSiphon) {
+        if (v.burn <= 0 || v.burnTurns <= 0 || v.hp >= v.max * 0.75) return -1;
+        return 96; // 仅在确有灼烧且明显受伤时以伤害机会换生存，满血不浪费火池。
+    }
     if (spellKind == SpellKind::Shield || spellKind == SpellKind::Guard) return v.shield < v.max * 0.15 ? 62 : -1;
     if (spellKind == SpellKind::Mana || spellKind == SpellKind::Burst || spellKind == SpellKind::Float) return v.mana <= 2 ? 94 : -1;
     if (spellKind == SpellKind::Draw || spellKind == SpellKind::Redraw || spellKind == SpellKind::Exhaust) return v.hand.size() <= 3 ? 78 : 35;
@@ -1456,8 +1596,77 @@ static int enemyCardPriority(const Battle& v, const SpellDef& sp) {
     if (spellKind == SpellKind::Charge || spellKind == SpellKind::Soul) return 84;
     if (spellKind == SpellKind::Heavy || spellKind == SpellKind::BodyBurst) return v.charge > 0 ? 85 : 68;
     if (spellKind == SpellKind::SoulBurst) return v.soul > 0 ? 85 : 45;
+    if (ElementalSword::mfIsElementalSword(sp)) {
+        if (ElementalSword::mfHasGeneratingCombo(v, sp))
+            return 90 + (talentMods(Foe).ElementalSwordMastery > 0 ? 2 : 0);
+        const int VisiblePath = mfHeldElementalSwordPathLength(v, sp);
+        // 有链但暂缺正确剑时先经营中性手牌/基础攻击；仍保留正分回退，不能无限空等。
+        if (v.ElementalSwordSequence > 0) return 45 + VisiblePath;
+        return 79 + VisiblePath;
+    }
     if (spellKind == SpellKind::Sword || spellKind == SpellKind::Human) return 79 + std::min(3, v.swordSequence);
     return sp.id == "strike" ? 50 : 72;
+}
+
+// 用途：从此刻已在手中的合法神通选择下一步；流程：冻结前缀规划与重洗后的真实续招。
+// 使用：传施术者视角，不查看未抽牌；返回：UID或空，不改变状态或RNG。
+static string mfNextEnemyCard(const Player& Actor, const Battle& State, bool AllowArtifacts) {
+    string Next;
+    int Priority = -1;
+    vector<string> Candidates = State.hand;
+    if (AllowArtifacts)
+        for (const auto& Active : equippedArtifactAbilities(Actor)) Candidates.push_back(Active.spell.id);
+    for (const auto& Uid : Candidates) {
+        const Card* Card = findCard(State, Uid);
+        optional<ArtifactAbility> Ability;
+        const SpellDef* Spell = battleResolveSpell(Actor, Card ? Card->spell : Uid, Ability);
+        if (!Spell || Spell->stage > Actor.stage || battleCooldown(State, Spell->id) > 0 ||
+            State.mana < battleCost(Actor, *Spell)) continue;
+        if (battleNeedsTarget(*Spell) && enemyRemoveTarget(State, *Spell).empty()) continue;
+        const int Score = mfBattleNpcCardPriority(Actor, State, *Spell);
+        if (Score > Priority) { Next = Uid; Priority = Score; }
+    }
+    return Next;
+}
+
+// 敌方施术事实仅用于当前执行/只读副本，既不持久化也不提前承诺未抽到的牌。
+struct EnemyActionFact {
+    string SpellId, Text;
+    int TargetDamage = 0, Blocked = 0;
+};
+
+// 用途：统一执行冻结前缀与普通修士跨重洗后的已知手牌续招；流程：真实敌方行动与意图副本。
+// 使用：RNG必须属于真实动作或独立副本；仅当前缀真实触发重洗，普通修士才续至合法cap。
+// 返回：逐步施术事实；Shadow沿用原固定前缀，不增加尾动作，不把未来弃牌UID写回计划。
+static vector<EnemyActionFact> mfExecuteEnemyPrefix(Game& RandomState, const Player& Actor, Battle& State,
+        const vector<string>& Prefix, int ActionLimit, bool AllowShuffleContinuation, double TargetReduction, double TargetCounter) {
+    vector<EnemyActionFact> Facts;
+    Facts.reserve(static_cast<std::size_t>(std::max(0, ActionLimit)));
+    const int ShufflesBefore = State.shuffles;
+    const auto Play = [&](const string& Uid) {
+        const Card* Card = findCard(State, Uid);
+        optional<ArtifactAbility> Ability;
+        const SpellDef* Spell = battleResolveSpell(Actor, Card ? Card->spell : Uid, Ability);
+        if (!Spell) return false;
+        const string SpellId = Spell->id;
+        const int HealthBefore = State.enemyHp, ShieldBefore = State.enemyShield;
+        string Text = battleEnemyPlay(&RandomState, Actor, State, Uid, TargetReduction, TargetCounter);
+        if (Text.empty()) return false;
+        Facts.push_back({SpellId, std::move(Text), std::max(0, HealthBefore - State.enemyHp),
+            std::max(0, ShieldBefore - State.enemyShield)});
+        return true;
+    };
+    for (const auto& Uid : Prefix) {
+        if (State.played >= ActionLimit || State.hp <= 0 || State.enemyHp <= 0) break;
+        Play(Uid);
+    }
+    if (AllowShuffleContinuation && State.shuffles > ShufflesBefore) {
+        while (State.played < ActionLimit && State.hp > 0 && State.enemyHp > 0) {
+            const string Next = mfNextEnemyCard(Actor, State, false);
+            if (Next.empty() || !Play(Next)) break;
+        }
+    }
+    return Facts;
 }
 
 // 用途：为真实修士建立合法构筑、牌堆和资源。
@@ -1491,6 +1700,7 @@ static void battleEnemyInit(Game& g, const EnemySpec& spec, bool opening) {
     b.enemyPower = BATTLE_POWER[npc.stage];
     b.enemyBeast = npc.beast; b.enemyDao = npc.dao;
     EnemyCombat e;
+    e.poisonDamage = 0;
     e.stage = npc.stage; e.sect = npc.sect; e.dao = npc.dao; e.body = npc.body;
     const Arts loadout = artNpcLoadout(npc);
     e.main = loadout.main; e.aux = loadout.aux;
@@ -1532,7 +1742,8 @@ static void battleEnemyInit(Game& g, const EnemySpec& spec, bool opening) {
     if (!opening && b.playerPoisonTurns > 0) {
         v.poisonTurns = b.playerPoisonTurns;
         v.poison = clampInt(jsRound(b.playerPoison /
-                                   (mfBattleDamageBasisFromPower(b.enemyPower) * 0.035)), 1, BATTLE_POISON_CAP);
+                                   (mfBattleDamageBasisFromPower(b.enemyPower) * LegacyPoisonTickBasisCoefficient)), 1, BATTLE_POISON_CAP);
+        v.poisonDamage = b.playerPoison;
     }
     for (const auto& id : loadout.spells) {
         const SpellDef* sp = battleSpell(id);
@@ -1622,7 +1833,7 @@ static void battleEnemyBeginTurn(const Battle& b, const ArtMods& mods, Battle& v
 
 // 用途：只读试算回合末持续状态及敌方完整连招。
 // 参与流程：战况意图展示。
-// 使用方式：传游戏，在副本上执行已计划行动，不重洗未知牌。
+// 使用方式：传游戏，在战斗与RNG副本上执行前缀；局部重洗后只根据已到手牌续招，不提交活动RNG。
 // 返回值：预计伤害、护盾、治疗、招式与说明，不消费 RNG。
 EnemyPreview battleEnemyPreview(const Game& g) {
     EnemyPreview out;
@@ -1630,9 +1841,10 @@ EnemyPreview battleEnemyPreview(const Game& g) {
     const Battle& b = *g.player.arts.battle;
     if (!b.shadowOutcome.empty()) { out.description = "天机切磋已经结束。"; return out; }
     Battle projected = b;
-    battleDiscard(g.player, projected, static_cast<int>(projected.hand.size()));
+    battleDiscard(g.player, projected, static_cast<int>(projected.hand.size()), DiscardRules::Timing::RoundEnd);
     battleTickStatuses(g.player, projected, false);
     if (projected.enemyHp <= 0 || projected.hp <= 0) {
+        for (const auto& Action : b.BeastActions) out.BeastActions.push_back({Action});
         out.damage = std::max(0, b.hp - projected.hp);
         out.description = projected.enemyHp <= 0
             ? "持续伤害将在敌方行动前击败对手。" : "毒与灼烧将在敌方行动前耗尽气血。";
@@ -1644,6 +1856,15 @@ EnemyPreview battleEnemyPreview(const Game& g) {
         return out;
     }
     if (!b.enemyCards.enabled) {
+        if (!b.BeastActions.empty()) {
+            const auto Result = BeastCombat::mfExecuteActions(g.player, projected, false);
+            out.damage = std::max(0, b.hp - projected.hp);
+            out.shield = Result.Shield; out.heal = Result.Heal;
+            out.description = Result.Description; out.BeastActions = Result.Actions;
+            if (b.hp > projected.hp + Result.Damage)
+                out.description = "毒与灼烧：伤害" + std::to_string(b.hp - projected.hp - Result.Damage) + "。 " + out.description;
+            return out;
+        }
         out.description = b.intentName;
         out.damage = std::max(0, b.hp - projected.hp);
         if (b.intentKind == "guard") out.shield = jsRound(b.enemyMax * 0.1);
@@ -1663,20 +1884,15 @@ EnemyPreview battleEnemyPreview(const Game& g) {
     battleEnemyBeginTurn(b, mods, v);
     const int before = v.hp;
     Game simulation; simulation.rng = g.rng;
-    for (const auto& uid : b.enemyCards.planned) {
-        const Card* card = findCard(v, uid);
-        optional<ArtifactAbility> ability;
-        const SpellDef* sp = battleResolveSpell(foe, card ? card->spell : uid, ability);
-        const string text = battleEnemyPlay(b.shadowPlayer ? &simulation : nullptr, foe, v, uid,
-                                            battleReduction(g.player, b), playerMods.bodyCounter);
-        if (text.empty() || !sp) continue;
-        out.spells.push_back(sp->id);
+    const auto Facts = mfExecuteEnemyPrefix(simulation, foe, v, b.enemyCards.planned,
+        mfBattleEnemyActionLimit(g, b), !b.shadowPlayer, battleReduction(g.player, b), playerMods.bodyCounter);
+    for (const auto& Fact : Facts) {
+        out.spells.push_back(Fact.SpellId);
         if (!out.description.empty()) out.description += " ";
-        out.description += text;
-        if (v.hp <= 0 || v.enemyHp <= 0) break;
+        out.description += Fact.Text;
     }
     if (v.hp > 0 && v.enemyHp > 0) {
-        battleDiscard(foe, v, static_cast<int>(v.hand.size()));
+        battleDiscard(foe, v, static_cast<int>(v.hand.size()), DiscardRules::Timing::RoundEnd);
         if (!v.attacked && mods.quietHeal > 0)
             v.hp = std::min(v.max, v.hp + jsRound(v.max * std::min(0.05, mods.quietHeal)));
         if (artHas(foe.arts, "木", 2))
@@ -1708,23 +1924,9 @@ static void battleEnemyPlan(Game& g) {
     battleEnemyBeginTurn(b, mods, v);
     e.planned.clear();
     Game simulation; simulation.rng = g.rng;
-    const int limit = b.shadowPlayer ? 24 : e.sect.empty() ? 2 + e.stage / 6 : std::min(8, 3 + e.stage / 3);
+    const int limit = mfBattleEnemyActionLimit(g, b);
     for (int played = 0; played < limit; ++played) {
-        string next;
-        int priority = -1;
-        vector<string> candidates = v.hand;
-        if (b.shadowPlayer)
-            for (const auto& active : equippedArtifactAbilities(foe)) candidates.push_back(active.spell.id);
-        for (const auto& uid : candidates) {
-            const Card* card = findCard(v, uid);
-            optional<ArtifactAbility> ability;
-            const SpellDef* sp = battleResolveSpell(foe, card ? card->spell : uid, ability);
-            if (!sp || sp->stage > foe.stage || battleCooldown(v, sp->id) > 0 ||
-                v.mana < battleCost(foe, *sp)) continue;
-            if (battleNeedsTarget(*sp) && enemyRemoveTarget(v, *sp).empty()) continue;
-            const int candidate = enemyCardPriority(v, *sp);
-            if (candidate > priority) { next = uid; priority = candidate; }
-        }
+        const string next = mfNextEnemyCard(foe, v, static_cast<bool>(b.shadowPlayer));
         if (next.empty()) break;
         if (battleEnemyPlay(b.shadowPlayer ? &simulation : nullptr, foe, v, next, battleReduction(g.player, b), playerMods.bodyCounter).empty()) break;
         e.planned.push_back(next);
@@ -1755,23 +1957,19 @@ static void battleEnemyAct(Game& g) {
     const ArtMods playerMods = talentMods(g.player);
     Battle v = battleEnemyView(b, g.player.stage);
     battleEnemyBeginTurn(b, mods, v);
-    const vector<string> planned = b.enemyCards.planned;
-    for (const auto& uid : planned) {
-        const int hp = v.enemyHp, shield = v.enemyShield;
-        const string text = battleEnemyPlay(&g, foe, v, uid,
-                                            battleReduction(g.player, b), playerMods.bodyCounter);
-        if (text.empty()) continue;
-        b.log.push_back("对方施放" + text);
-        if (v.enemyHp < hp)
-            b.log.push_back("你受到" + std::to_string(hp - v.enemyHp) + "伤害，护盾格挡" +
-                            std::to_string(std::max(0, shield - v.enemyShield)) + "。");
-        if (v.hp <= 0 || v.enemyHp <= 0) break;
+    const auto Facts = mfExecuteEnemyPrefix(g, foe, v, b.enemyCards.planned,
+        mfBattleEnemyActionLimit(g, b), !b.shadowPlayer, battleReduction(g.player, b), playerMods.bodyCounter);
+    for (const auto& Fact : Facts) {
+        b.log.push_back("对方施放" + Fact.Text);
+        if (Fact.TargetDamage > 0)
+            b.log.push_back("你受到" + std::to_string(Fact.TargetDamage) + "伤害，护盾格挡" +
+                            std::to_string(Fact.Blocked) + "。");
     }
     if (v.hp <= 0 || v.enemyHp <= 0) {
         battleSaveEnemyView(b, v, g.player.stage);
         return;
     }
-    battleDiscard(foe, v, static_cast<int>(v.hand.size()));
+    battleDiscard(foe, v, static_cast<int>(v.hand.size()), DiscardRules::Timing::RoundEnd);
     v.discard.insert(v.discard.end(), v.hand.begin(), v.hand.end()); v.hand.clear();
     for (auto& [id, cd] : v.cooldowns) cd = std::max(0, cd - 1);
     v.mana = battleNextMana(foe, v); v.carryMana = 0;
@@ -1787,7 +1985,7 @@ static void battleEnemyAct(Game& g) {
     }
     ++b.enemyCards.turns;
     const int draws = 5 + v.drawNext; v.drawNext = 0;
-    v.played = 0; v.attacked = false; v.swordSequence = 0; v.comboDraws = 0;
+    v.played = 0; v.attacked = false; v.swordSequence = 0; v.comboDraws = 0; v.ElementalSwordManaReturns = 0;
     battleEnemyDraw(g, v, draws);
     battleSaveEnemyView(b, v, g.player.stage);
 }
@@ -1813,7 +2011,7 @@ static Preview battlePreviewSpell(const Player& player, const Battle& battle, co
     const ArtMods targetMods = battle.enemyCards.enabled ? battleEnemyMods(battle) : ArtMods{};
     const double reduction = battle.enemyCards.enabled
         ? targetMods.reduction + battle.enemyCards.reduction + battle.enemyCards.guard : 0;
-    const string text = battleEffect(player, copy, spell, reduction, targetMods.bodyCounter);
+    const string text = battleEffect(player, copy, spell, reduction, targetMods.bodyCounter, &out.RawDamage, &out.ElementalGenerationReady);
 
     out.valid = true;
     out.spellName = spell.name;
@@ -1833,6 +2031,8 @@ static Preview battlePreviewSpell(const Player& player, const Battle& battle, co
     out.reductionPct = (copy.reduction - battle.reduction) * 100;
     out.guardPct = (copy.guard - battle.guard) * 100;
     out.healPotential = std::max(0, out.heal);
+    if (content::parseSpellKind(spell.kind) == SpellKind::FireSiphon)
+        out.healPotential = FireGrowth::mfExplosionAmount(talentMods(player), battle.FireGrowthRounds, battle.burn, battle.burnTurns);
     if (content::parseSpellKind(spell.kind) == SpellKind::Heal) {
         Battle wounded = battle;
         wounded.hp = 1;
@@ -1851,7 +2051,7 @@ static Preview battlePreviewSpell(const Player& player, const Battle& battle, co
     const double DamageBasis = mfBattleDamageBasis(player.stage);
     status("poison", "毒", "enemy", battle.poison, copy.poison, copy.poisonTurns,
            BATTLE_POISON_CAP, copy.poisonTurns > 0 ? (copy.poisonDamage >= 0 ? copy.poisonDamage :
-               jsRound(DamageBasis * 0.035 * copy.poison)) : 0);
+               mfLegacyPoisonTickFromLayers(DamageBasis, copy.poison)) : 0);
     status("burn", "灼烧", "enemy", battle.burn, copy.burn, copy.burnTurns,
            BATTLE_BURN_CAP, copy.burnTurns > 0 ? copy.burn : 0);
     out.text = text;
@@ -1912,9 +2112,16 @@ string battlePreviewConditions(const Player& player, const SpellDef& spell) {
                 << ")×18%×毒层；所有毒层合计后四舍五入，消耗全部毒层。";
         text = Formula.str();
     }
-    if (spellKind == SpellKind::FireBurst)
-        text = "引爆追加伤害＝现有灼烧每回合伤害×剩余回合×" + std::to_string(jsRound((1 + modifiers.burnExplosion) * 100)) + "%；消耗全部灼烧。";
-    if (spellKind == SpellKind::SoulBurst) text = "每层震荡伤害+15%，消耗全部震荡。";
+    if (spellKind == SpellKind::FireBurst || spellKind == SpellKind::FireSiphon)
+        text = string(spellKind == SpellKind::FireSiphon ? "转换治疗量" : "引爆追加伤害") + "＝现有灼烧每回合伤害×剩余回合×倍率；开局倍率" +
+            std::to_string(jsRound(FireGrowth::mfExplosionMultiplier(modifiers, 0) * 100)) + "%" +
+            (modifiers.BurnGrowthExplosionPerRound > 0 ? "，随本场实际灼烧结算逐轮成长，至多" + std::to_string(FireGrowth::MaximumGrowthRounds) + "轮" : "") + "；消耗全部灼烧。";
+    if (spellKind == SpellKind::FireSiphon) text += "无灼烧时治疗为0；最多回复到气血上限，不吃直伤、相生或治疗乘区。";
+    if (spellKind == SpellKind::SoulBurst)
+        text = "消耗震荡，每层增伤" + std::to_string(jsRound(SoulBurstPerLayerBonus * 100)) + "%；每层让该次伤害的" +
+            std::to_string(jsRound(SoulBurstPiercePerLayer * 100)) + "%穿盾，最多" + std::to_string(jsRound(SoulBurstMaximumPierceFraction * 100)) + "%；穿盾部分仍计目标减伤。";
+    if (ElementalSword::mfIsElementalSword(spell))
+        text += ElementalSword::mfRulesDescription(spell, modifiers);
     if (spellKind == SpellKind::BodyBurst) text = "出牌前灵力至少3时伤害+15%，每层蓄势伤害+10%，消耗全部蓄势。";
     if (spellKind == SpellKind::Human) text += "消耗全部剑气与当前8%气血，气血最低保留1。";
     if (spellKind == SpellKind::Redraw) text = "数字以出牌后剩余4张手牌为示例；实际弃置和抽牌数随手牌变化。";
@@ -1956,7 +2163,7 @@ static void battleEndTurn(Game& g) {
     // 1) 弃掉所有手牌
     const int DiscardedCardCount = static_cast<int>(b.hand.size());
     const int ShieldBeforeDiscard = b.shield;
-    battleDiscard(p, b, static_cast<int>(b.hand.size()));
+    battleDiscard(p, b, static_cast<int>(b.hand.size()), DiscardRules::Timing::RoundEnd);
     const int DiscardShieldGain = b.shield - ShieldBeforeDiscard;
     if (DiscardShieldGain > 0) {
         b.log.push_back("回合末弃置" + std::to_string(DiscardedCardCount) + "张手牌：弃牌凝盾+" +
@@ -1987,6 +2194,8 @@ static void battleEndTurn(Game& g) {
     // 3) 敌方按已展示的意图行动
     if (b.enemyCards.enabled) {
         battleEnemyAct(g);
+    } else if (!b.BeastActions.empty()) {
+        BeastCombat::mfExecuteActions(p, b, true);
     } else {
       b.enemyShield = 0;
       if (b.intentKind == "guard") {
@@ -2090,6 +2299,7 @@ static void battleEndTurn(Game& g) {
     b.played = 0;
     b.swordSequence = 0;
     b.comboDraws = 0;
+    b.ElementalSwordManaReturns = 0;
     // 回合护盾功法在下一回合重新产生
     b.shield = std::min(jsRound(b.max * 0.3), jsRound(b.max * m.roundShield));
 
@@ -2168,21 +2378,15 @@ static TurnResult executeBattleTurn(Game& g, const string& id, const string& tar
     if (!spell) return fail(artifact ? "这件法宝未装备、品阶不足或没有主动能力。" : "这张神通卡不在手牌中。");
     if (p.stage < spell->stage) return fail("境界不足，无法施放这门神通。");
 
-    string targetSpell;
+    string TargetUid, TargetName;
     if (battleNeedsTarget(*spell)) {
-        if (target.empty()) return fail("请选择本场要移除的神通。");
-        const Card* targetCard = findCard(b, target);
-        targetSpell = targetCard ? targetCard->spell : target;
-        if (targetSpell == spell->id) return fail("不能移除正在施放的这门神通。");
-        auto contains = [&](const vector<string>& pile) {
-            return std::any_of(pile.begin(), pile.end(), [&](const string& cardUid) {
-                const Card* candidate = findCard(b, cardUid);
-                return candidate && candidate->spell == targetSpell;
-            });
-        };
-        if (!battleSpell(targetSpell) ||
-            (!contains(b.hand) && !contains(b.draw) && !contains(b.discard)))
-            return fail("这门神通已移除或不在本场牌组中。");
+        if (target.empty()) return fail("请选择本场要移除的一张卡。");
+        TargetUid = mfResolveExhaustTargetUid(b, *spell, target);
+        if (TargetUid.empty()) return fail("目标卡已移除、不在本场牌堆中，或属于正在施放的神通。");
+        const auto* TargetCard = findCard(b, TargetUid);
+        const auto* TargetSpell = TargetCard ? battleSpell(TargetCard->spell) : nullptr;
+        if (!TargetSpell) return fail("目标卡的神通定义无效。");
+        TargetName = TargetSpell->name;
     }
 
     auto cd = b.cooldowns.find(spell->id);
@@ -2195,25 +2399,14 @@ static TurnResult executeBattleTurn(Game& g, const string& id, const string& tar
     // ---- 出牌 ----
     const int qiBefore = b.swordQi;
     // 先移出手牌，抽牌时释放手牌位置；施放卡直到抽牌完成才进入弃牌堆。
+    if (!TargetUid.empty()) mfExhaustOneCard(b, TargetUid);
     if (!artifact) b.hand.erase(std::find(b.hand.begin(), b.hand.end(), uid));
-    if (!targetSpell.empty()) {
-        auto isTarget = [&](const string& cardUid) {
-            const Card* candidate = findCard(b, cardUid);
-            return candidate && candidate->spell == targetSpell;
-        };
-        for (auto* pile : {&b.hand, &b.draw, &b.discard})
-            pile->erase(std::remove_if(pile->begin(), pile->end(), isTarget), pile->end());
-        for (const auto& candidate : b.deck)
-            if (candidate.spell == targetSpell &&
-                std::find(b.exhausted.begin(), b.exhausted.end(), candidate.uid) == b.exhausted.end())
-                b.exhausted.push_back(candidate.uid);
-    }
     b.pendingDraw = 0;
     const ArtMods targetMods = b.enemyCards.enabled ? battleEnemyMods(b) : ArtMods{};
     const double reduction = b.enemyCards.enabled
         ? targetMods.reduction + b.enemyCards.reduction + b.enemyCards.guard : 0;
     string text = battleEffect(p, b, *spell, reduction, targetMods.bodyCounter);
-    if (!targetSpell.empty()) text += "移除目标：" + battleSpell(targetSpell)->name + "。";
+    if (!TargetUid.empty()) text += "移除一张：" + TargetName + "（" + TargetUid + "）。";
 
     // 抽牌类神通：这里才真正抽（battleEffect 也可能被试算调用，没有 Game）
     if (b.pendingDraw > 0) {

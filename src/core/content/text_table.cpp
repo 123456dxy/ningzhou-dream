@@ -29,6 +29,7 @@ std::string_view displayName(SectId id) {
     case SectId::Jinhong: return "金虹剑派"; case SectId::Xinghe: return "星河剑派";
     case SectId::Zhushan: return "竹山宗"; case SectId::Lihuo: return "离火门";
     case SectId::Huachen: return "化尘教";
+    case SectId::Xuandao: return "玄道宗";
     }
     throw std::invalid_argument("Invalid sect display ID");
 }
@@ -43,7 +44,7 @@ std::string_view text(TextId id) {
     case TextId::DrawDescription: return "立即抽{count}张牌，手牌最多8张。";
     case TextId::ForeseeDescription: return "下一回合多抽{count}张牌，手牌最多8张。";
     case TextId::RedrawDescription: return "弃置其余手牌，重抽等量牌，再抽{count}张；弃牌可触发金系效果。";
-    case TextId::ExhaustDescription: return "选择另一种神通，将其全部副本从本场手牌、抽牌堆与弃牌堆移除，再抽{count}张。可选普通招式，下场恢复。";
+    case TextId::ExhaustDescription: return "选择手牌、抽牌堆或弃牌堆中一张其他神通卡，仅将该卡移出本场，再抽{count}张。同神通其他副本保留，可选普通招式，下场恢复。";
     case TextId::EmpowerDescription: return "本场伤害加成+{percent}%，累计最多30%，不消耗气血。";
     case TextId::WardDescription: return "本场额外减伤+{percent}%，累计最多20%；总减伤最多35%。";
     case TextId::ManaDescription: return "立即恢复{count}灵力，不造成伤害。";
@@ -62,11 +63,12 @@ std::string_view text(TextId id) {
     case TextId::WaterDescription: return "攻击并积攒2层水势，最多6层，可立即衔接浪击。";
     case TextId::WaveDescription: return "消耗水势，每层至少增伤15%；水系功法可保留水势、返还灵力。";
     case TextId::PoisonDescription: return "攻击并施加{count}层毒，天然叠加，最多{cap}层；再次施毒刷新3回合，木系功法可触发毒疗。";
-    case TextId::PoisonBurstDescription: return "消耗全部毒层，每层追加基础战力18%的伤害。";
+    case TextId::PoisonBurstDescription: return "消耗全部毒层，每层追加统一伤害基底（战力×0.3+18）的18%伤害；爆发受护盾和减伤影响。";
     case TextId::FireDescription: return "攻击并施加灼烧，天然叠加并刷新3回合；火系功法增加每次施加量，相生提高灼烧伤害。";
     case TextId::FireBurstDescription: return "攻击并引爆现有灼烧，追加剩余全部回合的灼烧伤害，然后清除燃烧。";
+    case TextId::FireSiphonDescription: return "消耗敌方全部灼烧，将原本引爆的灼烧伤害等量转为自身气血，不造成伤害；受引爆成长影响，不受治疗加成影响，回复不超过缺失气血。";
     case TextId::SoulDescription: return "攻击并积攒2层震荡，最多6层。";
-    case TextId::SoulBurstDescription: return "消耗全部震荡，每层增伤15%。";
+    case TextId::SoulBurstDescription: return "消耗全部震荡，每层增伤{bonus_percent}%；每层使该次伤害的{pierce_percent}%穿盾，最多{max_pierce_percent}%。穿盾部分仍受目标减伤。";
     case TextId::BodyBurstDescription: return "体魄强化爆发，消耗重势，每层增伤10%；施放前灵力至少3再增伤15%。";
     case TextId::DrainDescription: return "神识攻击，穿透全部护盾。";
     case TextId::StealDescription: return "攻击并回复1灵力，夺灵功法最多再增加1。";

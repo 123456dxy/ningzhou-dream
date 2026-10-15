@@ -6,6 +6,9 @@
 #include "core/dungeon.h"
 #include "core/shop.h"
 #include "core/interface/cave_views.h"
+#include "core/exploration/dungeon_encounters.h"
+#include "core/exploration/dungeon_events.h"
+#include "core/exploration/dungeon_reward_rules.h"
 
 namespace nz::api {
 using json::Value;
@@ -77,12 +80,21 @@ Value dungeonView(const Game& g) {
         s.set("locationName",Value(loc ? string(loc->name) : site.location));
         s.set("openedYear",num(site.openedYear)); s.set("expiresYear",num(site.expiresYear));
         s.set("stage",num(site.stage)); s.set("realmName",Value(realmName(site.stage)));
+        if (site.stage >= 0 && site.stage <= 12) {
+            const auto Rules = mfDungeonRewardRulesForStage(site.stage, site.type);
+            s.set("rewardHint", Value("沿途材料适配" + std::to_string(Rules.MaterialGrade) + "阶 · 普通战" +
+                std::to_string(Rules.BattleStones) + "探索灵石 · 精英另加" + std::to_string(Rules.EliteBonusStones) + "。"));
+        }
         s.set("revealed",Value(site.revealed)); s.set("cleared",Value(site.cleared));
         const auto entered=g.flags.find("dungeon-enter:"+site.id);
         const bool wasEntered=entered!=g.flags.end() && entered->second>0;
         s.set("available",Value(site.revealed && !site.cleared && !wasEntered && year>=site.openedYear && year<site.expiresYear));
         const string reason=dungeonEnterError(g,site);
         s.set("reason",Value(reason)); s.set("entryEnabled",Value(reason.empty()));
+        const auto Sweep = mfQuoteDungeonSweep(g, site.id);
+        Value SweepView(json::Object{}); SweepView.set("enabled", Value(Sweep.Enabled));
+        SweepView.set("reason", Value(Sweep.Reason)); SweepView.set("days", num(Sweep.Days));
+        SweepView.set("requiredStage", num(Sweep.RequiredStage)); s.set("sweep", std::move(SweepView));
         s.set("entered",Value(wasEntered));
         const int period=site.type=="sea"?10:site.type=="tianmo"?50:0;
         s.set("nextOpenYear",num(period ? (year/period+1)*period : 0));
@@ -118,6 +130,17 @@ Value dungeonView(const Game& g) {
     r.set("location",Value(run.location)); r.set("phase",Value(run.phase)); r.set("current",Value(run.current));
     r.set("stage",num(run.stage)); r.set("realmName",Value(realmName(run.stage))); r.set("health",num(run.health));
     r.set("row",num(run.row)); r.set("elapsedDays",num(run.elapsedDays)); r.set("cleared",Value(run.cleared));
+    r.set("layoutVersion", num(run.LayoutVersion));
+    const int RewardStage = mfDungeonEntryRewardStage(g, run);
+    if (RewardStage >= 0) {
+        r.set("entryRealmName", Value(realmName(RewardStage)));
+        const auto Rules = mfDungeonRewardRulesForStage(RewardStage, run.type);
+        r.set("rewardHint", Value("奖励按入口「" + realmName(RewardStage) + "」结算 · 材料适配" +
+            std::to_string(Rules.MaterialGrade) + "阶，沿途收益不会因高境人物进入低阶秘境而抬升。"));
+    }
+    int FloorCount = 0;
+    for (const auto& Node : run.nodes) FloorCount = std::max(FloorCount, Node.row + 1);
+    r.set("routeSummary", Value("共" + std::to_string(FloorCount) + "层 · 精英可选遗物，普通战可补充神通；首领前设营地。"));
     r.set("stones",num(run.stones)); r.set("targetGranted",Value(run.targetGranted));
     r.set("bossRewards",rewardsView(g,run.bossRewards)); r.set("bossRewardClaimed",Value(run.bossRewardClaimed));
     r.set("bossRewardTaken",run.bossRewardTaken?rewardView(g,*run.bossRewardTaken):Value());
@@ -127,7 +150,17 @@ Value dungeonView(const Game& g) {
         Value n(json::Object{}); n.set("id",Value(node.id)); n.set("type",Value(node.type));
         n.set("name",Value(node.name)); n.set("text",Value(node.text)); n.set("row",num(node.row));
         n.set("lane",num(node.lane)); n.set("next",strings(node.next)); n.set("visited",Value(node.visited));
-        n.set("available",Value(dungeonNodeAvailable(run,node.id))); nodes.push_back(std::move(n));
+        n.set("available",Value(dungeonNodeAvailable(run,node.id)));
+        if (run.LayoutVersion >= 2) {
+            if (const auto Encounter = mfDescribeDungeonEncounter(g, run, node); Encounter.Enabled) {
+                n.set("encounterName", Value(Encounter.Name)); n.set("encounterHint", Value(Encounter.Hint));
+            }
+            if (node.type == "event") {
+                const auto Event = mfDescribeDungeonEvent(run, node);
+                n.set("eventName", Value(Event.Name)); n.set("eventHint", Value(Event.Hint));
+            }
+        }
+        nodes.push_back(std::move(n));
     }
     r.set("nodes",Value(std::move(nodes)));
     json::Array deck;
@@ -148,9 +181,14 @@ Value dungeonView(const Game& g) {
     for (const auto& reward:run.rewards) {
         Value a=rewardView(g,reward);
         const bool purchase=reward.kind=="buyCard"||reward.kind=="buyRelic"||reward.kind=="buyHeal";
-        const string reason=purchase&&run.stones<reward.amount?"本次探索获得的灵石不足。":
+        string reason=purchase&&run.stones<reward.amount?"本次探索获得的灵石不足。":
             (reward.kind=="card"||reward.kind=="buyCard")&&run.deck.size()>=60?"临时牌组已满。":"";
-        a.set("cost",num(purchase?reward.amount:0)); a.set("enabled",Value(reason.empty())); a.set("reason",Value(reason));
+        int Cost = purchase ? reward.amount : 0;
+        if (reward.kind == "eventChoice") {
+            const auto Quote = mfQuoteDungeonEvent(g, reward.id);
+            reason = Quote.Reason; Cost = Quote.StoneCost; a.set("healthCost", num(Quote.HealthCost));
+        }
+        a.set("cost",num(Cost)); a.set("enabled",Value(reason.empty())); a.set("reason",Value(reason));
         rewards.push_back(std::move(a));
     }
     r.set("rewards",Value(std::move(rewards)));

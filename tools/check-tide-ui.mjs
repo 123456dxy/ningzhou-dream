@@ -25,7 +25,7 @@ check((active.match(/data-action="tide-fight"/g) || []).length === 4, '四个境
 check(/data-battlefield="2"[^>]*disabled/.test(active) && active.includes('境界尚未达到金丹初期'), '未开放战场禁用并说明原因');
 check(active.includes('27 积分') && active.includes('1 积分'), '击杀积分取自战场定义');
 check(active.includes('道友&lt;script&gt;') && !active.includes('<script>'), '金榜姓名安全转义');
-check(active.includes('流派高手') && active.includes('完整流派'), '特殊修士显示完整流派标记');
+check(active.includes('tide-row-tag">流派高手') && active.includes('查看流派高手 · 1 位'), '特殊修士显示高手标记并可单独查看名单');
 check(legacyRender === renderTidePanel, 'friends旧导出保持同一个实现');
 check(!shouldRenderTide({ active: false })
   && shouldRenderTide({ active: false, settled: true, market: { open: true } }), '结榜后仅在战后市场开放期间保留事件卡');

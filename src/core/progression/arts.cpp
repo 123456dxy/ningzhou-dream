@@ -1,5 +1,10 @@
 // 宁州一梦 · C++ 版 — 洞府道法实现（对应 JS 版 arts.mjs）
 #include "core/arts.h"
+#include "core/content/green_bottle_content.h"
+#include "core/combat/battle_scaling.h"
+#include "core/combat/elemental_sword.h"
+#include "core/combat/fire_growth.h"
+#include "core/combat/discard_rules.h"
 #include "core/progression/manual_study.h"
 #include "core/social/npc_consumables.h"
 #include "core/content/game_ids.h"
@@ -88,7 +93,7 @@ const vector<NodeDef>& artNodes() {
             "炼器成功率 +10%"};
         static const char* d2[12] = {
             "金系技能消耗 −1", "每回合自愈 1%", "水系技能消耗 −1",
-            "灼烧伤害翻倍", "所受伤害 −8%", "神识技能伤害 +20%",
+            "灼烧结算后逐轮成长", "所受伤害 −8%", "神识技能伤害 +20%",
             "所受伤害 −8%；遁速 +6", "初始剑气 +2", "初始灵力 +3",
             "护盾当回合消散，减伤 +4%", "每年额外化毒 4", "材料利用率 +15%"};
         static const char* d3[12] = {
@@ -96,11 +101,11 @@ const vector<NodeDef>& artNodes() {
             "本系伤害额外 +8%", "修炼效率 +8%", "突破成功率 +3%",
             "气血上限 +20%", "剑意伤害 +10%", "修炼效率 +10%",
             "灵力上限 +2", "耐药上限翻倍", "装备效果 +20%；炼器时间缩短30%"};
-        static const char* d4[12] = {
+        static const string d4[12] = {
             "每弃置一张未打出的手牌，获得气血上限2%的护盾；本回合护盾总上限30%",
             "每新增一层毒，回复气血上限0.3%的气血",
             "浪击每消耗一层水势，回灵系数+0.35；向下取整，每次最多回复2灵力",
-            "每次施加的灼烧额外增加50%；灼烧天然叠加，再次施火刷新3回合",
+            "薪火随实际灼烧结算逐轮成长",
             "实际获得护盾时，额外积蓄1层重势；弃牌凝盾也可触发",
             "抽牌、预谋、重抽及移除类神通的灵力消耗−1，最低0",
             "本回合每累计打出3张牌，回复气血上限2%的气血；遁速 +30",
@@ -113,7 +118,7 @@ const vector<NodeDef>& artNodes() {
             "每弃置一张未打出的手牌，下一次直接攻击增伤4%；锐势上限30%，命中后消耗",
             "回合结束时，尚未失效的毒额外增加1层；毒最多99层，到期解除",
             "浪击保留消耗前50%的水势；保留层数向下取整",
-            "引爆灼烧的附加伤害+50%；引爆后清除灼烧",
+            "引爆随实际灼烧结算逐轮成长",
             "消耗重势的重击额外造成当前护盾40%的伤害，不消耗护盾",
             "立即抽牌类神通额外抽1张牌；手牌仍受上限约束",
             "敌方攻击被护盾格挡时，反震格挡伤害的15%",
@@ -135,6 +140,12 @@ const vector<NodeDef>& artNodes() {
             out.push_back({i, 4, 6, dao + "道·" + names4[i], d4[i]});
             out.push_back({i, 5, 8, dao + "道·" + names5[i], d5[i]});
         }
+        for (auto& Node : out)
+            if (Node.dao == content::daoOrdinal(DaoId::Fire) && (Node.level == 2 || Node.level == 4 || Node.level == 5))
+                Node.desc = FireGrowth::mfNodeDescription(Node.level);
+        for (auto& Node : out)
+            if (Node.dao == content::daoOrdinal(DaoId::Metal) && Node.level == 4)
+                Node.desc += "主动换手全额凝盾，回合末余牌仅按" + std::to_string(DiscardRules::RoundEndShieldPercent) + "%凝盾；锐势不变。";
         return out;
     }();
     return data;
@@ -183,12 +194,14 @@ struct HookSpec {
 // 返回值：触发系数定义列表的常量引用。
 const vector<HookSpec>& hookSpecs() {
     static const vector<HookSpec> specs = {
-        {&CombatHooks::discardShield, "弃牌护盾系数", "%气血上限", true},
+        {&CombatHooks::discardShield, "主动弃牌护盾系数", "%气血上限；回合末余牌折半", true},
         {&CombatHooks::discardPower, "弃牌锐势系数", "%", true},
         {&CombatHooks::waterMana, "消耗水势回灵系数", ""},
         {&CombatHooks::waterKeep, "浪击留水比例", "%", true},
         {&CombatHooks::burnStack, "每次施加灼烧额外增加", "%", true},
         {&CombatHooks::burnExplosion, "引爆灼烧增伤", "%", true},
+        {&CombatHooks::BurnGrowthStackPerRound, "本场每个灼烧结算回合新增叠焰成长", "%", true},
+        {&CombatHooks::BurnGrowthExplosionPerRound, "本场每个灼烧结算回合引爆成长", "%", true},
         {&CombatHooks::poisonHeal, "每新增毒层治疗", "%气血上限", true},
         {&CombatHooks::poisonGrowth, "回合末活跃毒增长系数", ""},
         {&CombatHooks::shieldCharge, "获得盾时额外重势系数", ""},
@@ -203,6 +216,7 @@ const vector<HookSpec>& hookSpecs() {
         {&CombatHooks::comboDraw, "相生连击额外抽牌系数", ""},
         {&CombatHooks::bodyCounter, "护盾格挡反震伤害", "%", true},
         {&CombatHooks::poisonCleanse, "治疗时清除自身毒伤系数", ""},
+        {&CombatHooks::ElementalSwordMastery, "五行剑连续相生返灵系数", ""},
     };
     return specs;
 }
@@ -252,6 +266,9 @@ const vector<ManualEntry>& artManuals() {
             return &v.back();
         };
         // ---- 基础 14 部（arts.mjs 中显式写出的）----
+        add("fiveSword", "五行剑诀", "阵", 0, 180,
+            "每层修炼+2%；五属性剑相生额外积剑气；剑链可跨回合，非五行牌不打断，每三剑补牌；有效五行错序重开；返灵每轮最多3次，整数收益主满辅半向下取整")->ElementalSwordMastery = ElementalSword::MasteryPerManualLevel;
+        v.back().cult = 0.02;
         add("tuna", "吐纳功", "气", 0, 0, "每层修炼 +2%")->cult = 0.02;
         add("bull", "蛮牛护体功", "体", 0, 70, "每层斗法气血 +5%")->hp = 0.05;
         add("wood", "青木诀", "木", 0, 65, "每层治疗 +4%，修炼 +1%")->heal = 0.04;
@@ -473,12 +490,14 @@ const ArtMods& artModsOf(const Arts& a) {
     for (const auto& id : a.nodes) {
         const NodeDef* n = findNode(id);
         if (!n) continue;
+        if (n->level == 2 && n->dao == content::daoOrdinal(DaoId::Fire))
+            m.BurnGrowthStackPerRound += FireGrowth::FlameNodeStackGainPerRound;
         if (n->level == 4) {
             switch (n->dao) {
                 case 0: m.discardShield += 0.02; break;
                 case 1: m.poisonHeal += 0.003; break;
                 case 2: m.waterMana += 0.35; break;
-                case 3: m.burnStack += 0.5; break;
+                case 3: m.BurnGrowthStackPerRound += FireGrowth::KindleNodeStackGainPerRound; break;
                 case 4: m.shieldCharge += 1; break;
                 case 5: m.drawCost += 1; break;
                 case 6: m.thirdHeal += 0.02; m.escapeSpeed += 30; break;
@@ -493,7 +512,7 @@ const ArtMods& artModsOf(const Arts& a) {
                 case 0: m.discardPower += 0.04; break;
                 case 1: m.poisonGrowth += 1; break;
                 case 2: m.waterKeep += 0.5; break;
-                case 3: m.burnExplosion += 0.5; break;
+                case 3: m.BurnGrowthExplosionPerRound += FireGrowth::ExplosionNodeGainPerRound; break;
                 case 4: m.shieldStrike += 0.4; break;
                 case 5: m.drawBonus += 1; break;
                 case 6: m.bodyCounter += 0.15; break;
@@ -604,10 +623,14 @@ Arts artNpcLoadout(const Npc& npc) {
     };
     vector<string> manuals;
     vector<string> spells;
-    if (daoId == DaoId::Metal) { manuals = {"gold", "bladecare", "hidden", "heavy"}; spells = {"gold", "goldslash", "metalSeal", "refresh"}; }
+    if (content::parseSectId(npc.sect) == SectId::Xuandao) {
+        manuals = {"fiveSword", "array", "wheel", "zhou", "swordcraft"};
+        spells = {"earthSword", "metalSword", "waterSword", "woodSword", "fireSword", "scheme", "swordDraw", "refresh"};
+    }
+    else if (daoId == DaoId::Metal) { manuals = {"gold", "bladecare", "hidden", "heavy"}; spells = {"gold", "goldslash", "metalSeal", "refresh"}; }
     else if (daoId == DaoId::Wood) { manuals = {"longlife", "venom", "wood", "turtle"}; spells = {"corrode", "wood", "woodwall", "poisonBurst"}; }
     else if (daoId == DaoId::Water) { manuals = {"water", "rainform", "wave", "swordcraft"}; spells = {"waterSeal", "wavehit", "water", "softwater", "sword"}; }
-    else if (daoId == DaoId::Fire) { manuals = {"fire", "flame", "playfire", "pill"}; spells = {"fire", "fireburst", "spitfire", "fireSeal", "sun"}; }
+    else if (daoId == DaoId::Fire) { manuals = {"fire", "flame", "playfire", "pill"}; spells = {"fire", "fireburst", "spitfire", "fireSeal", "fireSiphon", "sun"}; }
     else if (daoId == DaoId::Earth) { manuals = {"earth", "mountain", "gravity", "jadecloud"}; spells = {"mountainSeal", "collapse", "earth", "aegis"}; }
     else if (daoId == DaoId::Mind) { manuals = {"mind", "visual", "soulfire", "cloud"}; spells = {"soulspark", "soulshock", "skim", "mind", "purge"}; }
     else if (daoId == DaoId::Body) { manuals = {"bull", "fetal", "steal", "cloud"}; spells = {"body", "collapse", "cutmana", "bloodfuel"}; }
@@ -618,6 +641,21 @@ Arts artNpcLoadout(const Npc& npc) {
     else { manuals = {"sword", "hidden", "swordcraft", "human"}; spells = {"sword", "swordFocus", "goldcover", "humanSword", "rain"}; }
     // 特殊传承复用同一套真实功法、神通与境界校验，不额外叠加无来源伤害。
     if (profile) { manuals = profile->manuals; spells = profile->spells; }
+    else {
+        // 普通修士也可经营手牌；补牌仍占真实神通槽、灵力、冷却及每轮行动预算。
+        string DrawSpellId;
+        switch (daoId) {
+        case DaoId::Metal: DrawSpellId = "metalRedraw"; break;
+        case DaoId::Wood: DrawSpellId = "woodDraw"; break;
+        case DaoId::Water: DrawSpellId = "waterDraw"; break;
+        case DaoId::Fire: DrawSpellId = "fireDraw"; break;
+        case DaoId::Earth: DrawSpellId = "earthDraw"; break;
+        case DaoId::Sword: DrawSpellId = "swordDraw"; break;
+        case DaoId::Mind: DrawSpellId = "insightdraw"; break;
+        default: break;
+        }
+        if (!DrawSpellId.empty()) spells.push_back(DrawSpellId);
+    }
     // 初期散修只具吐纳与少量本命神通；高境界逐步取得完整传承。
     arts.main.clear();
     if (!sect && stage < 3) equipManual("tuna", true);
@@ -633,6 +671,9 @@ Arts artNpcLoadout(const Npc& npc) {
     arts.exp[dao] = ART_THRESHOLDS[nodeLevel];
     for (int l = 1; l <= nodeLevel; ++l)
         arts.nodes.push_back(std::to_string(daoIndexValue) + "-" + std::to_string(l));
+    if (profile && profile->id == "xuandao-complete")
+        for (int Level = 1; Level <= nodeLevel; ++Level)
+            arts.nodes.push_back("7-" + std::to_string(Level));
     Player slotOwner; slotOwner.stage = stage;
     const int spellLimit = sect ? battleSpellSlots(slotOwner) : std::min(battleSpellSlots(slotOwner), 2 + major);
     const auto addSpell = [&](const string& id) {
@@ -697,8 +738,10 @@ void ensureArts(Game& g) {
     a.manuals["tuna"] = 1;
     a.main = "tuna";
     a.aux.clear();
-    a.spells = {"sword", "water", "wood", "skim"};
-    a.knownSpells = {"sword", "water", "wood", "skim", "refresh", "purge"};
+    // 新角用一费直伤、持续灼烧、护盾和回灵建立基本攻防；原入门神通仍可自行换装。
+    // 仅影响首次初始化，已初始化分支保留玩家原有配装。
+    a.spells = {"gold", "fire", "water", "gather"};
+    a.knownSpells = {"sword", "water", "wood", "skim", "refresh", "purge", "gold", "fire", "gather"};
     a.herbs.clear();
     a.potions.clear();
     a.used.clear();
@@ -901,6 +944,7 @@ BrewInfo artBrewInfo(const Player& p, const string& recipeId) {
 // 使用方式：传材料 ID。
 // 返回值：材料定义指针；未知 ID 为空。
 static const data::MaterialDef* findMaterial(const string& id) {
+    if (const auto* Special = content::mfFindGreenBottleMaterial(id)) return &Special->Material;
     for (const auto& m : data::MaterialDef_TABLE())
         if (m.id == id) return &m;
     return nullptr;
@@ -1510,6 +1554,10 @@ static bool lookupManual(const string& id, ManualEntryView& out) {
         out = {m.id, m.name, m.dao, m.effect, m.stage, m.price, m.mods};
         return true;
     }
+    if (const auto* Manual = findManual(id)) {
+        out = {Manual->id, Manual->name, Manual->dao, Manual->effect, Manual->stage, Manual->price, ""};
+        return true;
+    }
     return false;
 }
 
@@ -1531,6 +1579,7 @@ static const map<string, ManualInfo>& mfManualInfoCatalog() {
         };
         for (const auto& Definition : data::BaseManualDef_TABLE()) AddDefinition(Definition.id);
         for (const auto& Definition : data::ManualDef_TABLE()) AddDefinition(Definition.id);
+        for (const auto& Definition : artManuals()) AddDefinition(Definition.id);
         return Entries;
     }();
     return Catalog;
@@ -1545,6 +1594,9 @@ bool findManualInfo(const string& id, ManualInfo& out) {
     return true;
 }
 
+// 用途：公开权威功法元信息目录；流程：界面、NPC及来源查表；返回：含动态扩展内容的不可变引用，不缓存角色资格。
+const map<string, ManualInfo>& mfManualCatalog() { return mfManualInfoCatalog(); }
+
 // 用途：提供由真实功法、神通和节点组成的流派建议。
 // 参与流程：道法目录的构筑说明。
 // 使用方式：无参数，仅读取固定示例。
@@ -1552,38 +1604,38 @@ bool findManualInfo(const string& id, ManualInfo& out) {
 const vector<BuildInfo>& artBuilds() {
     static const vector<BuildInfo> builds = {
         {"metal-discard", "金虹弃牌", "金",
-         "明心咒补牌，换念诀弃置余牌凝盾并积锐势；下一次金罡斩消耗锐势，重势再放大伤害。回合末未打出的牌也能凝盾，护盾仅在本回合使用。",
+         "明心咒补牌，换念诀与回锋换念主动弃牌全额凝盾并积锐势；下一次金罡斩消耗锐势，重势再放大伤害。回合末余牌仅按" + std::to_string(DiscardRules::RoundEndShieldPercent) + "%凝盾，锐势不变；护盾仅在本回合使用。",
          {"gold", "bladecare", "mind", "heavy"},
-         {"refresh", "skim", "goldcover", "goldslash"}, {"0-4", "0-5", "4-4"}},
+         {"refresh", "skim", "goldcover", "goldslash", "metalRedraw", "insightdraw"}, {"0-4", "0-5", "4-4"}},
         {"water-wave", "叠浪回流", "水",
          "罡水印积蓄水势，浪击消耗水势爆发并按水势返灵；水道大成保留部分水势供下一轮使用。相生时先金后水，不必每次清空所有积累。",
          {"wave", "rainform", "ocean", "water"},
-         {"waterSeal", "wavehit", "metalSeal", "softwater"}, {"2-4", "2-5"}},
+         {"waterSeal", "wavehit", "metalSeal", "softwater", "waterDraw", "skim"}, {"2-4", "2-5"}},
         {"fire-stack", "积焰引爆", "火",
-         "上清印衔接吐焰触发木生火；灼烧天然累积并刷新持续回合，火系功法增加每次施加量。引焰爆按剩余灼烧回合引爆，随后清空灼烧。",
+         "上清印衔接吐焰触发木生火；灼烧天然累积并刷新持续回合，火道随真实灼烧结算成长。引焰爆消耗火池爆发，或花3灵力以噬焰回生将同一火池转为治疗。",
          {"playfire", "flame", "kindle", "sunwheel"},
-         {"woodSeal", "spitfire", "fireSeal", "fireburst"}, {"3-4", "3-5", "9-4"}},
+         {"woodSeal", "spitfire", "fireSeal", "fireburst", "fireSiphon", "fireDraw", "skim"}, {"3-4", "3-5", "9-4"}},
         {"wood-poison", "毒生回春", "木",
          "腐毒咒施毒时按新增毒层回血，保留活跃毒到回合末继续增长；在毒将失效或需要斩杀时打引毒咒消耗毒层。回春术和木壁术保障叠毒时间。",
          {"venom", "turtle", "wood", "evergreen"},
-         {"corrode", "poisonBurst", "wood", "woodwall"}, {"1-4", "1-5", "10-5"}},
+         {"corrode", "poisonBurst", "wood", "woodwall", "woodDraw", "skim"}, {"1-4", "1-5", "10-5"}},
         {"earth-charge", "厚土蓄势", "土",
          "获得护盾触发重势，三山印衔接金罡斩形成土生金；重击消耗重势并附加当前护盾伤害。盾被敌方攻击消耗时可用体道反震，不能跨回合无代价囤盾。",
          {"mountain", "earth", "jadecloud", "bull"},
-         {"pull", "mountainSeal", "goldslash", "aegis"}, {"4-4", "4-5", "6-5"}},
+         {"pull", "mountainSeal", "goldslash", "aegis", "earthDraw", "refresh"}, {"4-4", "4-5", "6-5"}},
         {"sword-chain", "连剑归锋", "剑",
          "同一回合连续剑招逐步增加追加伤害段，每连三剑返灵；人剑消耗剑气和少量气血作终结。中途使用非剑牌会打断连剑，剑意激发应在连剑前铺好。",
          {"swordcraft", "hidden", "human", "sword"},
-         {"swordFocus", "sword", "humanSword", "rain"}, {"7-4", "7-5"}},
+         {"swordFocus", "sword", "humanSword", "rain", "swordDraw", "skim"}, {"7-4", "7-5"}},
         {"mind-cycle", "神识精筹", "神",
-         "明心咒和洞观减费多抽；换念诀重整手牌，忘机咒选择一张牌并移除它在本场的所有副本，再抽牌。少出牌时聚灵，藏灵诀封存余灵支持下一回合的爆发。",
+         "明心咒补牌，燃魂咒积累震荡，惊魂咒消耗震荡爆发；换念诀重整手牌，忘机咒只移除一张杂牌。筑基以摄魂术穿盾，高境界再以藏灵诀和洞观经营手牌。携带数量仍受境界槽位限制。",
          {"visual", "mind", "zhou", "cloud"},
-         {"skim", "refresh", "purge", "hoard"}, {"5-4", "5-5", "8-4", "8-5"}},
-        {"five-elements", "五行相生", "阵",
-         "按土→金→水→木→火→土排列神通，每次相生返灵；阵道大成额外抽牌，每回合最多额外两张。先用藏机术准备下一轮手牌，再衔接相生，气道封存余灵使循环更稳定。",
-         {"array", "kindle", "wheel", "zhou"},
-         {"mountainSeal", "metalSeal", "waterSeal", "woodSeal", "fireSeal", "scheme"},
-         {"9-4", "9-5", "8-4"}},
+         {"skim", "soulspark", "soulshock", "refresh", "purge", "mind", "hoard", "insightdraw"}, {"5-4", "5-5", "8-4", "8-5"}},
+        {"five-elements", "五行归剑", "阵",
+         "以土→金→水→木→火→土的五行剑衔接相生，进度可跨回合，气/神/普通攻防等非五行牌不打断。五行剑诀叠剑气、有限返灵与补牌；水剑积气、木剑吸血、火剑连击增伤、土剑当轮守势。低境界槽位不足时使用部分剑，高境再补齐五剑和经营牌。",
+         {"fiveSword", "array", "wheel", "zhou"},
+         {"earthSword", "metalSword", "waterSword", "woodSword", "fireSword", "scheme", "swordDraw", "refresh"},
+         {"7-4", "7-5", "9-4", "9-5"}},
     };
     return builds;
 }

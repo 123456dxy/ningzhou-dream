@@ -79,7 +79,7 @@ int calendarTake(Game& g, const string& key, double amount) {
 // 使用方式：传入const Player& player，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
 double calendarDetoxPerYear(const Player& player) {
-    return hasDan(player) ? 5.0 : 1.0;
+    return BasePillPoisonDecayPerYear + (hasDan(player) ? PillPoisonDaoDecayBonusPerYear : 0);
 }
 
 // 用途：推进一个真实世界日；工作和兽潮回合共用月年/化毒/寿尽流程。

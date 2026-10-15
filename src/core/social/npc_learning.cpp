@@ -1,6 +1,7 @@
 #include "core/npc_learning.h"
 #include "core/talents.h"
 #include "core/content/game_ids.h"
+#include "core/content/npc_combat_profiles.h"
 #include <algorithm>
 #include <cstdint>
 #include <set>
@@ -63,6 +64,11 @@ vector<NpcLesson> knowledgeOf(const Npc& npc) {
     };
     for (const auto& id : carried.spells) addSpell(id);
     for (const auto& [id, level] : carried.manuals) if (level > 0) addManual(id);
+    // 完整传承的知识不因当前辅修槽位/手牌数裁剪；仍按老师和玩家的境界逐项校验授业。
+    if (const auto* Profile = content::findNpcCombatProfile(npc)) {
+        for (const auto& SpellId : Profile->spells) addSpell(SpellId);
+        for (const auto& ManualId : Profile->manuals) addManual(ManualId);
+    }
 
     int highestSpell = 0;
     for (const auto& sp : allSpells())
@@ -135,7 +141,7 @@ void refundLesson(Game& g, const Job& job, const string& reason) {
 string personPortrait(const string& gender, const string& sect, bool player) {
     const string root = "/assets/portraits/";
     if (player) return root + (gender == "女" ? "player-female.webp" : "player-male.webp");
-    if (sect.empty() || !findSect(sect)) return root + (gender == "女" ? "rogue-female.webp" : "rogue.webp");
+    if (sect.empty() || !findSect(sect) || sect == "xuandao") return root + (gender == "女" ? "rogue-female.webp" : "rogue.webp");
     const auto sectId = content::parseSectId(sect);
     const bool femaleDefault = sectId == content::SectId::Xinghe || sectId == content::SectId::Zhushan;
     return root + "sect-" + sect + ((gender == "女") == femaleDefault ? "" : (gender == "女" ? "-female" : "-male")) + ".webp";

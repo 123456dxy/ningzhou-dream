@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "core/base.h"
+#include "core/combat/beast_actions.h"
 
 namespace nz {
 
@@ -61,6 +62,8 @@ inline const std::vector<SectDef>& SECTS() {
          "以火炼心，以丹养道。炼丹成功率提高。", "#b77459"},
         {"huachen", "化尘教", "土", "尘中见天地",
          "厚积凝元，守静笃行。闭关消耗减少。", "#aa916b"},
+        {"xuandao", "玄道宗", "阵", "五行归一剑",
+         "以阵统御五行，以剑衔接相生。藏经阁传授五行剑与阵道功法。", "#8b83a7"},
     };
     return data;
 }
@@ -89,7 +92,7 @@ inline const std::vector<LocationDef>& LOCATIONS() {
         {"lihuo", "离火门", "sect", 59, 10, "天星以北的火系山门，赤岩丹炉长明，后山通往沃焦。", 0},
         {"huachen", "化尘教", "sect", 22, 55, "西部山川间的土系山门，层台石殿俯瞰正阳山。", 0},
         {"fanghu", "方壶山", "wild", 60, 94, "竹山宗东南的灵药险峰，碧幽潭藏于山间。", 22},
-        {"qingshi", "青石灵脉", "wild", 7, 30, "宁州西部与衡州接壤的灵核矿脉，由五宗轮流管理。", 34},
+        {"qingshi", "青石灵脉", "wild", 7, 30, "宁州西部与衡州接壤的灵核矿脉，由各宗轮流管理。", 34},
         {"sea", "无尽海", "wild", 96, 76, "宁州之外的广阔海域，灵舟远行与高阶海兽同在。", 80},
         {"fenglei", "风雷谷", "wild", 12, 11, "星河剑派后山的幽谷，寒月潭与惊雷谷藏着水道机缘。", 22},
         {"wojiao", "沃焦山", "wild", 68, 6, "离火门后山的火山地带，火脉与药田共生。", 45},
@@ -104,7 +107,7 @@ inline const std::vector<LocationDef>& LOCATIONS() {
         {"jiuyi", "九嶷山", "wild", 65, 79, "宁州南部的药山，偏僻山道与破庙藏着修士故事。", 22},
         {"yongan", "永安镇", "city", 85, 37, "武陵东北的小镇，学堂与民宅沿道路分布。", 0},
         {"daiyu", "岱舆山", "wild", 92, 49, "武陵东侧临海的药山，山林盛产修行所需草药。", 22},
-        {"xuandao", "玄道宗", "sect", 88, 83, "宁州东南的宗门，前往天魔眼的修士在此集结。", 0},
+        {"xuandao", "玄道宗", "sect", 88, 83, "宁州东南的五行剑山门，传授相生剑阵，前往天魔眼的修士亦在此集结。", 0},
         {"tianmo", "天魔眼", "wild", 83, 94, "宁州东南的魔物之地，灵核与危险并存。", 85},
     };
     return data;
@@ -183,7 +186,7 @@ inline const std::vector<TalentDef>& TALENTS() {
         {"blessing", "天道福泽", "悟道", 4, "获得的大道经验 +20%", "", 0},
         {"dragonBlood", "龙族血脉", "体魄", 5, "体魄 +1 · 每回合结束恢复3%气血", "body", 1},
         {"oddMeridian", "先天异脉", "磨砺", -3, "丹药与妖丹无法提升修为", "", 0},
-        {"greenBottle", "神秘绿瓶", "丹道", 3, "灵田储备充足时自动催熟：每日每份种苗耗品阶数量灵石，额外增加200成长点；外出照常生效，不催生妖丹", "", 0},
+        {"greenBottle", "神秘绿瓶", "丹道", 3, "可在洞府投入灵石永久恢复0至6阶灵性，持续增加灵田成长；高阶需要专属秘境灵材，无日费，外出照常生效，不催生妖丹", "", 0},
         {"lightStep", "轻功高手", "遁速", 2, "遁速 +6 · 影响先手、步行御器耗时与逃遁", "", 0},
         {"artisan", "百炼匠心", "器道", 3, "炼器时间 −15% · 自炼法器售值 +15%，遵守生活加成上限", "", 0},
         {"family", "修真家族", "传承", 3, "开局修得一层蛮牛护体功并领悟聚气", "", 0},
@@ -287,7 +290,10 @@ struct EnemyCombat {
     int carryMana = 0, manaBonus = 0, manaPenalty = 0, drawNext = 0;
     int carryCap = 0, hpCostPct = 0, poison = 0, poisonTurns = 0;
     int burn = 0, burnTurns = 0, swordSequence = 0, comboDraws = 0;
-    int poisonDamage = -1;         // exact shadow poison tick; -1 keeps legacy stack semantics
+    int ElementalSwordManaReturns = 0; // 本回合五行剑诀返灵触发次数，0..3
+    int ElementalSwordSequence = 0; // 五行剑独立三剑进度0..3；跨回合/中性牌保留，不混用普通连剑。
+    int FireGrowthRounds = 0; // 本场有成长悟道的灼烧已结算回合数，0..5，不随施法次数增长。
+    int poisonDamage = -1;         // 精确每跳毒伤；-1仅解释缺少此字段的旧在途层数状态
     double buff = 0, reduction = 0, guard = 0, discardPower = 0;
     string last;
 };
@@ -355,7 +361,8 @@ struct Battle {
     // ---- 敌方功法（人类修士用神通，妖兽力大砖飞）----
     string enemyDao;               // 对方本命大道
     vector<string> enemySpells;    // 对方会的神通
-    bool enemyBeast = false;       // 妖兽：不会神通，纯平A
+    bool enemyBeast = false;       // 妖兽使用冻结专属动作，不使用人类神通。
+    vector<BeastCombat::PlannedAction> BeastActions; // 空向量保留旧档当轮单意图；下一真实开轮更新。
     map<string, int> enemyCd;      // 对方神通的冷却
     int enemyWeaken = 0;           // 对方削弱你下回合伤害的层数
 
@@ -363,7 +370,7 @@ struct Battle {
     map<string, int> cooldowns;    // 神通 id -> 剩余回合数
     int poison = 0;
     int poisonTurns = 0;
-    int poisonDamage = -1;         // exact shadow poison tick after flat cleansing
+    int poisonDamage = -1;         // 精确每跳毒伤（含平减清毒余量）；-1仅为旧档默认值
     int playerPoison = 0;          // 敌方施加给玩家的每回合毒伤
     int playerPoisonTurns = 0;
     int burnTurns = 0;
@@ -386,7 +393,10 @@ struct Battle {
     double discardPower = 0;       // 弃牌积攒的下一次直接攻击增伤，最高30%
     int swordSequence = 0;         // 本回合连续剑系出牌数
     int comboDraws = 0;            // 本回合相生额外抽牌触发数，最高2
-    string last;                   // 上一手大道，用于相生连击
+    int ElementalSwordManaReturns = 0; // 本回合五行剑诀返灵触发次数，0..3
+    int ElementalSwordSequence = 0; // 五行剑独立三剑进度0..3；跨回合/中性牌保留，不混用普通连剑。
+    int FireGrowthRounds = 0; // 玩家本场灼烧成长0..5；回合末有实际灼烧才增加，新战斗归零。
+    string last;                   // 最近一张有效五行牌大道，跨回合保留；中性牌不覆盖。
     vector<string> log;
 
     // 游历斗法的上下文（对应 JS 把 adventure 挂在 battle 上）
@@ -446,6 +456,7 @@ struct Arts {
     map<string, int> potions;                  // 已炼成丹药 id -> 数量
     map<string, int> used;                     // 丹药服用记录
     int poison = 0;                            // 丹毒
+    int GreenBottleGrade = 0;                  // 神秘绿瓶永久阶位0..6，仅天赋持有者可升级。
     string furnace = "furnace-1";              // 当前丹炉
     int durability = 40;                       // 丹炉耐久
     map<string, int> materials;                // 炼器材料 id -> 数量
@@ -710,6 +721,7 @@ struct Economy {
     map<string, int> orders;              // 本月已接委托
     map<string, int> sold;                // 本月已售货品
     int marketCash = 400;                 // 坊市收购资金
+    int MarketCycleIndex = -1;            // 已兑现的1080世界日账期；旧缺字段按原月份归一
     int seq = 0;                          // 法器编号序列
 };
 
@@ -802,6 +814,7 @@ struct DungeonNode {
 };
 struct DungeonRun {
     string siteId, siteName, type, location, phase = "route", current;
+    int LayoutVersion = 1; // 旧路线固定为1；新入场使用2，避免更新重绘在途存档。
     int stage = 0, health = 100, row = -1, seq = 0, elapsedDays = 0;
     vector<DungeonNode> nodes;
     vector<Card> deck;
@@ -830,15 +843,15 @@ struct AutoCheckpoint {
     string source = "auto", snapshot, lastReason;
 };
 
-// 所属制作模块；拥有一批同日播种的种苗，Count为1~99，ProgressUnits为0~品阶成熟阈值。
+// 所属制作模块；拥有一批同日播种的种苗，Count为1~12，ProgressUnits为0~品阶成熟阈值。
 // 无外部资源、可复制，状态仅由灵田命令/真实世界日tick修改；补种新批次不能继承旧成长。
 struct GardenCohort {
     int Count = 0;
     int ProgressUnits = 0;
 };
 
-// 所属制作模块；一个地块只容纳同一HerbId，总未收种苗最多99份。
-// 拥有格内储备和批次；储备仅由明确存取/日加速费用变化，不隐式扣玩家背包灵石。
+// 所属制作模块；一个地块只容纳同一HerbId，总未收种苗最多12份。
+// ReserveStones仅兼容旧档待退还余额，新版禁止存取/收费；真实日或成功园艺命令逐步退回。
 struct GardenPlot {
     string HerbId;
     int ReserveStones = 0;
@@ -849,9 +862,11 @@ struct GardenPlot {
 // 默认未初始化是合法旧档状态：空Plots、LastGrowthDay=-1；初始化命令建立8格并从当前日期开始。
 // Initialized后禁止读查询补生长，LastGrowthDay确保每个真实世界日最多处理一次；由所属Game串行修改。
 struct CaveGardenState {
+    int RulesVersion = 2;
     bool Initialized = false;
     int LastGrowthDay = -1;
     vector<GardenPlot> Plots;
+    map<string, int> PendingHerbReturns; // 旧超量种苗待退还；按药材名登记，容量不足保留，不在查询中发放。
 };
 
 struct Game {

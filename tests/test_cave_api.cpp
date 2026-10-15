@@ -41,23 +41,32 @@ void mfRunCaveApiTests() {
     const auto View = api::view::state(State);
     checkStr(saveToJson(State), BeforeQuery, "洞府与价格完整视图纯只读");
     check(View["cave"]["access"]["atHome"].asBool(), "洞府访问条件表明已返府");
-    checkEq(View["cave"]["garden"]["plots"][0]["remainingCapacity"].asInt(), 99, "空格报价容量99");
+    checkEq(View["cave"]["garden"]["plots"][0]["remainingCapacity"].asInt(), 12, "空格报价容量12");
     check(View["cave"]["garden"]["plots"][0]["plantEnabled"].asBool(), "播种按钮来自领域报价");
     State.player.traits.clear();
     const auto NoBottleView = api::view::state(State);
-    check(!NoBottleView["cave"]["garden"]["hasGreenBottle"].asBool()
-          && !NoBottleView["cave"]["garden"]["plots"][0]["deposit"]["enabled"].asBool(),
-          "无小绿瓶完整视图明确禁用存入");
+    check(!NoBottleView["cave"]["greenBottle"]["hasTalent"].asBool()
+          && NoBottleView["cave"]["greenBottle"].asObject().size() == 1
+          && NoBottleView["cave"]["garden"]["plots"][0]["reserveStones"].isNull(),
+          "无天赋仅自然成长，接口不暴露储备或绿瓶操作");
     mfCheckCaveReject("cave/garden/reserve/deposit", mfGardenInput("plot-1", 1, 500), "无小绿瓶存入");
     State.player.traits = {"greenBottle"};
+    json::Value Upgrade(json::Object{}); Upgrade.set("expectedGrade", 0);
+    const int UpgradeStones = State.player.stones;
+    check(mfCaveRequest("cave/green-bottle/upgrade", Upgrade).status == 200, "永久绿瓶升级经过真实HTTP路由");
+    checkEq(State.player.arts.GreenBottleGrade, 1, "真实路由升级到一阶");
+    checkEq(State.player.stones, UpgradeStones - 2000, "真实路由扣除统一2000灵石报价");
+    mfCheckCaveReject("cave/green-bottle/upgrade", Upgrade, "过期阶位重复升级");
+    json::Value Rift(json::Object{}); Rift.set("expectedGrade", 1); Rift.set("grade", 4);
+    mfCheckCaveReject("cave/green-bottle/dungeon", Rift, "一阶不可越过三阶门槛开灵材秘境");
     for (const auto& Pill : View["pillCatalog"].asArray()) {
         const auto Quote = crafting::mfQuotePotionPrice(State, Pill["id"].asString());
         checkEq(Pill["pricing"]["materialCost"].asInt(), Quote.MaterialCost, "目录原料价值权威一致");
         checkEq(Pill["pricing"]["sellPrice"].asInt(), Quote.SellPrice, "目录出售单价权威一致");
     }
-    check(mfCaveRequest("cave/garden/plant", mfGardenInput("plot-1", 90)).status == 200, "真实路由播种90份");
-    check(mfCaveRequest("cave/garden/plant", mfGardenInput("plot-1", 9)).status == 200, "同格真实路由补种到99");
-    mfCheckCaveReject("cave/garden/plant", mfGardenInput("plot-1", 1), "第100份种苗");
+    check(mfCaveRequest("cave/garden/plant", mfGardenInput("plot-1", 10)).status == 200, "真实路由播种10份");
+    check(mfCaveRequest("cave/garden/plant", mfGardenInput("plot-1", 2)).status == 200, "同格真实路由补种到12");
+    mfCheckCaveReject("cave/garden/plant", mfGardenInput("plot-1", 1), "第13份种苗");
     mfCheckCaveReject("cave/garden/plant", mfGardenInput("plot-8", 1), "未解锁灵田");
     auto Fractional = mfGardenInput("plot-1"); Fractional.set("amount", 1.5);
     mfCheckCaveReject("cave/garden/reserve/deposit", Fractional, "小数转账金额");
@@ -65,9 +74,9 @@ void mfRunCaveApiTests() {
     mfCheckCaveReject("cave/garden/reserve/deposit", Overflow, "超范围金额");
     mfCheckCaveReject("cave/garden/reserve/deposit", mfGardenInput("plot-1", 1, -1), "负金额");
     const int StonesBefore = State.player.stones;
-    check(mfCaveRequest("cave/garden/reserve/deposit", mfGardenInput("plot-1", 1, 500)).status == 200, "显式转入格内500灵石");
-    checkEq(State.player.stones, StonesBefore - 500, "转入只扣指定数量");
-    checkEq(State.Garden.Plots[0].ReserveStones, 500, "格内保存完整储备");
+    mfCheckCaveReject("cave/garden/reserve/deposit", mfGardenInput("plot-1", 1, 500), "持有绿瓶也不可使用旧储备机制");
+    checkEq(State.player.stones, StonesBefore, "旧储备请求不扣钱");
+    State.Garden.Plots[0].ReserveStones = 500; // 模拟已迁移旧余额，仅真实日返还。
     State.player.location = "yifeng";
     mfCheckCaveReject("cave/garden/harvest", mfGardenInput("plot-1"), "外出管理灵田");
     json::Value Supply(json::Object{}); Supply.set("kind", "qi"); Supply.set("level", 1);
@@ -78,8 +87,8 @@ void mfRunCaveApiTests() {
     State.plan = "rest";
     json::Value Advance(json::Object{}); Advance.set("days", 1);
     check(mfCaveRequest("advance", Advance).status == 200, "真实推进接口安排休养并推进一天");
-    checkEq(State.Garden.Plots[0].ReserveStones, 401, "真实世界日在外扣本格99灵石");
-    checkEq(State.player.stones, AwayStones, "后台加速不暗扣行囊");
+    checkEq(State.Garden.Plots[0].ReserveStones, 0, "真实世界日在外清空旧待返余额");
+    checkEq(State.player.stones, AwayStones + 500, "旧余额返入背包，不收成长日费");
     State.job.reset(); // 下一断言使用空闲返府夹具，不把尚余29天的休养误当可赶路状态。
     const auto Away = api::view::state(State);
     check(Away["cave"]["access"]["canReturn"].asBool(), "外出可沿地图真实返府");
@@ -93,7 +102,7 @@ void mfRunCaveApiTests() {
     check(WildHome["workshopAvailable"].asBool() && !WildHome["inCity"].asBool(), "野外洞府工坊可用但不变成坊市");
     State.player.cave = "wuling"; State.player.location = "wuling";
     State.pending.reset(); State.job.reset();
-    check(mfCaveRequest("cave/garden/reserve/withdraw", mfGardenInput("plot-1", 1, 401)).status == 200, "真实路由可完整取回储备");
+    mfCheckCaveReject("cave/garden/reserve/withdraw", mfGardenInput("plot-1", 1, 401), "旧取出能力已删除");
     check(mfCaveRequest("cave/garden/clear", mfGardenInput("plot-1")).status == 200, "清除种苗走领域命令");
     check(State.Garden.Plots[0].Cohorts.empty(), "清理没有留下种苗");
     mfCheckCaveReject("cave/garden/harvest", mfGardenInput("plot-1"), "空格重复收获");

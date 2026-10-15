@@ -61,6 +61,8 @@ target_link_libraries(ningzhou PRIVATE nzcore)
 # ---- Web 服务：原版界面 + C++ 规则 ----
 # 这是推荐的玩法：复用 JS 版的 HTML/CSS，C++ 只当规则引擎。
 add_executable(ningzhou_web ${CMAKE_CURRENT_SOURCE_DIR}/src/web_main.cpp)
+# 独立斗法试炼场：内存角色、固定种子，不接入账号或玩家存档。
+add_executable(ningzhou_battle_lab ${CMAKE_CURRENT_SOURCE_DIR}/src/battle_lab_main.cpp)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ningzhou_web)
 if(MSVC)
     # Keep desktop/mobile UI sources visible in the IDE without compiling them.
@@ -74,26 +76,39 @@ if(MSVC)
 endif()
 find_package(Threads REQUIRED)
 target_link_libraries(ningzhou_web PRIVATE nzcore Threads::Threads)
+target_link_libraries(ningzhou_battle_lab PRIVATE nzcore Threads::Threads)
 if(UNIX AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # 服务器上不一定装了 libstdc++，静态链接 C++ 运行时，只依赖系统 glibc
     target_link_options(ningzhou_web PRIVATE -static-libstdc++ -static-libgcc)
+    target_link_options(ningzhou_battle_lab PRIVATE -static-libstdc++ -static-libgcc)
 endif()
 if(WIN32)
     target_link_libraries(ningzhou_web PRIVATE ws2_32)
+    target_link_libraries(ningzhou_battle_lab PRIVATE ws2_32)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         # Web 服务使用 wmain 接收 Unicode 路径；MinGW 需选择宽字符 CRT 入口。
         target_link_options(ningzhou_web PRIVATE -municode)
+        target_link_options(ningzhou_battle_lab PRIVATE -municode)
     endif()
 endif()
 
 # 把前端文件拷到可执行文件旁边的 web/ 目录，
 # 这样 exe 可以单独拷走运行（前端跟着走）。
 add_custom_target(nz_web_assets ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/web
-            $<TARGET_FILE_DIR:ningzhou_web>/web
+    COMMAND ${CMAKE_COMMAND}
+            -DNZ_ASSET_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/web
+            -DNZ_ASSET_DESTINATION=$<TARGET_FILE_DIR:ningzhou_web>/web
+            -DNZ_INCLUDE_BATTLE_LAB=OFF
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/copy-web-assets.cmake
     DEPENDS ningzhou_web
     COMMENT "同步前端文件到 web/")
+add_custom_command(TARGET ningzhou_battle_lab POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+            -DNZ_ASSET_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/web
+            -DNZ_ASSET_DESTINATION=$<TARGET_FILE_DIR:ningzhou_battle_lab>/battle-lab-web
+            -DNZ_INCLUDE_BATTLE_LAB=ON
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/copy-web-assets.cmake
+    COMMENT "同步独立斗法试炼场前端")
 
 # ---- 自测程序 ----
 file(GLOB NZ_TEST_SOURCES CONFIGURE_DEPENDS

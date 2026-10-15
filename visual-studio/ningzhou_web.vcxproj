@@ -16,17 +16,26 @@
 <None Include="..\web\artifacts.mjs"/>
 <None Include="..\web\arts.mjs"/>
 <None Include="..\web\assets\manuals\manifest.mjs"/>
+<None Include="..\web\battle-lab.css"/>
+<None Include="..\web\battle-lab.html"/>
+<None Include="..\web\battle-lab.mjs"/>
+<None Include="..\web\beast-intent.css"/>
+<None Include="..\web\beast-intent.mjs"/>
 <None Include="..\web\build-panel.mjs"/>
 <None Include="..\web\build-preview.css"/>
 <None Include="..\web\build-preview.mjs"/>
+<None Include="..\web\build-transmission.mjs"/>
 <None Include="..\web\build.css"/>
 <None Include="..\web\cards.mjs"/>
 <None Include="..\web\cave-panel.css"/>
 <None Include="..\web\cave-panel.mjs"/>
 <None Include="..\web\cave-ui.mjs"/>
+<None Include="..\web\compact-arts.mjs"/>
 <None Include="..\web\craft-pricing.mjs"/>
+<None Include="..\web\dungeons-ui.css"/>
 <None Include="..\web\dungeons.mjs"/>
 <None Include="..\web\economy.mjs"/>
+<None Include="..\web\elemental-generation.css"/>
 <None Include="..\web\enhance.css"/>
 <None Include="..\web\feedback.mjs"/>
 <None Include="..\web\friend-filters.mjs"/>
@@ -81,7 +90,7 @@
 <None Include="..\web\workshop.mjs"/>
 </ItemGroup>
 <ItemGroup><ProjectReference Include="nzcore.vcxproj"><Project>{2AE6D2AE-ED9A-5011-8713-BD16CCE15CE8}</Project></ProjectReference></ItemGroup>
-<ItemGroup><WebAssets Include="..\web\**\*"/></ItemGroup>
+<ItemGroup><WebAssets Include="..\web\**\*" Exclude="..\web\battle-lab.html;..\web\battle-lab.mjs;..\web\battle-lab.css"/></ItemGroup>
 <Target Name="CopyWebAssets" AfterTargets="Build"><Copy SourceFiles="@(WebAssets)" DestinationFiles="@(WebAssets->'$(OutDir)web\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true"/></Target>
 <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets"/>
 </Project>

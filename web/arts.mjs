@@ -9,6 +9,8 @@
 // 名称 / 花费 / 效果 / 领悟按钮，另外给一个「参悟 30 天」。
 
 'use strict';
+import { renderTransmissionTeachers } from './build-transmission.mjs';
+import { renderArtsDetails } from './compact-arts.mjs';
 
 import { cardKind, cardRule } from './cards.mjs';
 import { renderNumericPreview } from './numeric-preview.mjs';
@@ -256,19 +258,16 @@ export function renderSpellPicker(data, state, options = {}) {
           : full ? `最多携带 ${max} 个，请先卸下一个`
           : sp.reason || '';
         const canEquip = learned && !locked && !full && sp.canEquip !== false && sp.enabled !== false;
-        return `<button class="card${isCarried ? ' selected' : ''}${mandatory ? ' mandatory' : ''}${learned ? ' learned' : ' unlearned'}" `
-          + `data-spell-id="${esc(sp.id)}" `
-          + `${!mandatory && (isCarried || canEquip)
-              ? `data-action="spell" data-id="${sp.id}"` : 'disabled'}>`
+        return `<article class="card compact-spell-card${isCarried ? ' selected' : ''}${mandatory ? ' mandatory' : ''}${learned ? ' learned' : ' unlearned'}">`
           + `<div class="card-top"><span class="card-glyph">✦</span>`
           + `<strong>${esc(sp.name)}</strong>`
           + `<span class="count">${mandatory ? '固定常备' : isCarried ? '已携带 · 点击卸下' : learned ? '已学会 · 未携带' : '未学会'}</span></div>`
-          + `<p class="card-rule">${esc(cardRule(sp))}</p>`
-          + renderNumericPreview(sp.preview)
-          + `<div class="card-foot">${esc(sp.dao)}系 · `
-          + `${esc(cardKind(sp))} · 灵力 ${sp.actualCost ?? sp.cost}`
-          + `${sp.cooldown ? ` · 冷却 ${sp.cooldown} 回合` : ''} · 所需境界：${esc(stageName)}`
-          + `${why ? ` · ${why}` : ''}</div></button>`;
+          + `<p class="compact-spell-meta">${esc(sp.dao)}系 · 灵力 ${sp.actualCost ?? sp.cost} · 需${esc(stageName)}</p>`
+          + renderArtsDetails(`用途：${cardKind(sp)}`, `<p class="card-rule">${esc(cardRule(sp))}</p>`
+            + renderNumericPreview(sp.preview) + `<p>${sp.cooldown ? `冷却 ${sp.cooldown} 回合` : '无冷却'}${why ? ` · ${esc(why)}` : ''}</p>`)
+          + `<button data-spell-id="${esc(sp.id)}" ${!mandatory && (isCarried || canEquip)
+              ? `data-action="spell" data-id="${esc(sp.id)}"` : 'disabled'}>`
+          + `${mandatory ? '固定常备' : isCarried ? '卸下神通' : learned ? '携带神通' : '尚未学会'}</button></article>`;
       }).join('')
     + `</div>`;
 }
@@ -277,8 +276,9 @@ export function renderSpellPicker(data, state, options = {}) {
 // 流程：解析功法、神通和节点引用，标注获得与生效状态。
 // 调用方式：流派页面传入state、神通目录、节点和筛选id。
 // 返回值：流派HTML；无建议时空字符串。
-export function renderArtBuilds(state, data, nodes, selected = 'all') {
-  const builds = state.artBuilds || [];
+export function renderArtBuilds(state, data, nodes, selected = 'all', tier = 'initial') {
+  const advanced = tier === 'advanced';
+  const builds = (advanced ? state.advancedBuilds : state.artBuilds) || [];
   if (!builds.length) return '';
   const spells = data?.spells || [];
   // 用途：解释流派构筑引用。
@@ -323,14 +323,17 @@ export function renderArtBuilds(state, data, nodes, selected = 'all') {
       return `<span class="build-component ${item.ready ? 'ready' : item.known ? 'known' : 'missing'}">${art}<span class="build-component-copy">${esc(item.name)}<small>${esc(item.note)}</small></span></span>`;
     }).join('') + `</div>`;
   };
-  return `<div class="art-build-controls"><label>流派组合 <select data-art-build-filter><option value="all">全部流派</option>`
+  return `<div class="shop-tabs" aria-label="流派进阶"><button data-action="art-build-tier" data-id="initial" class="${advanced ? '' : 'active'}" aria-pressed="${!advanced}">初始流派</button>`
+    + `<button data-action="art-build-tier" data-id="advanced" class="${advanced ? 'active' : ''}" aria-pressed="${advanced}">完整传承</button></div>`
+    + `<div class="art-build-controls"><label>流派组合 <select data-art-build-filter><option value="all">全部流派</option>`
     + builds.map(b => `<option value="${esc(b.id)}" ${b.id === selected ? 'selected' : ''}>${esc(b.name)}</option>`).join('')
     + `</select></label><span>绿色表示已生效的功法、已携带的神通或已领悟的道法。选择一组后，神通列表只显示它需要的神通与固定常备牌。</span></div>`
     + `<div class="art-builds">` + builds.filter(b => selected === 'all' || b.id === selected).map(b => {
       const refs = [...(b.manuals || []).map(x => resolve('manual', x)), ...(b.spells || []).map(x => resolve('spell', x)), ...(b.nodes || []).map(x => resolve('node', x))];
       const ready = refs.filter(x => x.ready).length;
       return `<article class="art-build"><h4>${esc(b.name)} <span>${ready} / ${refs.length} 已具备</span></h4>`
-        + `<p>${esc(b.desc)}</p>` + group('功法', 'manual', b.manuals) + group('神通', 'spell', b.spells) + group('道法', 'node', b.nodes) + `</article>`;
+        + `<p>${esc(b.desc)}</p>` + group('功法', 'manual', b.manuals) + group('神通', 'spell', b.spells) + group('道法', 'node', b.nodes)
+        + (advanced ? renderTransmissionTeachers(state, b.id) : '') + `</article>`;
     }).join('') + `</div>`;
 }
 

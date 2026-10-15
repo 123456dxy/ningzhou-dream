@@ -849,6 +849,7 @@ string daoOfSect(const string& sect) {
     if (sect == "zhushan") return "木";
     if (sect == "lihuo") return "火";
     if (sect == "huachen") return "土";
+    if (sect == "xuandao") return "阵";
     return "";
 }
 

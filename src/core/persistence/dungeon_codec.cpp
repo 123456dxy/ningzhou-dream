@@ -51,6 +51,7 @@ Value dungeonWorldToJson(const DungeonWorld& world) {
         Value item(json::Object{});
         item.set("siteId", str(run.siteId)); item.set("siteName", str(run.siteName)); item.set("type", str(run.type)); item.set("location", str(run.location));
         item.set("phase", str(run.phase)); item.set("current", str(run.current)); item.set("stage", num(run.stage)); item.set("health", num(run.health));
+        item.set("layoutVersion", num(run.LayoutVersion));
         item.set("row", num(run.row)); item.set("seq", num(run.seq)); item.set("elapsedDays", num(run.elapsedDays));
         item.set("relics", stringVectorToJson(run.relics));
         item.set("herbs", mapToJson(run.herbs)); item.set("materials", mapToJson(run.materials)); item.set("potions", mapToJson(run.potions));
@@ -92,6 +93,7 @@ void dungeonWorldFromJson(const Value& value, DungeonWorld& world) {
     DungeonRun run;
     run.siteId = item["siteId"].asString(); run.siteName = item["siteName"].asString(); run.type = item["type"].asString(); run.location = item["location"].asString();
     run.phase = item["phase"].asString("route"); run.current = item["current"].asString(); run.stage = item["stage"].asInt(); run.health = item["health"].asInt(100);
+    run.LayoutVersion = item["layoutVersion"].asInt(1);
     run.row = item["row"].asInt(-1); run.seq = item["seq"].asInt(); run.elapsedDays = item["elapsedDays"].asInt(); run.relics = jsonToStringVec(item["relics"]);
     run.herbs = jsonToMap<int>(item["herbs"]); run.materials = jsonToMap<int>(item["materials"]); run.potions = jsonToMap<int>(item["potions"]);
     run.stones = item["stones"].asInt(); run.cores = item["cores"].asInt(); run.insight = item["insight"].asInt(); run.cleared = item["cleared"].asBool();

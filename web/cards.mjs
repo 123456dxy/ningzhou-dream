@@ -16,7 +16,7 @@ const KIND_LABEL = {
   // 灵力经营（参考杀戮尖塔）
   store: '蓄灵', flow: '聚气', burst: '夺灵',
   draw: '抽牌', foresee: '预谋',
-  exhaust: '本场移除', redraw: '换手', empower: '增伤', ward: '减伤', fireBurst: '引爆',
+  exhaust: '本场移除', redraw: '换手', empower: '增伤', ward: '减伤', fireBurst: '引爆', fireSiphon: '焰转治疗',
 };
 
 // 用途：显示神通类型中文标签。
@@ -27,6 +27,11 @@ export function cardKind(card) {
   return KIND_LABEL[card?.kind] || '神通';
 }
 
+// 用途：展示后端相生资格；流程：正式斗法与本地试炼手牌；返回：明确标签或空，不在前端推导五行顺序/能力。
+export function cardGenerationHint(card) {
+  return card?.elementalGenerationReady === true ? '相生可触发' : '';
+}
+
 // 每张卡的规则说明
 const KIND_RULE = {
   sword: '按当前剑气增伤；施术后剑气 +1（功法可追加），上限 8。',
@@ -34,7 +39,7 @@ const KIND_RULE = {
   wave: '每层水势增伤，施术后消耗全部水势。',
   heavy: '每层重势增伤 12%，施术后消耗全部重势。',
   poisonBurst: '每层毒追加伤害，施术后清除毒。',
-  soulBurst: '每层震荡增伤 15%，施术后消耗震荡。',
+  soulBurst: '每层震荡增伤 25%，每层穿盾 5%（最高30%），施术后消耗震荡。',
   bodyBurst: '体魄、重势增伤；出牌前有 3 灵力时额外增伤 15%。',
   mana: '恢复灵力；卡牌进入弃牌堆，本回合不能再抽回。',
   float: '恢复 2 灵力；随后两回合灵力回复 −1。',
@@ -43,7 +48,7 @@ const KIND_RULE = {
   heal: '恢复气血，单卡最高气血 14%；冷却按回合结算。',
   charge: '获得重势，上限 4 层，供爆发神通消耗。',
   water: '水势 +2，上限 6 层，供水系爆发消耗。',
-  poison: '叠毒，上限 6 层；回合结束结算，持续 3 回合。',
+  poison: '叠毒，上限 99 层；回合结束结算，持续 3 回合。',
   soul: '叠加震荡，上限 6 层，供神识爆发消耗。',
   fire: '附加灼烧；回合结束结算，持续 3 回合。',
   steal: '命中后恢复灵力。',
@@ -55,7 +60,7 @@ const KIND_RULE = {
   burst: '立刻获得灵力；代价是此后每回合灵力 −1（本场持续）。',
   draw: '本回合立刻多抽牌；卡牌本身也要花灵力，等于用灵力换手牌。',
   foresee: '下回合多抽牌；本回合不出力，把资源留给下一波。',
-  exhaust: '选择一种其它神通，将其全部副本从本场手牌、抽牌堆和弃牌堆中移除；下一场恢复。',
+  exhaust: '选择一张其它卡牌，仅移除这一张，本场不再抽到；同名其它卡仍保留，下一场恢复。',
   redraw: '弃掉其它手牌，再重抽相同数量 +1 张；弃牌仍会在牌堆重洗后出现。',
 };
 
@@ -95,6 +100,8 @@ export function battleStatusRows(b) {
   if (b.charge > 0) add('重势', `${b.charge} / 4 层`, '爆发神通消耗后清空');
   if (b.water > 0) add('水势', `${b.water} / 6 层`, '水系爆发消耗后清空');
   if (b.swordSequence > 0) add('连续剑牌', `${b.swordSequence} 张`, '本回合累计；非剑牌会打断');
+  if (b.elementalSwordSequence > 0) add('五行剑连段', `${b.elementalSwordSequence} / 3`, '跨回合保留；非五行牌不打断，错序五行重新起段');
+  if (b.fireGrowthRounds > 0) add('焰势成长', `${b.fireGrowthRounds} / ${b.fireGrowthMaxRounds ?? '—'} 轮`, '本场实际灼烧结算后积累；强化后续叠焰与引爆，新战斗归零');
   if (b.discardPower > 0) add('弃牌锐势', `下次直接攻击 +${percent(b.discardPower)}`, '只消耗一次；治疗与抽牌不消耗');
   if (b.buff) add('攻击增伤', `${b.buff > 0 ? '+' : ''}${percent(b.buff)}`, '本场持续，可叠加', b.buff > 0 ? 'good' : 'bad');
   if (b.effectiveReduction != null && b.effectiveReduction > 0) add('总减伤', percent(b.effectiveReduction), '当前实际减伤，已计入功法与守势');
@@ -117,9 +124,11 @@ export function battleStatusRows(b) {
 // 流程：收集正伤害、护盾、治疗和势值，并连接摘要。
 // 调用方式：战斗手牌传入实时卡牌。
 // 返回值：数值摘要字符串。
-export function cardNumbers(card) {
+export function cardNumbers(card, { showDamage = true } = {}) {
   const out = [];
-  if (card.damage > 0) out.push(`伤 ${card.damage}`);
+  if (showDamage && Number.isFinite(card.rawDamage) && (card.rawDamage > 0 || card.damage > 0))
+    out.push(`打出 ${card.rawDamage} / 气血 ${card.damage}`);
+  else if (showDamage && card.damage > 0) out.push(`气血 ${card.damage}`);
   if (card.shield > 0) out.push(`盾 ${card.shield}`);
   if (card.heal > 0) out.push(`疗 ${card.heal}`);
   if (card.qi > 0) out.push(`势 ${card.qi}`);

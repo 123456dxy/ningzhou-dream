@@ -24,6 +24,8 @@ Get-ChildItem -LiteralPath $assetRoot -File -Recurse | Sort-Object FullName | Fo
     if ($allowed -notcontains $_.Extension.ToLowerInvariant()) { return }
     # 注意：Windows PowerShell 5.1 的 [IO.Path] 没有 GetRelativePath，改用前缀截取，5.1/7 都能跑。
     $relative = $_.FullName.Substring($assetRoot.Length + 1)
+    # 独立斗法试炼仅在开发者本机使用，不进入正式网页或单文件发行包。
+    if ($relative -match '^battle-lab\.(html|css|mjs)$') { return }
     $target = Join-Path (Join-Path $runtime 'web') $relative
     New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
     Copy-Item -LiteralPath $_.FullName -Destination $target

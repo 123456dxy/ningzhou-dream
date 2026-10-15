@@ -117,7 +117,7 @@ void mfCheckNpcTidePace() {
         check(EventCapsValid, "60天普通最多9杀、精英最多12杀：种子" + SeedLabel);
         check(State.tide.playerScore == 351 && State.tide.playerRank == 1,
             "最高战场13次真实击杀稳定超过全州NPC：种子" + SeedLabel);
-        check(SeedNormalCount == 32 && SeedEliteCount == 5, "精英身份仍来自五宗真实构筑：种子" + SeedLabel);
+        check(SeedNormalCount == 32 && SeedEliteCount == static_cast<int>(content::npcCombatProfiles().size()), "精英身份来自六宗真实构筑：种子" + SeedLabel);
         Replay.clock.days = Replay.tide.endDay; tide::dayTick(Replay);
         check(saveToJson(State) == saveToJson(Replay), "同种子逐日与批量推进60天确定一致：种子" + SeedLabel);
         NormalTotalKills += SeedNormalKills; EliteTotalKills += SeedEliteKills;

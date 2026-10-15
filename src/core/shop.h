@@ -1,7 +1,7 @@
 // 宁州一梦 · C++ 版 — 即时经济动作
 //
 // 对应 JS economy.mjs 的 ecoInstant（七个「点一下立刻生效」的动作）：
-//   sell-potion / sell-gear  坊市出售（含 marketCash 与每月需求上限）
+//   sell-potion / sell-gear  坊市出售（含三年周期 marketCash，不设每月件数上限）
 //   book-buy                 城市书坊买功法
 //   library                  宗门藏经阁用贡献兑换
 //   cancel-job               中止当前安排
@@ -44,12 +44,14 @@ struct ActionQuote {
 };
 
 // 类型：有限坊市收购能力，只负责当前资金/同类需求与地点，不依赖持有量或开炉资格。
-// 临时炼器预览和现有物品出售共用；报价无时间/RNG/存档副作用，不充值旧档当月余额。
+// 临时炼器预览和现有物品出售共用；报价无时间/RNG/存档副作用，不充值旧档本期余额。
 struct MarketSaleQuote {
     bool InCity = false;
     int RemainingCash = 0;
     int NextMonthBudget = 0;
     int AffordableCount = 0;
+    int RefreshCycleDays = 1080;
+    int DaysUntilRefresh = 0;
     std::string Reason;
 };
 // 类型：同一只读响应内的收购参数快照；只存数值，不借用Game，不跨请求或动作复用。
@@ -58,10 +60,12 @@ struct MarketSaleContext {
     int RemainingCash = 0;
     int NextMonthBudget = 0;
     int DemandLimit = 0;
+    int RefreshCycleDays = 1080;
+    int DaysUntilRefresh = 0;
 };
-// 用途：一次计算月预算并在本次目录视图中复用；返回：纯数值快照，无状态/RNG/文件副作用。
+// 用途：一次计算三年周期预算并在本次目录视图中复用；返回：纯数值快照，无状态/RNG/文件副作用。
 [[nodiscard]] MarketSaleContext mfMarketSaleContext(const Game& State);
-// 用途：按后端单位售值查询资金和同类月需求；参数：potion/gear、稳定物品ID（临时法器可为空）、正价。
+// 用途：按后端单位售值查询本期资金和持有量；参数：potion/gear、稳定物品ID（临时法器可为空）、正价。
 // 返回：与真实saleQuote共用的收购能力；不检查拥有量，未炼成的报价也能显示可收数量。
 [[nodiscard]] MarketSaleQuote mfQuoteMarketSale(const Game& State, const std::string& Kind,
                                                const std::string& ItemId, int UnitSalePrice);
@@ -97,7 +101,7 @@ struct SellResult {
 };
 
 // 类型：单种丹药批量出售的纯值报价，无资源所有权，可复制；由游戏串行动作边界使用。
-// Count 是持有量、坊市资金、月需求和灵石余额容量共同允许的最大数量。
+// Count 是持有量、坊市资金和灵石余额容量共同允许的最大数量。
 struct PotionSaleQuote {
     bool Enabled = false;
     int Count = 0, UnitPrice = 0, TotalGain = 0;

@@ -30,18 +30,20 @@ function renderStockRules(tide) {
   const market = tide?.market;
   const rules = Array.isArray(market?.stockRules) ? market.stockRules : [];
   if (!rules.length) return '';
-  return `<div class="tide-stock-rules"><p class="tp-note">全州总积分每累计 ${count(market.pointsPerStock)} 分增加一档库存；解锁更高阶后，已解锁低阶材料继续增加，单项库存有上限。</p>${rules.map(rule => `<p class="tp-note">${count(rule.grade)} 阶材料：全州累计 ${count(rule.unlockScore)} 分解锁 · ${!tide.settled && count(tide.totalScore) < count(rule.unlockScore) ? '尚未解锁' : `${tide.settled ? '按当前规则计算供应' : '当前积分预计供应'} ${count(rule.initialStock)} 份 / 种`}</p>`).join('')}${tide.settled ? '<p class="tp-note">商品剩余库存以已生成记录为准；已生成库存不会按新规则重新补货。</p>' : ''}</div>`;
+  return `<div class="tide-stock-rules"><p class="tp-note">高阶材料供给增长更慢；解锁更高阶后，低阶库存继续增加，每种库存有上限。</p>${rules.map(rule => `<p class="tp-note">${count(rule.grade)} 阶材料：全州累计 ${count(rule.unlockScore)} 分解锁 · 此后每 ${count(rule.incrementScore || market.pointsPerStock)} 分增加 1 份 · ${!tide.settled && count(tide.totalScore) < count(rule.unlockScore) ? '尚未解锁' : `${tide.settled ? '按当前规则计算供应' : '当前积分预计供应'} ${count(rule.initialStock)} 份 / 种`}</p>`).join('')}${tide.settled ? '<p class="tp-note">商品剩余库存以已生成记录为准；已生成库存不会按新规则重新补货。</p>' : ''}</div>`;
 }
 
 // 用途：生成可滚动金榜；参与进行中及期末面板；传权威榜单，返回安全HTML。
 function renderLeaderboard(tide) {
   const rows = Array.isArray(tide.leaderboard) ? tide.leaderboard : [];
+  const champions = rows.filter(row => row.elite === true);
   if (!rows.length) return '<p class="tp-note">本期金榜尚无战绩。</p>';
   return `<details class="tide-goldboard" ${tide.settled ? 'open' : ''}><summary>兽潮金榜 · ${rows.length} 位修士${tide.active ? ' · 实时战绩' : ' · 最终排名'}</summary>`
     + '<p class="tp-note">全州按积分排名，同分并列，各境界不分榜。流派高手拥有完整功法与神通配合。</p>'
+    + (champions.length ? `<details class="tide-champions"><summary>查看流派高手 · ${champions.length} 位</summary>${champions.map(row => `<p class="tp-note"><strong>${esc(row.name)}</strong> · ${esc(row.buildName || '完整传承')} · ${esc(row.realm)} · ${count(row.score)} 积分</p>`).join('')}</details>` : '<p class="tp-note">本期参战名单中暂无流派高手。</p>')
     + (tide.npcPace ? `<p class="tp-note">修士间歇参战：普通修士${count(tide.npcPace.normalChanceDenominator) ? `每日有 1 / ${count(tide.npcPace.normalChanceDenominator)} 概率出战，` : ''}本期最多击杀 ${count(tide.npcPace.normalMaxKills)} 只；流派高手${count(tide.npcPace.eliteChanceDenominator) ? `每日有 1 / ${count(tide.npcPace.eliteChanceDenominator)} 概率出战，` : ''}本期最多击杀 ${count(tide.npcPace.eliteMaxKills)} 只。高境界战场每只妖兽的积分更多。</p>` : '')
     + '<div class="tide-ranking-scroll"><table><thead><tr><th scope="col">名次</th><th scope="col">修士</th><th scope="col">参战境界</th><th scope="col">积分</th></tr></thead><tbody>'
-    + rows.map(row => `<tr class="${row.isPlayer ? 'tide-self' : ''}"><td>${count(row.rank) || '—'}</td><th scope="row">${esc(row.name)}${row.isPlayer ? '<span class="tide-row-tag">你</span>' : ''}${row.elite ? '<span class="tide-row-tag">完整流派</span>' : ''}<small>${esc(row.sectName || row.sect || '散修')}</small></th><td>${esc(row.realm)}</td><td>${count(row.score)}</td></tr>`).join('')
+    + rows.map(row => `<tr class="${row.isPlayer ? 'tide-self' : ''}"><td>${count(row.rank) || '—'}</td><th scope="row">${esc(row.name)}${row.isPlayer ? '<span class="tide-row-tag">你</span>' : ''}${row.elite ? '<span class="tide-row-tag">流派高手</span>' : ''}<small>${esc(row.sectName || row.sect || '散修')}${row.buildName ? ` · ${esc(row.buildName)}` : ''}</small></th><td>${esc(row.realm)}</td><td>${count(row.score)}</td></tr>`).join('')
     + '</tbody></table></div></details>';
 }
 

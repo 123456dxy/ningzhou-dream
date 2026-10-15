@@ -1,6 +1,8 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
 #include "core/foundation/state_limits.h"
+#include "core/combat/elemental_sword.h"
+#include "core/combat/fire_growth.h"
 #include <cmath>
 #include <set>
 
@@ -74,6 +76,7 @@ bool dungeonShapesValid(const Value& world, bool modern) {
     }
     const auto& run = world["run"];
     if (!run.isObject()) return true;
+    if (run.asObject().count("layoutVersion") && !saveInteger(run["layoutVersion"], 1, 2)) return false;
     for (const char* name : {"siteId", "siteName", "type", "location", "phase", "current", "targetKind", "targetId", "targetName"}) if (!run[name].isString()) return false;
     for (const char* name : {"stage", "health", "row", "seq", "elapsedDays", "stones", "cores", "insight", "targetGrade"}) if (!run[name].isNumber()) return false;
     for (const char* name : {"cleared", "targetGranted"}) if (!run[name].isBool()) return false;
@@ -100,8 +103,13 @@ bool dungeonShapesValid(const Value& world, bool modern) {
 } // namespace
 
 bool saveShapesValid(const Value& root) {
+    const auto MarketCycle = root["economy"].asObject().find("marketCycleIndex");
+    if (MarketCycle != root["economy"].asObject().end() &&
+        !saveInteger(MarketCycle->second, -1, StateLimits::MaxPersistedInteger)) return false;
     if (!tideShapeValid(root["tide"])) return false;
     if (!mfGardenShapeValid(root["garden"])) return false;
+    if (!root["player"]["arts"]["greenBottleGrade"].isNull() &&
+        !saveInteger(root["player"]["arts"]["greenBottleGrade"], 0, 6)) return false;
     using json::Type;
     if (!saveObjectFieldTypes(root, {{"rng", Type::Number}, {"seed", Type::Number},
             {"year", Type::Number}, {"version", Type::Number}, {"ended", Type::Bool},
@@ -121,7 +129,7 @@ bool saveShapesValid(const Value& root) {
     if (!saveObjectFieldTypes(playerObject["arts"], {{"battle", Type::Object}, {"exp", Type::Object},
             {"herbs", Type::Object}, {"potions", Type::Object}, {"materials", Type::Object},
             {"manuals", Type::Object}, {"gear", Type::Array}, {"equipped", Type::Object},
-            {"knownSpells", Type::Array}, {"spells", Type::Array}})) return false;
+            {"knownSpells", Type::Array}, {"spells", Type::Array}, {"greenBottleGrade", Type::Number}})) return false;
     for (const char* key : {"knownSpells", "spells"})
         for (const auto& id : playerObject["arts"][key].asArray()) if (!id.isString()) return false;
     for (const auto& gear : playerObject["arts"]["gear"].asArray())
@@ -141,12 +149,23 @@ bool saveShapesValid(const Value& root) {
             {"travelChecks", Type::Number}, {"travelAmbushes", Type::Number}})) return false;
     if (battle.isObject() && !saveObjectFieldTypes(battle, {
             {"tideEventId", Type::String}, {"tideBattlefield", Type::Number}, {"tideDaysCharged", Type::Number},
-            {"deck", Type::Array}, {"hand", Type::Array}, {"draw", Type::Array},
+            {"deck", Type::Array}, {"hand", Type::Array}, {"draw", Type::Array}, {"beastActions", Type::Array},
             {"discard", Type::Array}, {"exhausted", Type::Array},
             {"cooldowns", Type::Object}, {"enemyCd", Type::Object}, {"enemyCards", Type::Object},
-            {"playerFirst", Type::Bool}, {"enemyStage", Type::Number},
+            {"playerFirst", Type::Bool}, {"enemyStage", Type::Number}, {"elementalSwordManaReturns", Type::Number}, {"elementalSwordSequence", Type::Number},
             {"shadowPlayer", Type::Object}, {"shadowOutcome", Type::String},
             {"playerSpeed", Type::Number}, {"enemySpeed", Type::Number}, {"dungeonSite", Type::String}, {"dungeonNode", Type::String}})) return false;
+    if (battle["beastActions"].asArray().size() > 4) return false;
+    for (const auto& Action : battle["beastActions"].asArray()) {
+        if (!Action.isObject() || !Action["id"].isString() ||
+            !BeastCombat::mfParseActionKind(Action["id"].asString())) return false;
+        static const std::set<string> Fields{"id", "rawDamage", "shieldGain", "healGain", "poisonDamage",
+            "burnDamage", "weakenLayers", "chargeGain", "piercePercent"};
+        for (const auto& [Key, Item] : Action.asObject())
+            if (!Fields.count(Key) || (Key != "id" && !saveInteger(Item, 0, 1000000))) return false;
+        for (const char* Key : {"rawDamage", "shieldGain", "healGain", "poisonDamage", "burnDamage", "weakenLayers", "chargeGain", "piercePercent"})
+            if (!saveInteger(Action[Key], 0, 1000000)) return false;
+    }
     const auto& shadow = battle["shadowPlayer"];
     if (shadow.isObject()) {
         // Reject recursive snapshots before any recursive deserialization.
@@ -172,9 +191,20 @@ bool saveShapesValid(const Value& root) {
         if (!card.isObject() || !card["uid"].isString() || !card["spell"].isString()) return false;
     for (const char* key : {"stage", "speed", "body", "mind", "mana", "maxMana", "shuffles", "played", "turns",
             "swordQi", "water", "soul", "charge", "lock", "carryMana", "manaBonus", "manaPenalty", "drawNext",
-            "carryCap", "hpCostPct", "poison", "poisonTurns", "poisonDamage", "burn", "burnTurns", "swordSequence", "comboDraws",
-            "buff", "reduction", "guard", "discardPower"})
+            "carryCap", "hpCostPct", "poison", "poisonTurns", "poisonDamage", "burn", "burnTurns", "swordSequence", "comboDraws", "elementalSwordManaReturns",
+            "buff", "reduction", "guard", "discardPower", "elementalSwordSequence"})
         if (!enemy[key].isNull() && !enemy[key].isNumber()) return false;
+    for (const auto* CombatState : {&battle, &enemy})
+        if (!(*CombatState)["elementalSwordManaReturns"].isNull() &&
+            !saveInteger((*CombatState)["elementalSwordManaReturns"], 0, ElementalSword::ManaReturnLimitPerTurn)) return false;
+    for (const auto* CombatState : {&battle, &enemy}) {
+        const auto Growth = CombatState->asObject().find("fireGrowthRounds");
+        if (Growth != CombatState->asObject().end() &&
+            !saveInteger(Growth->second, 0, FireGrowth::MaximumGrowthRounds)) return false;
+        const auto Sequence = CombatState->asObject().find("elementalSwordSequence");
+        if (Sequence != CombatState->asObject().end() &&
+            !saveInteger(Sequence->second, 0, ElementalSword::SwordChainCycleLength)) return false;
+    }
     for (const char* key : {"manuals", "cooldowns"})
         for (const auto& [id, value] : enemy[key].asObject()) if (!value.isNumber()) return false;
     for (const auto& npc : root["npcs"].asArray()) {

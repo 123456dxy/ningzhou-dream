@@ -8,12 +8,12 @@ namespace nz::content {
 
 // Ordinals deliberately retain the historical twelve-dao node/bonus layout.
 enum class DaoId { Metal, Wood, Water, Fire, Earth, Mind, Body, Sword, Qi, Array, Alchemy, Artifact };
-enum class SectId { Jinhong, Xinghe, Zhushan, Lihuo, Huachen };
+enum class SectId { Jinhong, Xinghe, Zhushan, Lihuo, Huachen, Xuandao };
 enum class SpellKind {
     Attack, Heal, Shield, Fire, Sword, Drain, Guard, Store, Flow, Burst,
     Draw, Foresee, Redraw, Exhaust, Empower, Ward, FireBurst, Mana, Charge, Heavy,
     Water, Wave, Poison, PoisonBurst, Float, Human, Soul, SoulBurst,
-    Steal, BodyBurst
+    Steal, BodyBurst, FireSiphon
 };
 enum class BattleKind { Spar, Wild, Hunt, Tide, Ambush, Kill, Rob, Dungeon, SectTrial, Tianji };
 
@@ -25,7 +25,7 @@ std::span<const DaoId> allDaoIds();
 // 用途：提供可识别宗门的强类型集合。
 // 参与流程：宗门内容注册与遍历。
 // 使用方式：无参数，读取静态不可变视图。
-// 返回值：五个 SectId 的 span。
+// 返回值：六个 SectId 的 span，既有宗门的枚举顺序保持不变。
 std::span<const SectId> allSectIds();
 // 用途：列出支持的神通结算类型。
 // 参与流程：神通注册校验与类型遍历。

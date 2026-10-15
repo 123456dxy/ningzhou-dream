@@ -159,13 +159,13 @@ void runBattleMechanismTests() {
         check(!battleTurn(g, "purge", "missing").ok, "未知移除目标被拒绝");
         checkEq(b.mana, mana, "所有目标拒绝均不扣灵力");
         check(b.hand == originalHand, "所有目标拒绝均不移出手牌");
-        check(battleTurn(g, "purge", "gold").ok, "按神通ID移除所有副本");
-        checkEq(b.exhausted.size(), 2, "手牌和弃牌中的目标副本全部移除");
+        check(battleTurn(g, "purge", "gold").ok, "旧神通ID入口仅选择首个合法副本");
+        checkEq(b.exhausted.size(), 1, "每次忘机仅移除一个目标副本，同名其它卡保留");
         checkEq(b.deck.size(), deckSize, "保留deck供存档检索移除牌");
         check(partitioned(b), "移除后四牌堆互斥且守恒");
         b.cooldowns.clear(); hand(b, {"purge", "strike"});
         check(battleTurn(g, "purge", copies(b, "strike").front()).ok, "可用卡UID选择固定普通攻击");
-        checkEq(b.exhausted.size(), 7, "普通攻击全部五张副本仅本场移除");
+        checkEq(b.exhausted.size(), 2, "第二次忘机只再移除一张普通攻击");
         for (int i = 0; i < 3; ++i) { b.intentKind = "guard"; battleTurn(g, "end"); check(partitioned(b), "移除牌经过弃牌洗牌不复活"); }
         checkEq(copies(b, "strike").size(), 5, "原牌组仍保留五张普通攻击定义");
         battleTurn(g, "escape");
@@ -222,7 +222,7 @@ void runBattleMechanismTests() {
         Game g = fight({"fire", "fireburst"}); Battle& b = *g.player.arts.battle;
         hand(b, {"fire", "fire"});
         battleTurn(g, "fire"); const int first = b.burn;
-        checkEq(first, jsRound(mfBattleDamageBasis(g.player.stage) * 0.1), "无功法火诀按统一伤害基底施加基础灼烧");
+        checkEq(first, jsRound(mfBattleDamageBasis(g.player.stage) * 0.08), "无功法火诀按统一伤害基底施加百分之八基础灼烧");
         battleTurn(g, "fire"); checkEq(b.burn, first * 2, "无功法重复施火天然累积灼烧");
         for (int i = 0; i < 6; ++i) { hand(b, {"fire"}); battleTurn(g, "fire"); }
         checkEq(b.burn, first * 8, "多次施火不被旧战力60%上限截断");
@@ -248,25 +248,25 @@ void runBattleMechanismTests() {
         check(master.player.arts.battle->burn > novice.player.arts.battle->burn, "功法层数提高灼烧附加量");
         Game combo = fight({"woodSeal", "fire"}, {"3-2", "3-4"}); Battle& b = *combo.player.arts.battle;
         hand(b, {"woodSeal", "fire"}); battleTurn(combo, "woodSeal"); battleTurn(combo, "fire");
-        checkEq(b.burn, jsRound(mfBattleDamageBasis(combo.player.stage) * 0.1 * 1.5 * 2 * 1.5),
-                "相生、灼烧翻倍与薪火加成相乘，不受旧24%单次截断");
+        checkEq(b.burn, jsRound(mfBattleDamageBasis(combo.player.stage) * 0.08 * 1.5),
+                "开局相生保留，火道与薪火尚未成长时不再即时叠乘");
     }
     {
         Game g = fight({"fire", "fireburst"}); Battle& b = *g.player.arts.battle;
         hand(b, {"fire"}); battleTurn(g, "fire"); const int first = b.burn;
-        b.intentKind = "guard"; const int hp = b.enemyHp; battleTurn(g, "end");
+        b.BeastActions.clear(); b.intentKind = "guard"; const int hp = b.enemyHp; battleTurn(g, "end");
         checkEq(hp - b.enemyHp, first, "灼烧第一回合只跳一次且穿过护盾");
         checkEq(b.burnTurns, 2, "灼烧跳伤后剩两回合");
         hand(b, {"fire"}); battleTurn(g, "fire");
         checkEq(b.burn, first * 2, "跨回合再施火仍保留旧灼烧");
         checkEq(b.burnTurns, 3, "跨回合再施火刷新三回合");
         for (int remaining = 2; remaining >= 0; --remaining) {
-            b.intentKind = "guard"; const int before = b.enemyHp; battleTurn(g, "end");
+            b.BeastActions.clear(); b.intentKind = "guard"; const int before = b.enemyHp; battleTurn(g, "end");
             checkEq(before - b.enemyHp, first * 2, "刷新后的灼烧每回合等量结算");
             checkEq(b.burnTurns, remaining, "灼烧持续回合逐次递减");
         }
         checkEq(b.burn, 0, "灼烧第三次跳伤后解除");
-        b.intentKind = "guard"; const int after = b.enemyHp; battleTurn(g, "end");
+        b.BeastActions.clear(); b.intentKind = "guard"; const int after = b.enemyHp; battleTurn(g, "end");
         checkEq(b.enemyHp, after, "已到期灼烧不会继续跳伤");
     }
     {
@@ -276,7 +276,7 @@ void runBattleMechanismTests() {
             Battle plain = b; plain.burn = plain.burnTurns = 0;
             const auto preview = battlePreview(g.player, b, "fireburst");
             checkEq(preview.damage - battlePreview(g.player, plain, "fireburst").damage,
-                    jsRound(100 * remaining * 1.5), "爆焰只放大剩余回合预算，不补已跳伤回合");
+                    jsRound(100 * remaining), "爆焰尚未成长时只兑现剩余回合预算，不补已跳伤回合");
             const int before = b.enemyHp; battleTurn(g, "fireburst");
             checkEq(before - b.enemyHp, preview.damage, "剩余一或两回合引爆预览等于实际");
         }
@@ -286,7 +286,7 @@ void runBattleMechanismTests() {
         for (int i = 0; i < 3; ++i) { hand(b, {"corrode"}); battleTurn(g, "corrode"); }
         checkEq(b.poison, 9, "无功法三次腐毒咒天然累积九层，不被六层封顶");
         const int enemyHp = b.enemyHp; b.intentKind = "guard"; battleTurn(g, "end");
-        checkEq(enemyHp - b.enemyHp, jsRound(mfBattleDamageBasis(g.player.stage) * 0.035 * 9),
+        checkEq(enemyHp - b.enemyHp, jsRound(mfBattleDamageBasis(g.player.stage) * 0.045 * 9),
                 "九层毒按真实层数跳伤");
         checkEq(b.poison, 9, "无毒增长功法时持续中的毒保留全部层数");
         b.enemyShield = 0; hand(b, {"poisonBurst"}); const auto preview = battlePreview(g.player, b, "poisonBurst");
@@ -375,7 +375,8 @@ void runBattleMechanismTests() {
         b.hp = b.max / 2; hand(b, {"gather", "strike", "defend"}); const int hp = b.hp;
         battleTurn(g, "gather"); battleTurn(g, "strike"); battleTurn(g, "defend");
         checkEq(b.hp, hp + jsRound(b.max * 0.02), "体道每第三次出牌回复2%气血");
-        b.intentKind = "attack"; b.intentName = "反震测试"; b.intentRaw = 20;
+        // 此例专测冻结20伤害的旧单意图反震；新多段计划另有逐段测试，不覆盖其真实计划。
+        b.BeastActions.clear(); b.intentKind = "attack"; b.intentName = "反震测试"; b.intentRaw = 20;
         const int enemy = b.enemyHp; battleTurn(g, "end");
         checkEq(b.enemyHp, enemy - 3, "格挡20伤害反震15%即3伤害");
     }
@@ -385,13 +386,17 @@ void runBattleMechanismTests() {
         EnemySpec enemy;
         enemy.name = "先手妖兽"; enemy.stage = 0; enemy.style = "体";
         enemy.beast = true; enemy.speed = 1000;
+        // 先手完成后已规划下一轮，不能拿下一轮intentRaw当首击。用同种子的未先行动作预告作对照。
+        Game Control = g; EnemySpec SlowEnemy = enemy; SlowEnemy.speed = 0;
+        battleStart(Control, SlowEnemy);
+        const auto Opening = battleReferenceState(g.player);
+        const int ExpectedLoss = battleEnemyPreview(Control).damage;
         battleStart(g, enemy);
         const Battle& b = *g.player.arts.battle;
         check(!b.playerFirst, "更快的妖兽实际取得先手");
-        // 固定种子下新伤害尺度的首击为19；器道开局20盾吸收19后保留1，不能要求盾必定耗尽。
-        checkEq(b.intentRaw, 19, "新伤害尺度下固定种子妖兽先手攻击为19");
-        checkEq(b.shield, 1, "妖兽先手攻击实际消耗19点开局护盾，剩余1");
-        checkEq(b.hp, b.max, "妖兽先手攻击被开局护盾完全吸收，气血不减少");
+        check(ExpectedLoss > 0, "新妖兽平衡下先手扑击可穿过20点护盾");
+        checkEq(b.shield, 0, "妖兽先手攻击真实消耗20点开局护盾");
+        checkEq(b.hp, Opening.hp - ExpectedLoss, "妖兽实际首击与同种子初轮预告一致，不误用下一轮意图");
         checkEq(b.enemyMax - b.enemyHp, 3, "妖兽先手攻击的盾挡也触发体道反震");
     }
     {

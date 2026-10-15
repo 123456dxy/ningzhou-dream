@@ -47,6 +47,19 @@ inline void checkStr(const std::string& got, const std::string& want,
 }
 
 // 各模块测试入口
+void mfRunBattleLabTests();
+void mfRunCombatBalanceIterationTests();
+void mfRunXuandaoSectTests();
+void mfRunMarketCycleTests();
+void mfRunGreenBottleTests();
+void mfRunFireGrowthTests();
+void mfRunBeastActionTests();
+void mfRunNpcShuffleContinuationTests();
+void mfRunDiscardTimingTests();
+void mfRunDungeonSweepTests();
+void mfRunDungeonEventTests();
+void mfRunDungeonEncounterTests();
+void mfRunDungeonRewardScalingTests();
 void mfRunServiceConvenienceTests();
 void mfRunTradeQuickActionsApiTests();
 void mfRunTideMaxPurchaseTests();

@@ -45,7 +45,7 @@ changed.rewardRules[0].rewardRenown = 52;
 changed.market.pointsPerStock = 333;
 changed.npcPace.normalChanceDenominator = 7;
 const changedHtml = renderTidePanel(changed);
-check(changedHtml.includes('51 年') && changedHtml.includes('声望 +52') && changedHtml.includes('累计 333 分')
+check(changedHtml.includes('51 年') && changedHtml.includes('声望 +52') && changedHtml.includes('每 333 分增加 1 份')
   && changedHtml.includes('1 / 7'), '模拟后端参数变化直接反映到展示，无前端第二份配置');
 const ended = { ...fixture, active: false, settled: true, rewardStones: 9600, rewardRenown: 49, rewardPaid: true,
   market: { ...fixture.market, open: true, daysLeft: 30, discountPercent: 50, minDiscountPercent: 50, items: [
@@ -55,7 +55,7 @@ const ended = { ...fixture, active: false, settled: true, rewardStones: 9600, re
 const endedHtml = renderTidePanel(ended);
 check(endedHtml.includes('9600 灵石 · 声望 +49') && endedHtml.includes('已到账'), '结榜使用保存的实际奖金和声望，不用规则重新覆盖旧结果');
 const market = renderTideMarket({ tide: ended, player: { stones: 10000 } }, { grade: 'all' });
-check(market.includes('按当前规则计算供应 10 份') && market.includes('已解锁低阶材料继续增加')
+check(market.includes('按当前规则计算供应 10 份') && market.includes('低阶库存继续增加')
   && market.includes('商品剩余库存以已生成记录为准'), '交易说明当前规则供应与真实库存记录的区别，低阶继续累增');
 check(market.includes('尚未解锁：本期全州总积分需达到 5700 分') && !market.includes('已售罄'), '未解锁高阶不误标售罄');
 check(!shouldRenderTide({ active: false, settled: true, market: { open: false } }), '战后坊市到期不继续占用纪事界面');
@@ -126,6 +126,9 @@ if (!args.includes('--exe')) {
       startDay: 0, endDay: 60, durationDays: 60, lastProcessedDay: 59, monthsLeft: 1, playerJoined: true,
       playerScore: 5700, playerEntryStage: 5, playerRank: 0, totalScore: 0, settled: false, rewardPaid: false,
       rewardStones: 0, rewardRenown: 0, participants: [], marketStock: [], marketExpiresDay: -1 });
+    game.tide.participants = game.npcs.filter(npc => npc.alive && !npc.beast && npc.combatProfileId)
+      .map(npc => ({ actorId: npc.id, name: npc.name, sect: npc.sect, combatProfileId: npc.combatProfileId,
+        entryStage: npc.stage, score: 0, kills: 0, rank: 0, elite: true }));
     await api('import', { game: JSON.stringify(game) });
     const state = (await api('state')).state;
     check(state.tide.rewardRules.map(rule => rule.rewardYears).join('/') === '50/25/15/5'
@@ -134,6 +137,10 @@ if (!args.includes('--exe')) {
       '真实API出战频率字段为普通1/6精英1/4');
     check(state.tide.market.pointsPerStock === 300 && state.tide.market.stockRules.map(rule => rule.unlockScore).join('/') === '300/3000/5700',
       '真实API阶梯库存门槛300/3000/5700');
+    check(state.tide.market.stockRules.map(rule => rule.incrementScore).join('/') === '300/900/2700',
+      '真实API高阶库存采用更慢的独立增长间隔');
+    const champions = state.tide.leaderboard.filter(row => row.elite === true);
+    check(champions.length > 0 && champions.every(row => row.buildName), '真实金榜提供合法高手身份及具体流派名');
     const queryBefore = (await api('export')).game;
     await api('state'); await api('state');
     check((await api('export')).game === queryBefore, '两次完整state查询不参战不推进RNG不发奖');
@@ -143,8 +150,11 @@ if (!args.includes('--exe')) {
     timings.push({ label: '首次可见兽潮面板', milliseconds: performance.now() - pageStart });
     check((await page.locator('.tide-reward-rules').innerText()).includes('25 年')
       && (await page.locator('.tide-stock-rules').innerText()).includes('5700 分解锁'), '真实DOM可见新奖励与库存门槛');
-    await page.locator('.tide-goldboard summary').click();
+    await page.locator('.tide-goldboard > summary').click();
     check((await page.locator('.tide-goldboard').innerText()).includes('1 / 6'), '真实金榜展开后显示参战概率');
+    await page.locator('.tide-champions summary').click();
+    check((await page.locator('.tide-champions').innerText()).includes(champions[0].buildName)
+      && (await page.locator('.tide-ranking-scroll').innerText()).includes('流派高手'), '真实金榜高手可定位并显示流派名与徽标');
     const advanceResponse = page.waitForResponse(response => response.url() === `${base}/api/advance` && response.request().method() === 'POST');
     const clickStart = performance.now();
     await page.locator('[data-action="advance-step"][data-days="1"]').click();

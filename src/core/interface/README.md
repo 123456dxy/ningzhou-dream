@@ -12,7 +12,8 @@
 | `views.h` / `state_views.cpp` | 内部视图组合契约、`ViewContext` 与完整 state |
 | `player_views.cpp`、`arts_views.cpp`、`world_views.cpp`、`social_views.cpp`、`economy_views.cpp`、`equipment_views.cpp`、`battle_views.cpp` | 各领域 JSON 视图与数值预览 |
 | `api_exploration.cpp` | 秘境、洞府、检查点 JSON 视图 |
-| `cave_views.cpp` / `cave_views.h` | 洞府管理资格、训练、批次灵田与按格储备的权威快照；查询不生长或扣费 |
+| `cave_views.cpp` / `cave_views.h` | 洞府管理资格、训练、12苗批次灵田与永久日增权威快照；查询不生长或扣费 |
+| `green_bottle_api.cpp` / `green_bottle_api.h` | 永久瓶阶/材料/成熟周期/专属秘境视图与严格命令解析；真实规则委托crafting |
 | `craft_price_views.cpp` / `craft_price_views.h` | 完整材料市价、1.5/3倍基价及法器额外售价乘区的协议编码 |
 | `view_policy.h` / `view_policy.cpp` | 视图与动作共享的阻止理由 |
 | `view_helpers.h` | 视图内部的 JSON/格式工具 |

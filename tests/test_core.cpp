@@ -32,7 +32,7 @@ void runDataTests() {
 
     std::printf("\n-- 规则表 --\n");
     checkEq(static_cast<long long>(REALMS().size()), 13, "境界 13 级");
-    checkEq(static_cast<long long>(SECTS().size()), 5, "宗门 5 家");
+    checkEq(static_cast<long long>(SECTS().size()), 6, "宗门 6 家");
     checkEq(static_cast<long long>(LOCATIONS().size()), 28, "宁州地点28处");
     checkEq(static_cast<long long>(PLANS().size()), 5, "月度计划 5 种");
     checkEq(static_cast<long long>(TALENTS().size()), 44, "天赋 44 项");

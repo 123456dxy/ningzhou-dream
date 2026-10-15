@@ -47,6 +47,10 @@ json::Value mfCraftPriceView(const crafting::CraftPriceQuote& Quote, const Game&
     Market.set("monthBudget", Availability.NextMonthBudget);
     Market.set("remainingCash", Availability.RemainingCash);
     Market.set("nextMonthBudget", Availability.NextMonthBudget);
+    Market.set("nextCycleBudget", Availability.NextMonthBudget);
+    Market.set("refreshCycleDays", Availability.RefreshCycleDays);
+    Market.set("daysUntilRefresh", Availability.DaysUntilRefresh);
+    Market.set("saleCountUnlimited", true);
     Market.set("affordableCount", Availability.AffordableCount);
     Market.set("reason", Availability.Reason);
     Result.set("market", std::move(Market));

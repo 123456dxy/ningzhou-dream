@@ -12,6 +12,7 @@
 #include "core/economy.h"
 #include "core/shop.h"
 #include "core/content/npc_combat_profiles.h"
+#include "core/content/advanced_builds.h"
 #include "core/content/game_ids.h"
 #include "data/reference_tables.h"
 #include <algorithm>
@@ -20,11 +21,44 @@ namespace nz::api::view {
 namespace {
 // 用途：展示实际装备构筑标签；参与仙友筛选；按合法模板或实际大道/核心神通归类，返回ID/中文名，不改NPC装备或成长。
 void mfAppendNpcBuild(const Npc& Person, const Arts& Loadout, Value& Entry) {
+    Entry.set("isChampion", content::isChampion(Person));
     if (const auto* Profile = content::findNpcCombatProfile(Person)) {
         Entry.set("buildId", Profile->id);
         Entry.set("buildName", Profile->name);
+        Entry.set("buildTier", "advanced");
+        Entry.set("advancedBuildId", Profile->BuildId);
+        Value Transmission(json::Object{});
+        Transmission.set("buildId", Profile->BuildId);
+        Transmission.set("name", Profile->name);
+        Transmission.set("note", "完整构筑可逐项请教；仍需满足境界、好感、交情、学费和当面授业条件，功法从第一层学起。");
+        json::Array Manuals, Spells, Components;
+        for (const auto& ManualId : Profile->manuals) {
+            Manuals.push_back(str(ManualId));
+            ManualInfo Definition;
+            if (!findManualInfo(ManualId, Definition)) continue;
+            Value Component(json::Object{});
+            Component.set("kind", "manual"); Component.set("id", ManualId);
+            Component.set("name", Definition.name); Component.set("stage", Definition.stage);
+            Component.set("stageName", realmName(Definition.stage));
+            Components.push_back(std::move(Component));
+        }
+        for (const auto& SpellId : Profile->spells) {
+            Spells.push_back(str(SpellId));
+            const auto* Definition = battleSpell(SpellId);
+            if (!Definition) continue;
+            Value Component(json::Object{});
+            Component.set("kind", "spell"); Component.set("id", SpellId);
+            Component.set("name", Definition->name); Component.set("stage", Definition->stage);
+            Component.set("stageName", realmName(Definition->stage));
+            Components.push_back(std::move(Component));
+        }
+        Transmission.set("manuals", Value(std::move(Manuals)));
+        Transmission.set("spells", Value(std::move(Spells)));
+        Transmission.set("components", Value(std::move(Components)));
+        Entry.set("transmission", std::move(Transmission));
         return;
     }
+    Entry.set("buildTier", "initial");
     const auto Focus = content::parseDaoId(Loadout.focus);
     for (const auto& Build : artBuilds()) {
         const bool HasCoreSpell = std::any_of(Build.spells.begin(), Build.spells.end(), [&](const auto& SpellId) {
@@ -50,6 +84,37 @@ void appendSocialState(const Game& game, Value& state) {
 }
 
 void mfAppendSocialState(const Game& GameState, Value& State, const shop::MarketSaleContext& MarketContext) {
+
+    // 全州传承指引是常态目录，不要求兽潮活动或先认识老师；位置只读，动作仍走真实赶路和逐项请教。
+    json::Array Teachers;
+    for (const auto& Person : GameState.npcs) {
+        const auto* Profile = content::findNpcCombatProfile(Person);
+        if (!Profile || !Person.alive || Person.health <= 0 || Person.age >= Person.lifespan) continue;
+        Value Teacher(json::Object{});
+        Teacher.set("id", Person.id); Teacher.set("name", Person.name);
+        Teacher.set("profileId", Profile->id); Teacher.set("buildId", Profile->BuildId);
+        Teacher.set("buildName", Profile->name); Teacher.set("sect", Profile->sect);
+        Teacher.set("stage", num(Person.stage)); Teacher.set("realmName", realmName(Person.stage));
+        Teacher.set("location", Person.location);
+        Teacher.set("locationName", findLoc(Person.location) ? findLoc(Person.location)->name : Person.location);
+        Teacher.set("here", Person.location == GameState.player.location);
+        Teachers.push_back(std::move(Teacher));
+    }
+    State.set("championTeachers", Value(std::move(Teachers)));
+    json::Array AdvancedBuilds;
+    for (const auto& Build : content::mfAdvancedBuilds()) {
+        Value Entry(json::Object{});
+        Entry.set("id", Build.id); Entry.set("name", Build.name); Entry.set("dao", Build.dao);
+        Entry.set("desc", Build.desc); Entry.set("tier", "advanced");
+        json::Array Manuals, Spells, Nodes;
+        for (const auto& ManualId : Build.manuals) Manuals.push_back(str(ManualId));
+        for (const auto& SpellId : Build.spells) Spells.push_back(str(SpellId));
+        for (const auto& NodeId : Build.nodes) Nodes.push_back(str(NodeId));
+        Entry.set("manuals", Value(std::move(Manuals))); Entry.set("spells", Value(std::move(Spells)));
+        Entry.set("nodes", Value(std::move(Nodes)));
+        AdvancedBuilds.push_back(std::move(Entry));
+    }
+    State.set("advancedBuilds", Value(std::move(AdvancedBuilds)));
 
     // ---- 人情 ----
     {
@@ -199,6 +264,7 @@ void mfAppendSocialState(const Game& GameState, Value& State, const shop::Market
         entry.set("buyDiscount", num(renown::buyDiscount(rn)));
         entry.set("sellBonus", num(renown::sellBonus(rn)));
         entry.set("sellLimit", num(renown::sellLimit(rn)));
+        entry.set("saleCountUnlimited", true);
         entry.set("marketCashCap", num(MarketContext.NextMonthBudget));
         entry.set("marketTier", num(ecoMarketTier(GameState.player)));
         entry.set("marketBudgetRule", str(mfMarketBudgetRule()));

@@ -211,8 +211,8 @@ void mfRunCraftTimingTests() {
             State.player.stage = MajorRealm * 3;
             State.player.renown = Fame;
             const int RealmMultiplier = 1 << MajorRealm;
-            const int Budget = mfMarketBudgetBase(State) * 3 * RealmMultiplier;
-            checkEq(ecoMarketBudget(State), Budget, "完整基础预算先翻三倍再按大境界乘1/2/4/8/16");
+            const int Budget = static_cast<int>(std::min<long long>(1000000000, static_cast<long long>(mfMarketBudgetBase(State)) * 3 * RealmMultiplier * 50));
+            checkEq(ecoMarketBudget(State), Budget, "三年预算保留原三倍底座/境界乘区再乘50");
             State.economy.month = -1;
             ensureEconomy(State);
             checkEq(State.economy.marketCash, Budget, "初始化资金按统一境界预算补齐");
@@ -229,17 +229,20 @@ void mfRunCraftTimingTests() {
             checkEq(Restored.economy.marketCash, 3, "读档不重新发放当月预算");
             Restored.clock.days += 30;
             ecoRefresh(Restored);
-            checkEq(Restored.economy.marketCash, CurrentBudget, "下一月按当前境界和声望补充资金");
+            checkEq(Restored.economy.marketCash, 3, "下一月不补充三年账期资金");
+            Restored.clock.days = 1080;
             ecoRefresh(Restored);
-            checkEq(Restored.economy.marketCash, CurrentBudget, "重复换月刷新不会叠加额度");
+            checkEq(Restored.economy.marketCash, CurrentBudget, "三年边界按当前条件刷新");
+            ecoRefresh(Restored);
+            checkEq(Restored.economy.marketCash, CurrentBudget, "重复换期不会叠加额度");
         }
     }
     {
         Game TripleBudget = mfCraftTimingGame();
         TripleBudget.player.renown = 250;
-        checkEq(ecoMarketBudget(TripleBudget), 7200, "高声望炼气2400原底座基础翻三倍为7200");
+        checkEq(ecoMarketBudget(TripleBudget), 360000, "高声望炼气7200原月预算乘50为三年预算");
         TripleBudget.player.stage = 3;
-        checkEq(ecoMarketBudget(TripleBudget), mfMarketBudgetBase(TripleBudget) * 6,
+        checkEq(ecoMarketBudget(TripleBudget), mfMarketBudgetBase(TripleBudget) * 6 * 50,
                 "筑基总预算叠加基础3倍和境界2倍为原底座6倍");
         TripleBudget.player.stage = 12;
         TripleBudget.world.market = 30000.0;

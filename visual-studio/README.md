@@ -10,6 +10,7 @@
 - `ningzhou_web`：浏览器服务与完整前端源码，构建后复制网页和素材。
 - `ningzhou`：控制台入口。
 - `ningzhou_tests`：完整规则与 API 自测。
+- `ningzhou_battle_lab`：仅本地使用的独立斗法试炼场，内存角色，不读写人生存档。构建后单独资源位于 `battle-lab-web`，正式 `ningzhou_web` 资源同步排除三个试炼页面文件；用法见 [斗法试炼场说明](../docs/BATTLE_LAB.md)。
 
 项目全部使用相对路径，不依赖开发者的 D 盘目录。构建输出位于仓库的 `build-vs-share/Debug` 或 `Release`；网页资源跟随 `ningzhou_web.exe`，包含地图、立绘和移动版资源。
 

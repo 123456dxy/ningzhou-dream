@@ -302,13 +302,12 @@ void appendArtsState(const Game& game, Value& state) {
     }
     {
         json::Array arr;
-        for (const auto& def : data::BaseManualDef_TABLE()) {
-            ManualInfo info;
-            if (!findManualInfo(def.id, info)) continue;
+        for (const auto& [ManualId, Info] : mfManualCatalog()) {
+            static_cast<void>(ManualId);
             Value item(json::Object{});
-            item.set("id", str(info.id)); item.set("name", str(info.name)); item.set("dao", str(info.dao));
-            item.set("stage", num(info.stage)); item.set("stageName", str(realmName(info.stage)));
-            item.set("effect", str(info.effect));
+            item.set("id", str(Info.id)); item.set("name", str(Info.name)); item.set("dao", str(Info.dao));
+            item.set("stage", num(Info.stage)); item.set("stageName", str(realmName(Info.stage)));
+            item.set("effect", str(Info.effect));
             arr.push_back(std::move(item));
         }
         state.set("manualCatalog", Value(std::move(arr)));

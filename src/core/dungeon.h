@@ -15,6 +15,13 @@ struct DungeonIntelOption {
     string reason;
 };
 
+// 扫荡报价只描述现有入口；RequiredStage可能为15，表示当前最高境界仍无法越境扫荡。
+struct DungeonSweepQuote {
+    string SiteId, Reason;
+    int SiteStage = 0, RequiredStage = 3, Days = 1;
+    bool Enabled = false;
+};
+
 // 用途：提供秘境临时遗物及其收益定义。
 // 参与流程：秘境奖励、战斗资源与战后恢复。
 // 使用方式：无参数，读取固定表。
@@ -51,6 +58,14 @@ bool dungeonNodeAvailable(const DungeonRun& run, const string& nodeId);
 // 使用方式：传 site ID，内部校验后复制奖励和构建临时牌组/路线。
 // 返回值：成功为空并建立 run/入场标记；失败为原因。
 string dungeonEnter(Game& g, const string& siteId);
+// 用途：按入口大境界与真实入场资格报价一键扫荡；流程：目录按钮和实际命令共用。
+// 使用：传现有site ID，不生成入口、时间或RNG；返回：资格/原因及离境结算的一天耗时。
+DungeonSweepQuote mfQuoteDungeonSweep(const Game& State, const string& SiteId);
+// 用途：越大境界扫荡并停在原最终奖励选择；流程：秘境目录动作。
+// 使用：传现有site ID，候选副本通过完整校验才提交；返回：成功为空，失败不改变资源/进度。
+string mfSweepDungeon(Game& State, const string& SiteId);
+// 用途：按已验证瓶阶创建并进入一次专属灵材秘境；流程：green_bottle命令；返回：错误或空，真实爬塔/结算，无额外门票和人物境界锁。
+string mfOpenBottleMaterialDungeon(Game& State, int MaterialGrade);
 // 用途：进入可达节点并开始战斗或形成节点奖励。
 // 参与流程：探索路线选择动作。
 // 使用方式：传游戏和 node ID，战斗上下文先登记再调用 battleStart。

@@ -1,6 +1,7 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
 #include "core/persistence/json_helpers.h"
+#include "core/crafting/market_cycle.h"
 
 namespace nz::persistence {
 
@@ -94,6 +95,7 @@ Value gameToJson(const Game& game) {
         record.set("orders", mapToJson(game.economy.orders));
         record.set("sold", mapToJson(game.economy.sold));
         record.set("marketCash", num(game.economy.marketCash));
+        record.set("marketCycleIndex", num(game.economy.MarketCycleIndex));
         record.set("seq", num(game.economy.seq));
         root.set("economy", std::move(record));
     }
@@ -322,6 +324,8 @@ Game gameFromJson(const Value& root) {
         game.economy.orders = jsonToMap<int>(economyObject["orders"]);
         game.economy.sold = jsonToMap<int>(economyObject["sold"]);
         game.economy.marketCash = economyObject["marketCash"].asInt(400);
+        game.economy.MarketCycleIndex = economyObject["marketCycleIndex"].asInt(
+            std::max(0, game.economy.month) / (crafting::MarketCycleDurationDays / 30));
         game.economy.seq = economyObject["seq"].asInt();
     }
 

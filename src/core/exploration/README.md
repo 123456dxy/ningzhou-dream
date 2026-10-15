@@ -12,6 +12,9 @@
 | `location_services.cpp` | 地点服务列表、服务开始与完成 | `location_services.h` |
 | `adventure.cpp` | 奇遇初始化、事件、选择与战斗后果 | `adventure.h` |
 | `dungeon.cpp` | 秘境生成、进入、节点、奖励、情报与完整性 | `dungeon.h` |
+| `dungeon_events.cpp` | 六类事件的冻结选项、真实代价、原子领取与领域校验 | `exploration/dungeon_events.h` |
+| `dungeon_encounters.cpp` | 六型妖兽、宗门精英及共享的真实遭遇预告 | `exploration/dungeon_encounters.h` |
+| `dungeon_reward_rules.cpp` | 按入口境界的灵石/材料池与旧冻结奖励白名单 | `exploration/dungeon_reward_rules.h` |
 | `resource_points.cpp` | 资源点开发目录和默认关闭的功能闸门；未开放争夺、收益或时间钩子 | `resource_points.h` |
 
 这些公共头仍保留在 core 根。交通入口为 `travelPlan` → `travelBegin` → `travelAmbushTick`；地点服务为 `locationServices` → `locationServiceBegin` → `locationServiceComplete`；秘境为 `dungeonEnter` → `dungeonChoose` / `dungeonClaim` → `dungeonLeave`。
@@ -29,7 +32,9 @@ API 根据当前位置与目标查询选项，规则入口验证后创建在途 
 - 路线报价与实际执行保持一致；长途工作、跨月/跨年与途中斗法要保存可恢复的上下文。
 - 秘境房间和斗法期间只累加 `run.elapsedDays`，世界日历暂停；离境先清除 run，再用 `socialElapsed` 工作结算累计天数。跨年新开兽潮或遇事时保留剩余工作，不强推到活动结束。成功响应引导至岁月纪事并说明剩余天数；重新打开秘境目录也保留精准继续入口。相关回归为 `tests/test_dungeon_tide_transition.cpp::mfRunDungeonTideTransitionTests`。
 - 奖励 ID 和节点 ID 必须稳定，领取和退出不能重复发奖；旧奖励结构变更需要迁移。
+- 新入场LayoutVersion=2，中途混合节点与事件，预告和实际遭遇共用同一规格；旧在途缺字段按1继续原连线。扫荡要求高一大境界、人在入口且空闲，直接进入冻结终奖选择，目标材料10份不变，不刷沿途收益，离境结算1天。事件先核对完整冻结集合，候选牌组/资源和日志分配完成后无抛提交。奖励/游商/事件费用共用入口境界倍率，不使用高境玩家境界抬低阶收益。见[DUNGEON_EXPLORATION_V2](../../../docs/DUNGEON_EXPLORATION_V2.md)。
 - 秘境的活动限制应同时反映在 interface 路由策略、领域检查与 persistence 校验中。
+- 小绿瓶专属秘境使用`type=bottle/targetKind=bottleMaterial`，目标必须来自`content/green_bottle_content`白名单。`mfOpenBottleMaterialDungeon`仅在实际动作的候选Game上生成新入口，难度随当前人物境界，进入资格共用洞府/瓶阶报价；查询不能生成site。路线/斗法/领奖/离境复用现机制，完整通关才保底恰10份专属材料，未通关退出不发。三阶瓶即可开四阶材料秘境，满六阶仍可开六阶。见[小绿瓶规则](../../../docs/GREEN_BOTTLE_V2.md)。
 - 只读列表/计划不应推进时间；`ensure...`、进入与完成函数属于会改状态的入口。
 - 天机阁情报可以提前购买，不设玩家境界门槛；真实进入仍校验境界。入口冻结 `max(购买时玩家境界,材料最低探索境界)`，避免低境界预购生成难度过低或无法读档的高材秘境。所在地、灵石、每月一份和五年有效期均保留；预览与真实采购共用 `dungeonIntelOptions`，真实采购在候选Game上建入口/冻结奖励后一次提交。
 - 炼丹材料最低探索境界共用 `crafting::mfHerbAcquisitionStage`，按真实丹方最早用途消除突破材料闭环；器材仍按原品阶门槛。野外采集共用稳定ID生境目录与草药分类，妖丹不能按日采得，详见 [药材取得规则](../../../docs/HERB_ACQUISITION.md)。

@@ -99,7 +99,7 @@ function journeyPanel(state) {
     + `<p class="travel-paid">${job.cost > 0 ? `启程已付 ${job.cost} 灵石，中止不会返还。` : '本段赶路无需灵石。'}途中遇事会暂停。</p></section>`;
 }
 
-const JOINABLE_SECTS = new Set(['jinhong', 'xinghe', 'zhushan', 'lihuo', 'huachen']);
+const JOINABLE_SECTS = new Set(['jinhong', 'xinghe', 'zhushan', 'lihuo', 'huachen', 'xuandao']);
 
 // 用途：显示地点山门入口。
 // 流程：读取宗门和当前人物身份，区分入宗考核或返回宗门。

@@ -2,6 +2,7 @@
 #include "core/interface/view_helpers.h"
 #include "core/tide.h"
 #include "core/simulation/tide_rules.h"
+#include "core/content/npc_combat_profiles.h"
 #include <algorithm>
 
 namespace nz::api::view {
@@ -55,6 +56,10 @@ json::Value tideState(const Game& game) {
         row.set("entryStage",num(actor.entryStage)); row.set("realm",str(realmName(actor.entryStage)));
         row.set("score",num(actor.score)); row.set("rank",num(actor.rank)); row.set("elite",Value(actor.elite));
         row.set("isPlayer",Value(actor.actorId=="player")); row.set("combatProfileId",str(actor.combatProfileId));
+        string ProfileName;
+        for (const auto& Profile : content::npcCombatProfiles())
+            if (Profile.id == actor.combatProfileId && Profile.sect == actor.sect) ProfileName = Profile.name;
+        row.set("buildName", str(ProfileName));
         ranking.push_back(std::move(row));
     }
     if (!tide.settled) out.set("totalScore",num(static_cast<int>(std::min(1000000000LL,liveTotal))));
@@ -85,6 +90,7 @@ json::Value tideState(const Game& game) {
         Value StockRule(json::Object{});
         StockRule.set("grade", num(Grade));
         StockRule.set("unlockScore", num(tide::rules::mfStockUnlockScore(Grade)));
+        StockRule.set("incrementScore", num(tide::rules::mfStockIncrementScore(Grade)));
         StockRule.set("initialStock", num(tide::rules::stockPerItem(DisplayedTotalScore, Grade)));
         StockRules.push_back(std::move(StockRule));
     }

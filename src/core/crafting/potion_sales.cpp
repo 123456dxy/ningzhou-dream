@@ -57,11 +57,6 @@ PotionSaleQuote mfQuoteMaxPotionSale(const Game& State, const std::string& ItemI
         Quote.Reason = "没有这枚丹药。";
         return Quote;
     }
-    const auto Sold = State.economy.sold.find("potion:" + ItemId);
-    if (Sold != State.economy.sold.end() && Sold->second < 0) {
-        Quote.Reason = "当前货品需求账无效，无法出售。";
-        return Quote;
-    }
     const auto SingleQuote = saleQuote(State, "potion", ItemId, Context);
     Quote.UnitPrice = SingleQuote.returnStones;
     if (!SingleQuote.enabled) {
@@ -81,7 +76,7 @@ PotionSaleQuote mfQuoteMaxPotionSale(const Game& State, const std::string& ItemI
     if (Quote.Count == Owned->second) Quote.LimitReason = "持有量";
     if (Quote.Count == MarketQuote.AffordableCount) {
         if (!Quote.LimitReason.empty()) Quote.LimitReason += "、";
-        Quote.LimitReason += "坊市收购资金或本月需求";
+        Quote.LimitReason += "坊市收购资金";
     }
     if (Quote.Count == BalanceCapacity) {
         if (!Quote.LimitReason.empty()) Quote.LimitReason += "、";
@@ -105,19 +100,12 @@ SellResult mfSellPotions(Game& State, const std::string& ItemId, int Count, int 
 
     const long long TotalGain = static_cast<long long>(Count) * Quote.UnitPrice;
     const long long NextStones = static_cast<long long>(State.player.stones) + TotalGain;
-    const std::string SaleKey = "potion:" + ItemId;
-    const auto Sold = State.economy.sold.find(SaleKey);
-    const int SoldCount = Sold == State.economy.sold.end() ? 0 : Sold->second;
-    const long long NextSoldCount = static_cast<long long>(SoldCount) + Count;
-    if (TotalGain <= 0 || TotalGain > State.economy.marketCash || NextStones > StateLimits::MaxPersistedInteger ||
-        SoldCount < 0 || NextSoldCount > StateLimits::MaxPersistedInteger)
+    if (TotalGain <= 0 || TotalGain > State.economy.marketCash || NextStones > StateLimits::MaxPersistedInteger)
         return mfPotionSaleFailure("当前交易数值超过支持范围。");
 
     // 仅预演受影响的两个账本和纪事，避免拷贝全州NPC；分配失败发生在提交前。
     auto NextPotions = State.player.arts.potions;
-    auto NextSold = State.economy.sold;
     NextPotions.at(ItemId) -= Count;
-    NextSold.insert_or_assign(SaleKey, static_cast<int>(NextSoldCount));
     Game JournalState;
     JournalState.year = State.year;
     JournalState.player.age = State.player.age;
@@ -135,7 +123,6 @@ SellResult mfSellPotions(Game& State, const std::string& ItemId, int Count, int 
 
     // 以下仅交换已构造容器与写入已验证整数，不再进行可失败的分配或逐枚交易。
     State.player.arts.potions.swap(NextPotions);
-    State.economy.sold.swap(NextSold);
     State.economy.marketCash -= Result.gain;
     State.player.stones = static_cast<int>(NextStones);
     State.player.arts.progress.wealth = std::max(State.player.arts.progress.wealth, State.player.stones);

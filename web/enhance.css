@@ -1636,6 +1636,16 @@ body[aria-busy="true"] [data-action], body[aria-busy="true"] [data-faction], bod
   .tide-market-row>.buy{grid-column:1/-1;width:100%;min-height:44px}
 }
 /* 当地仙友筛选与异地服务导航：只压缩操作空间，不盖住游戏行动。 */
+.compact-art-details{min-width:0;margin:7px 0;font-size:12px}.compact-art-details>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;color:var(--green);line-height:1.6;list-style:revert}
+.compact-art-details>summary>span{white-space:nowrap;font-size:11px;color:var(--muted)}.compact-art-details[open]>summary>span{font-weight:bold}.compact-art-details>div{margin-top:8px;overflow-wrap:anywhere}
+.manual-card>.manual-art--compact{float:left;width:48px;height:48px;margin:0 12px 8px 0}.manual-card .mc-foot{clear:both}.compact-spell-meta{font-size:11px;color:var(--muted);margin:6px 0}
+.spell-picker .compact-spell-card{display:flex;flex-direction:column;gap:3px}.compact-spell-card>.compact-art-details{flex:1}.compact-spell-card>button{align-self:flex-end;font-size:12px;padding:6px 12px}
+.spell-picker>.card.unlearned{border-style:dashed;background:#f1f1eb;color:#73786d}.spell-picker>.card.mandatory{background:#f0f4ec}
+.transmission-teachers{border-top:1px solid var(--line);margin-top:12px;padding-top:10px;font-size:12px}
+.transmission-teachers>div{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.transmission-teachers button{font:inherit;min-height:36px}.npc-learning[data-npc-transmission] .build-components{flex-wrap:wrap}.npc-learning[data-npc-transmission] .build-component small{display:block}
+.cave-bottle-dungeon{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}.cave-bottle-dungeon p{margin:5px 0}.cave-bottle-dungeon small{display:block;color:var(--muted)}
+[data-green-bottle-panel]>.primary{max-width:100%;white-space:normal;line-height:1.6}.cave-growth-rate{color:var(--green);font-size:12px}
 .friend-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:14px; margin-bottom:14px; border:1px solid var(--line, #e4e8dc); border-radius:10px; background:var(--paper, #fafaf4); }
 .friend-filters label { display:flex; flex-direction:column; gap:5px; min-width:0; font-size:13px; color:var(--muted, #7f8b78); }
 .friend-filters select,.friend-filters input { width:100%; min-width:0; min-height:38px; box-sizing:border-box; }

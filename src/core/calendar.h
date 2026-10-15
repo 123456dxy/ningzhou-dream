@@ -7,6 +7,8 @@
 #include "core/model.h"
 
 namespace nz {
+inline constexpr int BasePillPoisonDecayPerYear = 2;
+inline constexpr int PillPoisonDaoDecayBonusPerYear = 4;
 
 // 日历上的一个位置
 struct CalDate {

@@ -14,6 +14,11 @@ inline constexpr int PointsPerStock = 300;
 inline constexpr int MinimumStockGrade = 3;
 inline constexpr int MaximumStockGrade = 5;
 inline constexpr int StockTierUnlockCount = 10;
+// 类型：每种材料的首次解锁与后续增量积分；只读配置，三至五阶依次更稀缺。
+struct StockGradeRule { int Grade, UnlockScore, PointsPerAdditionalItem; };
+inline constexpr std::array<StockGradeRule, 3> StockGradeRules{{
+    {3, 300, 300}, {4, 3000, 900}, {5, 5700, 2700}
+}};
 inline constexpr int MinimumPayablePercent = 50;
 // 类型：兽潮NPC出战节奏的不可变规则值；负责日出战概率、日击杀与本期上限，无资源或持久字段。
 // BattleChanceDenominator表示每日仅有1/该值概率出战；未出战不抽击杀，已达本期上限不再投骰。
@@ -56,8 +61,10 @@ int payablePercent(int rank, bool participated);
 // 用途：按全体积分计算有限库存；流程：战后市场生成；用法：传总分与品阶；返回：每种材料库存。
 int stockPerItem(int totalScore, int grade);
 // 用途：查询品阶库存的首次解锁分数；流程：市场资格及展示；传3至5阶，返回300/3000/5700，其他返回0。
-// 副作用：无；每个积分档在前一阶首次满10份时同时生成新阶第1份，低阶继续累加。
+// 副作用：无；解锁门槛保留，后续增速由品阶规则分别控制，低阶继续累加。
 int mfStockUnlockScore(int Grade);
+// 用途：读取该阶解锁后每多一份的积分间隔；参与库存生成与说明；传3至5阶，返回300/900/2700，未知返回0，无副作用。
+int mfStockIncrementScore(int Grade);
 // 用途：整数计算有底线的市场价格；流程：报价与成交共用；用法：传正常买价和实付比例；返回：不低于当前正常购价五折的向上取整单价。
 int discountedPrice(int normalPrice, int payablePercent);
 // 用途：为积分安全累加；流程：日模拟与击杀；用法：传原值和非负增量；返回：不溢出的积分。

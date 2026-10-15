@@ -2,6 +2,8 @@
 
 ## 定位与职责
 
+本轮新增`DungeonRun.LayoutVersion`：codec键`layoutVersion`，缺字段默认1，显式值必须为整数1或2。版本1保留旧路线，版本2按新布局重建并校验节点预告。新事件不另造持久资源字段，沿用冻结`DungeonReward`并按事件目录全字段核对；旧冻结首领奖金额保留白名单值，不在读档/查询时重算收益。
+
 负责人生存档的结构编解码、数值/形状校验、领域完整性校验、历史版本迁移和文件存储。core 根的 `save.cpp` 保留公共加载/保存编排；公共头 `save.h` 也保留。天机账号留影的专用 Store 实现在 core 根的 `tianji.cpp`，由朋友维护，仅供接口对接；其数据不属于可导入的人生存档。
 
 ## 主要文件与入口
@@ -11,6 +13,7 @@
 | `person_codec.cpp`、`player_codec.cpp`、`npc_codec.cpp` | 人物、玩家和 NPC 字段 |
 | `arts_codec.cpp`、`battle_codec.cpp`、`dungeon_codec.cpp` | 功法、斗法和秘境状态 |
 | `game_codec.cpp` | 整体 Game 编解码 |
+| `garden_codec.cpp` | 灵田规则版本、独立批次、仅待返的旧余额/超量草药事实 |
 | `shape_validation.cpp` | JSON 字段形状、数值范围与递归检查 |
 | `state_validation.cpp` | 领域之间的引用、任务、战斗与状态一致性 |
 | `migrations.cpp` | 旧版本迁移与读档后的状态补全 |
@@ -31,6 +34,7 @@
 - 不把失败数据直接解码到正在玩的 Game；导入失败要保持现状。
 - 迁移应按版本与原始 JSON 区分缺失字段，避免重新发奖、消耗 RNG 或覆盖已保存的牌组。
 - 文件路径及槽位保留规则属于产品行为；自动检查点使用的槽位不能被普通保存随意覆盖。
+- 小绿瓶`player.arts.greenBottleGrade`缺省0，严格0至6整数且正阶需天赋。灵田版本1先校验旧阈值与99容量再按比例迁至版本2/12苗，超量种苗及旧余额仅登记待返；load与只读查询不返现，实际日或园艺命令原子兑现。专属秘境目标/瓶阶/通关10份状态交由`dungeonStateError`校验。往返及恶意输入定向入口见`test_green_bottle.cpp`、`test_cave_garden.cpp`。
 
 ## 已有测试
 

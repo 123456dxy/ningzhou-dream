@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>斗法试炼场 · 宁州一梦</title>
+  <link rel="stylesheet" href="battle-lab.css">
+  <link rel="stylesheet" href="elemental-generation.css">
+</head>
+<body>
+  <main class="lab-shell">
+    <header class="lab-heading">
+      <div class="lab-brand"><span class="seal" aria-hidden="true">宁</span><div><h1>斗法试炼场</h1><p>宁州一梦 · 独立战斗测试</p></div></div>
+      <p class="lab-isolation">选择流派，直接斗法<span>独立试炼，不写入人物存档</span></p>
+    </header>
+    <section id="lab-config" class="lab-config" aria-label="选择试炼构筑"><p class="loading">正在载入流派…</p></section>
+    <div id="lab-notice" class="lab-notice" role="status" aria-live="polite" hidden></div>
+    <section id="lab-battle" class="lab-battle" aria-label="战斗场地"><p class="loading">正在读取战况…</p></section>
+    <section id="lab-details" class="lab-details" aria-label="构筑与战报"></section>
+  </main>
+  <dialog id="lab-target" aria-labelledby="target-title"></dialog>
+  <script type="module" src="battle-lab.mjs"></script>
+</body>
+</html>

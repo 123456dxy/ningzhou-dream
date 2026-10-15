@@ -23,8 +23,8 @@ template<class Operation> bool invalidText(Operation operation) {
 void runContentRegistryTests() {
     std::printf("\n-- 稳定业务 ID 与展示词表 --\n");
     checkEq(allDaoIds().size(), 12, "十二大道均有稳定 ID");
-    checkEq(allSectIds().size(), 5, "五宗门均有稳定 ID");
-    checkEq(allSpellKinds().size(), 30, "全部三十类神通均有稳定 ID");
+    checkEq(allSectIds().size(), 6, "六宗门均有稳定 ID");
+    checkEq(allSpellKinds().size(), 31, "全部三十一类神通均有稳定 ID");
     checkEq(allBattleKinds().size(), 10, "全部十类斗法均有稳定 ID");
     const DaoId legacyOrder[] = {DaoId::Metal, DaoId::Wood, DaoId::Water, DaoId::Fire,
         DaoId::Earth, DaoId::Mind, DaoId::Body, DaoId::Sword, DaoId::Qi, DaoId::Array,

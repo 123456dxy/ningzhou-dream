@@ -17,7 +17,7 @@ constexpr std::array daos = {
 constexpr std::array sects = {
     Entry{SectId::Jinhong, "jinhong", "jinhong"}, Entry{SectId::Xinghe, "xinghe", "xinghe"},
     Entry{SectId::Zhushan, "zhushan", "zhushan"}, Entry{SectId::Lihuo, "lihuo", "lihuo"},
-    Entry{SectId::Huachen, "huachen", "huachen"}
+    Entry{SectId::Huachen, "huachen", "huachen"}, Entry{SectId::Xuandao, "xuandao", "xuandao"}
 };
 constexpr std::array spells = {
     Entry{SpellKind::Attack, "attack", "attack"}, Entry{SpellKind::Heal, "heal", "heal"},
@@ -35,7 +35,8 @@ constexpr std::array spells = {
     Entry{SpellKind::PoisonBurst, "poison_burst", "poisonBurst"}, Entry{SpellKind::Float, "float", "float"},
     Entry{SpellKind::Human, "human", "human"}, Entry{SpellKind::Soul, "soul", "soul"},
     Entry{SpellKind::SoulBurst, "soul_burst", "soulBurst"}, Entry{SpellKind::Steal, "steal", "steal"},
-    Entry{SpellKind::BodyBurst, "body_burst", "bodyBurst"}
+    Entry{SpellKind::BodyBurst, "body_burst", "bodyBurst"},
+    Entry{SpellKind::FireSiphon, "fire_siphon", "fireSiphon"}
 };
 constexpr std::array battles = {
     Entry{BattleKind::Spar, "spar", "spar"}, Entry{BattleKind::Wild, "wild", "wild"},
@@ -83,7 +84,7 @@ std::span<const DaoId> allDaoIds() { static constexpr auto ids = idsOf(daos); re
 // 用途：提供可识别宗门的强类型集合。
 // 参与流程：宗门内容注册与遍历。
 // 使用方式：无参数，读取静态不可变视图。
-// 返回值：五个 SectId 的 span。
+// 返回值：六个 SectId 的 span，既有顺序保持不变。
 std::span<const SectId> allSectIds() { static constexpr auto ids = idsOf(sects); return ids; }
 // 用途：列出支持的神通结算类型。
 // 参与流程：神通注册校验与类型遍历。
@@ -179,6 +180,7 @@ DaoId sectDao(SectId id) {
     case SectId::Zhushan: return DaoId::Wood;
     case SectId::Lihuo: return DaoId::Fire;
     case SectId::Huachen: return DaoId::Earth;
+    case SectId::Xuandao: return DaoId::Array;
     }
     throw std::invalid_argument("Invalid sect ID");
 }

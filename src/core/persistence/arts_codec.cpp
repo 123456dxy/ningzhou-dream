@@ -44,6 +44,7 @@ Value artsToJson(const Arts& arts) {
     artsObject.set("potions", mapToJson(arts.potions));
     artsObject.set("used", mapToJson(arts.used));
     artsObject.set("poison", num(arts.poison));
+    artsObject.set("greenBottleGrade", num(arts.GreenBottleGrade));
     artsObject.set("furnace", str(arts.furnace));
     artsObject.set("durability", num(arts.durability));
     artsObject.set("materials", mapToJson(arts.materials));
@@ -97,6 +98,7 @@ Value artsToJson(const Arts& arts) {
 }
 
 void artsFromJson(const Value& artsObject, Arts& arts) {
+    arts.GreenBottleGrade = artsObject["greenBottleGrade"].asInt(0);
     arts.focus = artsObject["focus"].asString("气");
     arts.exp = jsonToMap<int>(artsObject["exp"]);
     arts.points = artsObject["points"].asInt();

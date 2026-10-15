@@ -9,6 +9,7 @@
 
 'use strict';
 import { renderPortrait } from './portraits.mjs';
+import { renderNpcTransmission } from './build-transmission.mjs';
 import { filterNearbyFriends, renderFriendFilters, friendBuild } from './friend-filters.mjs';
 // 兼容旧调用；兽潮展示集中到独立模块，避免道友功能与全州事件耦合。
 export { renderTidePanel } from './tide-panel.mjs';
@@ -148,6 +149,7 @@ export function renderFriendList(state, opts = {}) {
     const sel = opts.selected === n.id;
     const rel = n.relation ?? 0;
     const tags = [];
+    if (n.isChampion === true) tags.push('<span class="tag champion">流派高手</span>');
     if (n.isMaster) tags.push('<span class="tag master">师尊</span>');
     if (n.isPartner) tags.push('<span class="tag partner">道侣</span>');
     if (n.isDisciple) tags.push('<span class="tag disciple">弟子</span>');
@@ -232,8 +234,10 @@ export function renderFriendPanel(state, npcId, bag, opts = {}) {
   return `<div class="friend-panel">
     <div class="friend-character">${renderPortrait(npc, 'npc', 'friend-detail-portrait')}<div class="friend-character-copy"><div class="fp-head">
       <h3>${esc(npc.name)}</h3>
+      ${npc.isChampion === true ? '<span class="tag champion">流派高手</span>' : ''}
       <span class="tag">${esc(npc.realmName)}</span>
       <span class="fp-meta">${esc(npc.sectName || '散修')} · ${esc(npc.personality)}</span>
+      <span class="fp-meta">${esc(friendBuild(npc).name)}</span>
     </div>
 
     <div class="fp-bars">
@@ -267,6 +271,7 @@ export function renderFriendPanel(state, npcId, bag, opts = {}) {
     ])}
 
     ${renderNpcLoadout(npc)}
+    ${renderNpcTransmission(npc, state)}
     ${state.job?.type === 'npcLearn' ? `<div class="npc-learning-progress" data-npc-learning-progress><strong>${esc(state.job.name)}</strong>`
       + `<p>尚余 ${state.job.remaining} / ${state.job.total} 天 · 已付学费与交情，中止不返还。</p>`
       + `<div><button class="primary" data-action="npc-learn-resume" ${state.pending || state.battle || state.ended ? 'disabled' : ''}>继续授业</button>`

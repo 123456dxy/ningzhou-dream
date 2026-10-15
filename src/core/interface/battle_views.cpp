@@ -1,6 +1,7 @@
 #include "core/npc_learning.h"
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
+#include "core/combat/fire_growth.h"
 #include "core/arts.h"
 #include "core/artifact.h"
 #include "core/battle.h"
@@ -19,10 +20,11 @@ Value spellPreview(const Player& player, const SpellDef& spell) {
     const Battle opening = battleReferenceState(player);
     Value entry(json::Object{});
     entry.set("valid", Value(preview.valid)); entry.set("reference", Value(true));
+    entry.set("elementalGenerationReady", Value(preview.ElementalGenerationReady));
     entry.set("context", str("按当前" + realmName(player.stage) + "、已装备功法/悟道/法器与开局准备计算；气血上限" +
         std::to_string(opening.max) + "、开局灵力" + std::to_string(opening.mana) +
         "；目标无护盾/减伤，无相生或额外蓄积状态。境界未满足时仅供参考。"));
-    entry.set("damage", num(preview.damage)); entry.set("shield", num(preview.shield));
+    entry.set("damage", num(preview.damage)); entry.set("rawDamage", num(preview.RawDamage)); entry.set("shield", num(preview.shield));
     entry.set("heal", num(preview.heal)); entry.set("healPotential", num(preview.healPotential));
     entry.set("cost", num(preview.cost)); entry.set("energy", num(preview.energy)); entry.set("manaGain", num(preview.manaGain));
     entry.set("qi", num(preview.qi)); entry.set("draw", num(preview.draw)); entry.set("drawNext", num(preview.drawNext));
@@ -79,6 +81,29 @@ Value battle(const Game& game) {
     entry.set("intentDamage", num(intent.damage));
     entry.set("intentShield", num(intent.shield));
     entry.set("intentHeal", num(intent.heal));
+    entry.set("enemyActionCount", num(static_cast<int>(intent.spells.size())));
+    entry.set("enemyActionLimit", num(battle.enemyCards.enabled ? mfBattleEnemyActionLimit(game, battle) :
+        battle.BeastActions.empty() ? 1 : BeastCombat::mfActionLimit(battle.enemyStage)));
+    entry.set("beastActionLimit", num(battle.enemyBeast ? BeastCombat::mfActionLimit(battle.enemyStage) : 0));
+    entry.set("beastEnergyBudget", num(battle.enemyBeast ? BeastCombat::mfEnergyBudget(battle.enemyStage) : 0));
+    {
+        json::Array Actions;
+        for (const auto& Outcome : intent.BeastActions) {
+            const auto& Action = Outcome.Action;
+            Value Item(json::Object{});
+            Item.set("id", str(string(BeastCombat::mfActionId(Action.Kind))));
+            Item.set("name", str(string(BeastCombat::mfActionName(Action.Kind))));
+            Item.set("cost", num(BeastCombat::mfActionCost(Action.Kind)));
+            Item.set("rawDamage", num(Action.RawDamage)); Item.set("damage", num(Outcome.Damage));
+            Item.set("blocked", num(Outcome.Blocked)); Item.set("counterDamage", num(Outcome.CounterDamage));
+            Item.set("shieldGain", num(Action.ShieldGain)); Item.set("healGain", num(Action.HealGain));
+            Item.set("poisonDamage", num(Action.PoisonDamage)); Item.set("burnDamage", num(Action.BurnDamage));
+            Item.set("weakenLayers", num(Action.WeakenLayers)); Item.set("chargeGain", num(Action.ChargeGain));
+            Item.set("piercePercent", num(Action.PiercePercent)); Item.set("executed", Value(Outcome.Executed));
+            Actions.push_back(std::move(Item));
+        }
+        entry.set("beastActions", Value(std::move(Actions)));
+    }
     { json::Array spells; for (const auto& id : intent.spells) { const auto* spell = battleSpell(id); spells.push_back(str(spell ? spell->name : id)); } entry.set("intentSpells", Value(std::move(spells))); }
     entry.set("hp", num(battle.hp));
     entry.set("max", num(battle.max));
@@ -90,7 +115,18 @@ Value battle(const Game& game) {
     entry.set("enemyShield", num(battle.enemyShield));
     entry.set("swordQi", num(battle.swordQi));
     entry.set("turn", num(battle.turn));
-    entry.set("intentName", str(battle.intentName));
+    string CurrentIntentName = battle.intentName;
+    if (battle.enemyCards.enabled) {
+        CurrentIntentName.clear();
+        for (const auto& Id : intent.spells) {
+            if (!CurrentIntentName.empty()) CurrentIntentName += " → ";
+            const auto* Spell = battleSpell(Id);
+            CurrentIntentName += Spell ? Spell->name : Id;
+        }
+        if (CurrentIntentName.empty())
+            CurrentIntentName = battle.shadowOutcome.empty() ? "本轮不行动" : "斗法已结束";
+    }
+    entry.set("intentName", str(CurrentIntentName));
     entry.set("intentRaw", num(battle.intentRaw));
     // 生死斗法要在界面上明确提示，否则玩家会莫名其妙死掉
     entry.set("lethal", Value(battleDefeatEndsLife(battle)));
@@ -148,6 +184,8 @@ Value battle(const Game& game) {
                 cardView.set("reason", str(why));
             }
             cardView.set("damage", num(preview.damage));
+            cardView.set("rawDamage", num(preview.RawDamage));
+            cardView.set("elementalGenerationReady", Value(preview.ElementalGenerationReady));
             cardView.set("shield", num(preview.shield));
             cardView.set("heal", num(preview.heal));
             cardView.set("qi", num(preview.qi));
@@ -168,6 +206,8 @@ Value battle(const Game& game) {
                 battle.played >= 24 ? "本回合施术已达上限。" : "";
             artifact.set("playable", Value(reason.empty())); artifact.set("reason", str(reason)); artifact.set("cooldownRemaining", num(cooldown));
             artifact.set("damage", num(preview.damage)); artifact.set("shield", num(preview.shield)); artifact.set("heal", num(preview.heal));
+            artifact.set("rawDamage", num(preview.RawDamage));
+            artifact.set("elementalGenerationReady", Value(preview.ElementalGenerationReady));
             artifact.set("energy", num(preview.energy)); artifact.set("qi", num(preview.qi)); artifact.set("text", str(preview.text));
             artifacts.push_back(std::move(artifact));
         }
@@ -205,6 +245,11 @@ Value battle(const Game& game) {
     entry.set("hpCostPct", num(battle.hpCostPct));
     entry.set("discardPower", num(battle.discardPower));
     entry.set("swordSequence", num(battle.swordSequence));
+    entry.set("elementalSwordSequence", num(battle.ElementalSwordSequence));
+    entry.set("fireGrowthRounds", num(battle.FireGrowthRounds));
+    entry.set("fireGrowthMaxRounds", num(FireGrowth::MaximumGrowthRounds));
+    entry.set("enemyFireGrowthRounds", num(battle.enemyCards.FireGrowthRounds));
+    entry.set("enemyElementalSwordSequence", num(battle.enemyCards.ElementalSwordSequence));
     entry.set("comboDraws", num(battle.comboDraws));
     entry.set("lastDao", str(battle.last));
     entry.set("manaCap", num(battleManaCap(game.player)));
@@ -244,7 +289,21 @@ Value battle(const Game& game) {
             }
             return Value(std::move(arr));
         };
-        entry.set("removalOptions", pileInfo(active));
+        json::Array RemovalOptions;
+        for (const auto& Card : battle.deck) {
+            if (std::find(battle.exhausted.begin(), battle.exhausted.end(), Card.uid) != battle.exhausted.end()) continue;
+            const bool IsAvailable = std::find(battle.hand.begin(), battle.hand.end(), Card.uid) != battle.hand.end() ||
+                std::find(battle.draw.begin(), battle.draw.end(), Card.uid) != battle.draw.end() ||
+                std::find(battle.discard.begin(), battle.discard.end(), Card.uid) != battle.discard.end();
+            const SpellDef* Definition = battleSpell(Card.spell);
+            if (!IsAvailable || !Definition) continue;
+            Value Option(json::Object{});
+            Option.set("uid", str(Card.uid)); Option.set("id", str(Definition->id));
+            Option.set("name", str(Definition->name)); Option.set("dao", str(Definition->dao));
+            Option.set("copies", num(1));
+            RemovalOptions.push_back(std::move(Option));
+        }
+        entry.set("removalOptions", Value(std::move(RemovalOptions)));
         entry.set("exhaustedSpells", pileInfo(removed));
     }
     return entry;

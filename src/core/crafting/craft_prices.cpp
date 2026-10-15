@@ -1,6 +1,7 @@
 #include "core/crafting/craft_prices.h"
 
 #include "core/arts.h"
+#include "core/content/green_bottle_content.h"
 #include "core/renown.h"
 #include "core/talents.h"
 #include "data/reference_tables.h"
@@ -124,6 +125,7 @@ int mfNormalMaterialBuyPrice(const Game& GameState, MaterialPriceKind Kind, cons
         return mfNormalBuyPrice(GameState, LocalBasePrice);
     }
     case MaterialPriceKind::ForgeMaterial:
+        if (const auto* Special = content::mfFindGreenBottleMaterial(MaterialId)) return mfNormalBuyPrice(GameState, Special->Material.price);
         for (const auto& Material : data::MaterialDef_TABLE())
             if (Material.id == MaterialId) return mfNormalBuyPrice(GameState, Material.price);
         return 0;

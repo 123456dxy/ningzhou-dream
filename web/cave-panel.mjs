@@ -3,7 +3,7 @@ import { esc, heading, panel } from './shell.mjs';
 import { renderQuantitySlider } from './quantity-controls.mjs';
 
 // 用途：安全展示后端数值，不把缺失报价默认为免费。
-// 流程：灵田、储备、成熟时间及训练报价展示。
+// 流程：灵田、品阶、成熟时间及训练报价展示。
 // 调用方式：传后端数值；缺失、非有限值显示占位。
 // 返回值：数值文本；不计算成长、收益或收费规则。
 function numberText(value) {
@@ -12,10 +12,10 @@ function numberText(value) {
   return Number.isFinite(numeric) ? String(numeric) : '—';
 }
 
-// 用途：为数量或储备金额控件保留合法的本地输入。
+// 用途：为种植数量控件保留合法的本地输入。
 // 流程：页面重绘时恢复用户尚未提交的选择。
 // 调用方式：传草稿、后端容量上限及初始值；只限制输入范围。
-// 返回值：正整数输入，不修改行囊、储备或服务器状态。
+// 返回值：正整数输入，不修改行囊或服务器状态。
 function inputCount(value, maximum, initial = 1) {
   const numeric = Number(value);
   const upper = Number(maximum);
@@ -30,7 +30,7 @@ function inputCount(value, maximum, initial = 1) {
 export function cavePlantCountLimit(plot, option) {
   const capacity = Number(plot?.remainingCapacity), owned = Number(option?.ownedCount);
   return Number.isSafeInteger(capacity) && capacity > 0 && Number.isSafeInteger(owned) && owned > 0
-    ? Math.min(99, capacity, owned) : 0;
+    ? Math.min(capacity, owned) : 0;
 }
 
 // 用途：将播种草稿收束到当前可选的整数范围。
@@ -43,7 +43,7 @@ export function cavePlantCount(value, maximum) {
 }
 
 // 用途：统一生成按服务端资格启用的按钮。
-// 流程：返府、迁府、播种、收获、储备、清理与训练展示。
+// 流程：返府、迁府、播种、收获、品阶、清理与训练展示。
 // 调用方式：传动作、标题和权威资格；附加属性只能来自模块内预先转义的字符串。
 // 返回值：HTML按钮；未明确enabled=true时一律禁用，不执行动作。
 function actionButton(action, label, qualification, attributes = '', className = '') {
@@ -94,14 +94,14 @@ function renderCohorts(plot) {
       const required = Number(plot.requiredUnits), progress = Number(cohort.progressUnits);
       const percentage = required > 0 && Number.isFinite(progress)
         ? `${Math.max(0, Math.min(100, Math.round(progress / required * 100)))}%` : '—';
-      return `<li>${numberText(cohort.count)} 份 · ${cohort.ready === true ? '已成熟' : `成长 ${percentage}`}</li>`;
+      return `<li>${numberText(cohort.count)} 份 · ${cohort.ready === true ? '已成熟' : `成长 ${percentage} · 预计 ${numberText(cohort.estimatedDays)} 天`}</li>`;
     }).join('') + '</ul></details>';
 }
 
-// 用途：展示成熟时间、自动加速方案和储备收费状态。
+// 用途：展示永久成长速度和成熟时间。
 // 流程：已种植灵田格的只读成长信息。
-// 调用方式：传后端plot快照；费用和天数直接读取，不用客户端成长公式。
-// 返回值：成长HTML，人在外面仍可查看自动生长与收费。
+// 调用方式：传后端plot快照；速度和天数直接读取，不用客户端成长公式。
+// 返回值：成长HTML，外出仍按同样日增生长，没有每日扣费。
 function renderGrowth(plot, garden) {
   if (!(Number(plot.seedCount) > 0)) return '';
   const hasGrowing = Number(plot.growingCount) > 0;
@@ -109,33 +109,12 @@ function renderGrowth(plot, garden) {
   return `<div class="cave-growth-line"><span>生长中 <strong>${numberText(plot.growingCount)} 份</strong></span>`
     + `<span>成熟种苗 <strong>${numberText(plot.readyCount)} 份</strong></span></div>`
     + `<p>成熟可收 ${numberText(plot.harvest?.harvestCount)} 份${plot.harvest?.reason ? ` · ${esc(plot.harvest.reason)}` : ''}</p>`
-    + (hasGrowing ? `<p>${garden.hasGreenBottle === true ? '按当前储备' : '按当前成长'}预计全部成熟约 <strong>${numberText(plot.estimatedEffectiveDays)} 天</strong>`
-      + (garden.hasGreenBottle === true ? ` · ${plot.accelerationFunded === true ? '储备充足 · 自动加速' : '自然生长'}` : '') + `</p>`
-      + (garden.hasGreenBottle === true ? `<details class="cave-batch-details"><summary>不同配给下的成熟时间</summary><ul>`
-      + `<li>自然生长 ${numberText(plot.estimatedNaturalDays)} 天</li>`
-      + `<li>灵气方案 ${numberText(plot.estimatedSpiritDays)} 天 · ${numberText(plot.spiritDailyCostStones)} 灵石 / 天</li>`
-      + (garden.hasGreenBottle === true ? `<li>小绿瓶方案 ${numberText(plot.estimatedBottleDays)} 天 · ${numberText(plot.bottleDailyCostStones)} 灵石 / 天</li>` : '')
-      + `<li>全部加速 ${numberText(plot.estimatedFullyAcceleratedDays)} 天 · ${numberText(plot.dailyCostStones)} 灵石 / 天</li></ul></details>` : '') : '')
+    + `<p class="cave-growth-rate">每日成长 <strong>${numberText(plot.effectiveUnitsPerDay)}</strong> = 洞府自然 ${numberText(plot.naturalUnitsPerDay)}`
+      + (garden.hasGreenBottle === true ? ` + 绿瓶阶位 ${numberText(plot.bottleBonusUnitsPerDay)}` : '') + '</p>'
+    + (hasGrowing ? `<p>预计全部成熟约 <strong>${numberText(plot.estimatedEffectiveDays)} 天</strong></p>` : '')
     + `<div class="cave-plot-actions">${actionButton('cave-garden-harvest', ready ? '收获成熟药材' : '尚不可收获',
       plot.harvest, `data-plot-id="${esc(plot.plotId)}"`, ready ? 'primary' : '')}</div>`
     + renderCohorts(plot);
-}
-
-// 用途：展示每格独立储备的金额输入与存取资格。
-// 流程：自动加速付费储备管理。
-// 调用方式：传plot快照及本地未提交金额，不隐式从背包扣款。
-// 返回值：存取控件HTML；真正转账由根应用动作与后端校验。
-function renderReserve(plot, amount, garden) {
-  if (garden.hasGreenBottle !== true) return '';
-  const plotAttribute = `data-plot-id="${esc(plot.plotId)}"`;
-  return `<div class="cave-reserve"><div class="cave-reserve-head">`
-    + `<strong>本格储备 ${numberText(plot.reserveStones)} 灵石</strong><span>自动加速 ${numberText(plot.dailyCostStones)} 灵石 / 天</span></div>`
-    + `<div class="cave-reserve-controls"><label>存取金额<input type="number" min="1" step="1" value="${inputCount(amount)}"`
-    + ` data-cave-reserve-amount ${plotAttribute} inputmode="numeric" aria-label="本格储备存取灵石金额"></label>`
-    + actionButton('cave-garden-deposit', '存入', plot.deposit, plotAttribute)
-    + actionButton('cave-garden-withdraw', '取出', plot.withdraw, plotAttribute)
-    + `</div><p>储备足够时按日自动加速；外出后也继续生长。${plot.deposit?.reason ? ` ${esc(plot.deposit.reason)}` : ''}`
-    + `${plot.withdraw?.reason ? ` ${esc(plot.withdraw.reason)}` : ''}</p></div>`;
 }
 
 // 用途：约束本地灵田筛选项，不把非法缓存值传播到控件。
@@ -209,10 +188,10 @@ function renderPlantControls(plot, garden, choices, matchingOptions) {
     + `${qualification.reason ? ` · ${esc(qualification.reason)}` : ''}</p>`;
 }
 
-// 用途：拼接一个灵田格的材料、独立批次、收获和储备信息。
+// 用途：拼接一个灵田格的材料、独立批次与收获信息。
 // 流程：洞府灵田主面板。
 // 调用方式：传后端plot、garden及本地输入，不写调用方数组或对象。
-// 返回值：灵田卡HTML；清理动作由根入口确认，保留储备语义清晰可见。
+// 返回值：灵田卡HTML；清理动作由根入口确认种苗损失。
 function renderPlot(plot, garden, choices, matchingOptions) {
   const planted = Number(plot.seedCount) > 0;
   const ready = Number(plot.readyCount) > 0;
@@ -221,9 +200,8 @@ function renderPlot(plot, garden, choices, matchingOptions) {
     + `<span class="tag">${planted ? `${numberText(plot.grade)} 阶 · 已种 ${numberText(plot.seedCount)} / ${numberText(garden.plantsPerPlotLimit)}` : `可容纳 ${numberText(garden.plantsPerPlotLimit)} 份`}</span></div>`
     + renderPlantControls(plot, garden, choices, matchingOptions)
     + renderGrowth(plot, garden)
-    + renderReserve(plot, choices.reserveAmount, garden)
     + (planted ? `<div class="cave-plot-actions">${actionButton('cave-garden-clear', '清除种苗', plot.clear,
-      `data-plot-id="${esc(plot.plotId)}"`, 'subtle')}<span class="cave-action-cost">${garden.hasGreenBottle === true ? '放弃本格全部种苗，储备保留。' : '放弃本格全部种苗。'}</span></div>` : '')
+      `data-plot-id="${esc(plot.plotId)}"`, 'subtle')}<span class="cave-action-cost">放弃本格全部种苗。</span></div>` : '')
     + '</article>';
 }
 
@@ -241,7 +219,7 @@ function renderGarden(state, plantSelections, plantFilters) {
   return panel('灵田', `${numberText(garden.plotCountUnlocked)} 格已解锁`, `<div class="cave-section-body">`
     + `<div class="cave-garden-summary"><span>每格最多<strong>${numberText(garden.plantsPerPlotLimit)} 份种苗</strong></span>`
     + `<span>每份成熟产出<strong>${numberText(garden.harvestMultiplier)} 份药材</strong></span>`
-    + `<span>小绿瓶<strong>${garden.hasGreenBottle === true ? '已持有' : '未持有'}</strong></span></div>`
+    + '</div>'
     + `<p class="cave-section-intro">同一格只种同种药材；追加播种形成独立批次，不继承已有成熟进度。</p>`
     + (garden.accessReason ? `<p class="cave-access-note">${esc(garden.accessReason)}</p>` : '')
     + renderPlantFilters(catalog, filters, matchingOptions.length)
@@ -250,6 +228,35 @@ function renderGarden(state, plantSelections, plantFilters) {
     + `<p class="cave-training-note">${esc(garden.growthCostRule || '')}</p>`
     + `<button class="subtle" data-action="goto-tab" data-tab="chronicle">前往岁月纪事安排时间 →</button>`
     + '</div>');
+}
+
+// 用途：展示小绿瓶永久阶位、一次性投入与专属灵材秘境。
+// 流程：洞府有天赋时展示；传后端报价，不在客户端计算费用、资格、成长或周期。
+// 返回值：完整面板HTML；无天赋为空，实际升阶/开境由根动作提交expectedGrade。
+function renderGreenBottle(state) {
+  const bottle = state.cave?.greenBottle;
+  if (bottle?.hasTalent !== true) return '';
+  const upgrade = bottle.upgrade || {};
+  const materials = (upgrade.materials || []).map(material => `<li>${esc(material.name)}：需要 ${numberText(material.required)} 份 · 已有 ${numberText(material.owned)} 份${material.missing > 0 ? ` · 缺 ${numberText(material.missing)} 份` : ''}</li>`).join('');
+  const periods = (upgrade.maturityDaysBefore || []).map(before => {
+    const after = (upgrade.maturityDaysAfter || []).find(entry => entry.grade === before.grade);
+    return `<li>${numberText(before.grade)}品：${numberText(before.days)} 天 → ${numberText(after?.days)} 天</li>`;
+  }).join('');
+  const gradeAttribute = `data-bottle-grade="${esc(bottle.currentGrade)}"`;
+  return panel('小绿瓶', `${numberText(bottle.currentGrade)} / 6 阶`, `<div class="cave-section-body" data-green-bottle-panel>`
+    + `<p>当前瓶阶永久日增 <strong>+${numberText(bottle.currentDailyBonus)}</strong> · 灵田合计日增 <strong>${numberText(bottle.currentUnitsPerDay)}</strong></p>`
+    + (bottle.currentGrade < 6 && bottle.nextGrade != null ? `<p>升至 ${numberText(bottle.nextGrade)} 阶：瓶阶日增 +${numberText(bottle.nextDailyBonus)}，灵田合计日增 ${numberText(bottle.nextUnitsPerDay)}。</p>`
+      + `<p>一次性投入 ${numberText(upgrade.stoneCost)} 灵石 · 当前持有 ${numberText(upgrade.ownedStones)} 灵石</p>`
+      + (materials ? `<ul>${materials}</ul>` : '')
+      + `<details class="cave-batch-details"><summary>升阶前后成熟周期</summary><ul>${periods}</ul><small>以当前洞府、空进度一批种苗为参照；已有种苗按剩余成长另算。</small></details>` : '<p>灵性已恢复至六阶，持续提供永久成长。</p>')
+    + actionButton('green-bottle-upgrade', '投入大量灵石，为小绿瓶恢复些许灵性', upgrade, gradeAttribute, 'primary')
+    + (upgrade.reason ? `<p class="cave-access-note">${esc(upgrade.reason)}</p>` : '')
+    + `<details class="cave-batch-details" data-green-bottle-dungeons><summary>寻找升阶灵材</summary>`
+    + (bottle.dungeons || []).map(dungeon => `<div class="cave-bottle-dungeon"><div><strong>${esc(dungeon.name)}</strong>`
+      + `<p>通关获得 ${esc(dungeon.materialName)} ×${numberText(dungeon.rewardCount)}</p>`
+      + (dungeon.reason ? `<small>${esc(dungeon.reason)}</small>` : '') + '</div>'
+      + actionButton('green-bottle-dungeon', '进入秘境', dungeon, `${gradeAttribute} data-material-grade="${esc(dungeon.grade)}"`) + '</div>').join('')
+    + '</details></div>');
 }
 
 // 用途：把现有演武切磋以洞府训练场形式展示。
@@ -275,10 +282,9 @@ function renderTraining(state) {
 // 返回值：整页HTML；没有进入/离开旗标、单次加速或炼丹炼器入口，不产生网络请求。
 export function renderCavePage(state, { supplyHtml = '', plantSelections = {}, plantFilters = {} } = {}) {
   return `<div class="cave-page">`
-    + heading('洞府', state.cave?.garden?.hasGreenBottle === true
-      ? '安置修行居所，管理灵田、储备、配给与训练。' : '安置修行居所，管理灵田、配给与训练。', state.cave?.access?.atHome ? '在府' : '只读查看')
+    + heading('洞府', '安置修行居所，管理灵田、闭关配给与训练。', state.cave?.access?.atHome ? '在府' : '只读查看')
     + renderResidence(state)
-    + `<div class="cave-main-column">${renderGarden(state, plantSelections, plantFilters)}${renderTraining(state)}</div>`
+    + `<div class="cave-main-column">${renderGreenBottle(state)}${renderGarden(state, plantSelections, plantFilters)}${renderTraining(state)}</div>`
     + (supplyHtml ? `<div class="cave-supply-section">${supplyHtml}</div>` : '')
     + '</div>';
 }

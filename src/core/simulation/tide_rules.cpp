@@ -37,15 +37,20 @@ int payablePercent(int rank, bool participated) {
 }
 // 用途：按总分配置有限库存；流程：期末生成；用法：传总分和品阶；返回：有上限的每项库存。
 int stockPerItem(int totalScore, int grade) {
-    if (grade < MinimumStockGrade || grade > MaximumStockGrade) return 0;
-    const int ScoreSteps = std::max(0, totalScore) / PointsPerStock;
-    const int PreviousTierSteps = (grade - MinimumStockGrade) * (StockTierUnlockCount - 1);
-    return clampInt(ScoreSteps - PreviousTierSteps, 0, MaximumStock);
+    const int UnlockScore = mfStockUnlockScore(grade);
+    const int IncrementScore = mfStockIncrementScore(grade);
+    if (UnlockScore == 0 || IncrementScore == 0 || totalScore < UnlockScore) return 0;
+    return clampInt(1 + (totalScore - UnlockScore) / IncrementScore, 0, MaximumStock);
 }
 // 用途：给出阶梯库存的有效品阶门槛；参与报价拒绝与界面说明，返回全州积分要求，无副作用。
 int mfStockUnlockScore(int Grade) {
-    if (Grade < MinimumStockGrade || Grade > MaximumStockGrade) return 0;
-    return ((Grade - MinimumStockGrade) * (StockTierUnlockCount - 1) + 1) * PointsPerStock;
+    for (const auto& Rule : StockGradeRules) if (Rule.Grade == Grade) return Rule.UnlockScore;
+    return 0;
+}
+// 用途：读取高阶供给的独立增量门槛；流程：期末库存和只读说明；传合法品阶，返回每份积分或零，无副作用。
+int mfStockIncrementScore(int Grade) {
+    for (const auto& Rule : StockGradeRules) if (Rule.Grade == Grade) return Rule.PointsPerAdditionalItem;
+    return 0;
 }
 // 用途：用整数计算不少于正常价一半的价格；流程：报价和成交；用法：传正常价与比例；返回：安全单价。
 int discountedPrice(int normalPrice, int percent) {

@@ -68,7 +68,7 @@ void mfRunPotionBulkSalesTests() {
         const auto Result = shop::mfSellPotions(State, PotionId, Quote.Count, Quote.UnitPrice);
         check(Result.ok && Result.gain == Quote.TotalGain, "售尽按报价一次成功结算");
         checkEq(State.player.arts.potions.at(PotionId), 0, "一次扣除售尽丹药数量");
-        checkEq(State.economy.sold.at("potion:" + std::string(PotionId)), Quote.Count, "月需求计数按实际数量增加");
+        check(State.economy.sold.empty(), "取消月需求后成交不再新增销量限制账");
         checkEq(State.economy.marketCash, MarketCash - Quote.TotalGain, "坊市收购资金扣除实际总售值");
         checkEq(State.player.stones, 100 + Quote.TotalGain, "背包余额增加实际总售值");
         checkEq(State.player.arts.progress.wealth, State.player.stones, "财富成就按新的历史最高余额更新");
@@ -81,10 +81,10 @@ void mfRunPotionBulkSalesTests() {
         Game State = mfPotionSaleState();
         State.player.arts.potions[PotionId] = 20;
         const auto Quote = shop::mfQuoteMaxPotionSale(State, PotionId);
-        checkEq(Quote.Count, 8, "默认当月单种丹药需求限制为八枚");
-        check(shop::mfSellPotions(State, PotionId, Quote.Count).ok, "月需求内八枚可一次出售");
-        checkEq(State.player.arts.potions.at(PotionId), 12, "超月需求持有量保留剩余十二枚");
-        mfCheckSaleRejected(State, PotionId, 1, "月需求用尽后的出售");
+        checkEq(Quote.Count, 20, "持有20枚且资金充足可全部出售");
+        check(shop::mfSellPotions(State, PotionId, Quote.Count).ok, "取消八枚限制后20枚可一次出售");
+        checkEq(State.player.arts.potions.at(PotionId), 0, "真实售尽20枚");
+        mfCheckSaleRejected(State, PotionId, 1, "售尽后库存不足的出售");
     }
     {
         Game State = mfPotionSaleState();
@@ -99,10 +99,9 @@ void mfRunPotionBulkSalesTests() {
     {
         Game State = mfPotionSaleState();
         State.economy.sold["potion:" + std::string(PotionId)] = 6;
-        checkEq(shop::mfQuoteMaxPotionSale(State, PotionId).Count, 2, "已有六枚月销量仅允许两枚");
-        mfCheckSaleRejected(State, PotionId, 3, "超出剩余月需求");
-        check(shop::mfSellPotions(State, PotionId, 2).ok, "月需求剩余两枚结算成功");
-        checkEq(State.economy.sold.at("potion:" + std::string(PotionId)), 8, "需求账累计准确");
+        checkEq(shop::mfQuoteMaxPotionSale(State, PotionId).Count, 5, "旧月销量不限制现有五枚丹药");
+        check(shop::mfSellPotions(State, PotionId, 3).ok, "原剩余需求两枚不再阻止出售三枚");
+        checkEq(State.economy.sold.at("potion:" + std::string(PotionId)), 6, "旧停用需求账保留但不再累计");
     }
     {
         Game State = mfPotionSaleState();
@@ -142,7 +141,7 @@ void mfRunPotionBulkSalesTests() {
         checkEq(State.player.arts.progress.wealth, 100000, "出售不降低已记录财富最高值");
     }
     for (const std::string Scenario : {"outside", "ended", "event", "battle", "job", "dungeon", "empty", "zero-cash",
-                                       "negative-stones", "negative-cash", "negative-owned", "negative-sold", "event-overflow",
+                                       "negative-stones", "negative-cash", "negative-owned", "event-overflow",
                                        "stones-save-overflow", "cash-save-overflow"}) {
         Game State = mfPotionSaleState();
         if (Scenario == "outside") State.player.location = "yishan";
@@ -156,7 +155,6 @@ void mfRunPotionBulkSalesTests() {
         if (Scenario == "negative-stones") State.player.stones = -1;
         if (Scenario == "negative-cash") State.economy.marketCash = -1;
         if (Scenario == "negative-owned") State.player.arts.potions[PotionId] = -1;
-        if (Scenario == "negative-sold") State.economy.sold["potion:" + std::string(PotionId)] = -1;
         if (Scenario == "event-overflow") State.eventSeq = StateLimits::MaxPersistedInteger;
         if (Scenario == "stones-save-overflow") State.player.stones = StateLimits::MaxPersistedInteger + 1;
         if (Scenario == "cash-save-overflow") State.economy.marketCash = StateLimits::MaxPersistedInteger + 1;

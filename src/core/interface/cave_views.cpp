@@ -3,6 +3,7 @@
 #include "core/interface/view_policy.h"
 #include "core/interface/routes.h"
 #include "core/crafting/cave_garden.h"
+#include "core/interface/green_bottle_api.h"
 #include "core/economy.h"
 #include "core/shop.h"
 #include "core/travel.h"
@@ -15,7 +16,7 @@ json::Value mfGardenQuoteView(const crafting::GardenActionQuote& Quote) {
     json::Value Result(json::Object{});
     Result.set("enabled", Quote.Enabled); Result.set("reason", Quote.Reason);
     Result.set("seedCount", Quote.SeedCount); Result.set("harvestCount", Quote.HarvestCount);
-    Result.set("transferStones", Quote.TransferStones); Result.set("discardCount", Quote.DiscardCount);
+    Result.set("discardCount", Quote.DiscardCount);
     return Result;
 }
 // 用途：编码灵田可复制快照；流程：洞府页的分批成长、种植和储备展示；返回：完整JSON；资格复用真实命令的纯报价，不推进世界日。
@@ -41,17 +42,12 @@ json::Value mfGardenView(const Game& State) {
         Item.set("plotId", Plot.PlotId); Item.set("herbId", Plot.HerbId); Item.set("name", Plot.Name);
         Item.set("grade", Plot.Grade); Item.set("seedCount", Plot.SeedCount);
         Item.set("growingCount", Plot.GrowingCount); Item.set("readyCount", Plot.ReadyCount);
-        Item.set("reserveStones", Plot.ReserveStones); Item.set("requiredUnits", Plot.RequiredUnits);
+        Item.set("requiredUnits", Plot.RequiredUnits);
         Item.set("naturalUnitsPerDay", Plot.NaturalUnitsPerDay);
-        Item.set("spiritUnitsPerDay", Plot.SpiritUnitsPerDay); Item.set("bottleUnitsPerDay", Plot.BottleUnitsPerDay);
-        Item.set("fullyAcceleratedUnitsPerDay", Plot.FullyAcceleratedUnitsPerDay);
+        Item.set("bottleBonusUnitsPerDay", Plot.BottleBonusUnitsPerDay);
         Item.set("effectiveUnitsPerDay", Plot.EffectiveUnitsPerDay);
-        Item.set("spiritDailyCostStones", Plot.SpiritDailyCostStones);
-        Item.set("bottleDailyCostStones", Plot.BottleDailyCostStones); Item.set("dailyCostStones", Plot.DailyCostStones);
         Item.set("estimatedNaturalDays", Plot.EstimatedNaturalDays);
-        Item.set("estimatedSpiritDays", Plot.EstimatedSpiritDays); Item.set("estimatedBottleDays", Plot.EstimatedBottleDays);
-        Item.set("estimatedFullyAcceleratedDays", Plot.EstimatedFullyAcceleratedDays);
-        Item.set("estimatedEffectiveDays", Plot.EstimatedEffectiveDays); Item.set("accelerationFunded", Plot.AccelerationFunded);
+        Item.set("estimatedEffectiveDays", Plot.EstimatedEffectiveDays);
         Item.set("remainingCapacity", std::max(0, Info.PlantsPerPlotLimit - Plot.SeedCount));
         crafting::GardenActionQuote PlantQuote;
         PlantQuote.Reason = Info.AccessReason.empty() ? "没有可种植的药材，或本格已满。" : Info.AccessReason;
@@ -62,13 +58,12 @@ json::Value mfGardenView(const Game& State) {
             if (Option.OwnedCount > 0) PlantQuote = Candidate;
         }
         Item.set("plantEnabled", PlantQuote.Enabled); Item.set("plantReason", PlantQuote.Reason);
-        Item.set("deposit", mfGardenQuoteView(crafting::mfQuoteGardenReserve(State, Plot.PlotId, 1, true)));
-        Item.set("withdraw", mfGardenQuoteView(crafting::mfQuoteGardenReserve(State, Plot.PlotId, 1, false)));
         Item.set("harvest", mfGardenQuoteView(Plot.Harvest)); Item.set("clear", mfGardenQuoteView(Plot.Clear));
         json::Array Cohorts;
         for (const auto& Cohort : Plot.Cohorts) {
             json::Value Row(json::Object{}); Row.set("count", Cohort.Count);
             Row.set("progressUnits", Cohort.ProgressUnits); Row.set("ready", Cohort.Ready);
+            Row.set("estimatedDays", Cohort.EstimatedDays);
             Cohorts.push_back(std::move(Row));
         }
         Item.set("cohorts", std::move(Cohorts)); Plots.push_back(std::move(Item));
@@ -115,5 +110,6 @@ void mfAppendCaveDetails(const Game& State, json::Value& Cave) {
     Arena.set("enabled", Training.valid && TrainingError.empty()); Arena.set("reason", TrainingError);
     Cave.set("training", json::Array{std::move(Arena)});
     Cave.set("garden", mfGardenView(State));
+    Cave.set("greenBottle", mfGreenBottleView(State));
 }
 } // namespace nz::api::view

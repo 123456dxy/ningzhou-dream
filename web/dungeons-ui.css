@@ -1,0 +1,72 @@
+/* 秘境的入口报价与路线对照。只补信息层级，不改变路线坐标及战斗规则。 */
+.dungeon-sweep-note,
+.dungeon-route-summary {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.75;
+}
+.dungeon-sweep-note { margin: 0 0 18px; }
+.dungeon-site .dungeon-reward-hint,
+.dungeon-run-heading .dungeon-reward-hint { color: var(--green); font-size: 11px; line-height: 1.7; }
+.dungeon-site .dungeon-boss-preview { margin: 12px 0; }
+.dungeon-site .dungeon-boss-preview summary,
+.location-dungeons .dungeon-boss-preview summary { cursor: pointer; }
+.dungeon-site .dungeon-boss-preview p { margin: 4px 0; }
+.dungeon-sweep-reason {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.dungeon-entrance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 220px;
+}
+.location-dungeons .location-service > .dungeon-entrance-actions { flex: 0 1 220px; }
+.dungeon-entrance-actions .dungeon-sweep-reason { flex-basis: 100%; }
+.dungeon-site-actions .dungeon-sweep,
+.dungeon-entrance-actions .dungeon-sweep {
+  color: var(--green);
+  border-color: var(--green);
+}
+.dungeon-route-summary { margin: 12px 18px 0; }
+.dungeon-route-options { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.dungeon-route-options h4 { margin: 0 0 10px; color: var(--green); font-size: 13px; }
+.dungeon-route-options > div { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr)); gap: 10px; }
+.dungeon-route-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.dungeon-route-option.elite { border-color: var(--gold); }
+.dungeon-option-kind,
+.dungeon-route-option > small { color: var(--muted); font-size: 11px; }
+.dungeon-route-option h5 { margin: 7px 0 4px; color: var(--ink); font: 18px var(--serif); }
+.dungeon-route-option p { margin: 7px 0; color: var(--ink); font-size: 12px; line-height: 1.7; }
+.dungeon-route-option .dungeon-option-next { color: var(--muted); font-size: 11px; }
+.dungeon-elite-warning { margin: 3px 0; color: var(--gold); font-size: 11px; font-weight: 500; }
+.dungeon-route-option button { margin-top: auto; padding-top: 8px; padding-bottom: 8px; font-size: 12px; }
+.dungeon-current-preview { margin: 12px 0; padding: 12px 16px; border-left: 3px solid var(--gold); background: var(--surface); }
+.dungeon-current-preview strong { color: var(--green); font-size: 14px; }
+.dungeon-current-preview p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
+
+@media (max-width: 1100px) {
+  .dungeon-run .dungeon-run-layout { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 850px) {
+  .dungeon-route-options { padding: 12px; }
+  .dungeon-route-summary { margin: 12px 12px 0; }
+  .location-dungeons .location-service { flex-wrap: wrap; }
+  .dungeon-entrance-actions { max-width: none; }
+  .location-dungeons .location-service > .dungeon-entrance-actions { flex-basis: 100%; }
+}

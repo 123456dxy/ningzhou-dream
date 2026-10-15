@@ -14,9 +14,9 @@ function renderMarketAvailability(market, isGear) {
   const unit = isGear ? '件' : '枚';
   return `<div class="craft-sale-availability" data-craft-sale-availability>`
     + `<p class="panel-note">收购地点：${cities || '渠道待报价'}${market.inCity ? '（当前在城中）' : '；请携成品前往城中'}</p>`
-    + `<p class="panel-note">本月剩余收购资金 ${quoteNumber(market.remainingCash)} 灵石 · 当前可收 ${quoteNumber(market.affordableCount)} ${unit}</p>`
+    + `<p class="panel-note">本期剩余收购资金 ${quoteNumber(market.remainingCash)} 灵石 · 当前可收 ${quoteNumber(market.affordableCount)} ${unit}</p>`
     + (market.reason ? `<p class="panel-note">${esc(market.reason)}</p>` : '')
-    + `<details class="craft-sale-budget"><summary>查看下月收购额度</summary><p class="panel-note">按当前境界、声望与行情预计下月 ${quoteNumber(market.nextMonthBudget)} 灵石；只在进入新月时刷新，已用资金不会因切页、读档或晋阶重置。</p></details>`
+    + `<details class="craft-sale-budget"><summary>查看三年收购账期</summary><p class="panel-note">距刷新 ${quoteNumber(market.daysUntilRefresh)} 天；下一期按当前条件预计 ${quoteNumber(market.nextCycleBudget ?? market.nextMonthBudget)} 灵石。每三年刷新，取消每月出售件数限制；本期已用资金不会因切页、读档、换城或晋阶重置。</p></details>`
     + `</div>`;
 }
 
@@ -50,6 +50,6 @@ export function renderCraftPricing(pricing, { kind = 'potion', compact = false }
     + `<div class="craft-cost">基础出售价 ${quoteNumber(pricing.baseSellPrice)} 灵石（材料市价 1.5 倍）<br>`
     + `基准购入价 ${quoteNumber(pricing.buyPrice)} 灵石（材料市价 3 倍）</div>`
     + bonusText + `<div class="craft-cost">最终出售价 ${quoteNumber(pricing.sellPrice)} 灵石</div>`
-    + estimatedText + '<p class="panel-note">使用完整配方材料价值，已有库存不抵扣；不含炼制费用，不重复叠加行情。出售仍需满足当地资金与需求限制。</p>'
+    + estimatedText + '<p class="panel-note">使用完整配方材料价值，已有库存不抵扣；不含炼制费用，不重复叠加行情。出售仍受当地收购资金限制。</p>'
     + `</div></details>`;
 }

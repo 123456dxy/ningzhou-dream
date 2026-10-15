@@ -12,7 +12,8 @@
 | `shop.cpp` | 交易报价、出售、换书、法器处理、丹炉、洞府 | `shop.h` |
 | `source_limits.cpp` | 普通草药/材料品阶限制与错误信息 | `source_limits.h` |
 | `craft_timing.cpp` | 逐品阶时长、丹术/器道与生活减时；`ecoCraftDays` 为既有接口的薄适配 | `crafting/craft_timing.h` |
-| `cave_garden.cpp` | 同格批次种植、储备自动催熟、后台生长与纯报价 | `crafting/cave_garden.h` |
+| `cave_garden.cpp` / `garden_rules.h` | 12苗独立批次、后台永久成长、旧资产待返与纯报价；阈值/日增唯一配置 | `crafting/cave_garden.h` |
+| `green_bottle.cpp` | 永久0至6阶报价、原子升级、洞府专属秘境入口；不处理存档或HTTP | `crafting/green_bottle.h` |
 | `herb_acquisition.cpp` | 以真实丹方最早用途推导药材取得阶段，草药分类与采集池 | `crafting/herb_acquisition.h` |
 
 公共头仍位于 core 根。任务路径主要为 `ecoActionInfo` / `ecoActionError` → `ecoBegin` → `ecoComplete`；即时路径主要为 `shop::saleQuote` / `gearActionQuote` → `sell` / `salvage` / `inscribe`。`ordinaryHerbGradeLimit` 与 `ordinaryMaterialGradeLimit` 为跨模块来源限制提供统一计算。
@@ -29,16 +30,15 @@
 - 失败动作不得先扣材料、灵石或取消任务；批量制作要检查数量、库存和数值边界。
 - 物品 ID、来源键和任务类型属于稳定数据契约，改显示文字不应改这些键。
 - 变动跨越在途 `Job`、装备或配给字段时，应同步 persistence 的结构与状态校验。
-- 制作时长只在 `craft_timing.cpp` 定义，开工冻结到 Job；存读档不重算。药材本地交易使用HerbDef.price，不混用sourcePrice；基础成品售/买仍为材料1.5/3倍。坊市月预算底座保障artTier可炼丹药和同阶标准法器，先乘基础3倍再乘境界1/2/4/8/16，查询和同月晋阶不补充资金，详见 [制作时长与预算](../../../docs/CRAFT_TIMING.md)。
+- 制作时长只在 `craft_timing.cpp` 定义，开工冻结到 Job；存读档不重算。药材本地交易使用HerbDef.price，不混用sourcePrice；基础成品售/买仍为材料1.5/3倍。坊市三年预算由原月预算乘50，保留基础3倍、境界1/2/4/8/16及整枚高价丹保护；1080日真实边界刷新，查询、换月和晋阶不补款，取消月售出件数限制，详见 [制作时长与预算](../../../docs/CRAFT_TIMING.md)。
 
 ## 已有测试
 
 `potion_sales.cpp` 提供 `mfQuoteMaxPotionSale` / `mfSellPotions`：每种丹药一键出售的数量由真实拥有量、需求余量、收购资金和灵石余额容量共同限制。报价使用本次只读响应的 `MarketSaleContext`，实际动作重新核算，不接收前端伪造的上下文。成功仅产生一条批量纪事，拒绝不部分扣丹或增加需求计数；旧 `sell` 单件接口保留。定向验收见 `tests/test_potion_bulk_sales.cpp` 和 `test_trade_quick_actions_api.cpp`。
 
 `tests/test_craft.cpp`、`test_equipment_task.cpp`、`test_material_sources.cpp`、`test_passive_life_travel.cpp`、`test_numeric_previews.cpp`；API 与收益另见 `test_api.cpp`、`test_renown_artifact_api.cpp`、`test_event_rewards.cpp`。测试统一编入 `ningzhou_tests`；此处仅列出已有覆盖入口。
-新增时长与月预算回归见 `tests/test_craft_timing.cpp`，包含真实核心 API、旧工作合同和同月余额保持。
-洞府灵田规则见 [灵田说明](../../../docs/CAVE_GARDEN.md)，定向批次/储备/日历回归为 `tests/test_cave_garden.cpp`。
-灵田真实日结算只计算下一日成长与费用，成熟时间预报仅在纯视图中隔离执行；两者共用单日报价值。性能定位与等价验证见 [时间流程性能记录](../../../docs/reviews/2026-10-13-time-performance.md)。
+新增时长与账期预算回归见 `tests/test_craft_timing.cpp`，包含真实核心 API、旧工作合同和同月余额保持。
+洞府灵田版本2规则见 [灵田说明](../../../docs/CAVE_GARDEN.md) 和 [永久小绿瓶](../../../docs/GREEN_BOTTLE_V2.md)。自然日增20/40/60，加永久瓶阶0/45/85/150/250/420/700；不再读灵气配给、存取储备或收每日费。成熟预报按共享阈值直接向上取整，不逐日模拟。`tests/test_cave_garden.cpp` / `test_green_bottle.cpp` / `test_cave_api.cpp`覆盖本轮批次、周期、升级/专属秘境、持久化及HTTP边界。历史[时间流程性能记录](../../../docs/reviews/2026-10-13-time-performance.md)仅代表当时检查，不能视为本轮结果。
 丹方用途、稳定生境与丹炉资格闭环见 [药材取得说明](../../../docs/HERB_ACQUISITION.md)，全目录及真实动作回归为 `tests/test_herb_acquisition.cpp`。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。

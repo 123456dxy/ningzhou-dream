@@ -99,7 +99,7 @@ void runSectTrialTests() {
         checkEq(g.clock.days, 3, def.sect + "入门试炼真实消耗三天日历");
         check(sectTrialStateError(g).empty(), def.sect + "试炼结算后没有残留活跃报名");
     }
-    checkEq(trialNames.size(), 5, "五宗拥有五种独立特色考核");
+    checkEq(trialNames.size(), 6, "六宗拥有六种独立特色考核");
     {
         Game g = trialGame(); sectTrialBegin(g, "jinhong");
         if (!g.player.arts.battle) return;

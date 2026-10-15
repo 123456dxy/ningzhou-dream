@@ -1,5 +1,7 @@
 // 宁州一梦 · C++ 版 — 即时经济动作（实现）
 #include "core/shop.h"
+#include "core/crafting/market_cycle.h"
+#include "core/foundation/state_limits.h"
 #include "core/crafting/cave_garden.h"
 #include "core/crafting/craft_prices.h"
 #include "core/crafting/material_supply.h"
@@ -15,6 +17,7 @@
 #include "core/renown.h"
 #include "core/sim.h"
 #include "core/talents.h"
+#include "core/content/npc_combat_profiles.h"
 #include "data/reference_tables.h"
 
 namespace nz::shop {
@@ -98,7 +101,7 @@ int salePrice(const Game& g, const string& kind, const string& id) {
 
 MarketSaleContext mfMarketSaleContext(const Game& State) {
     return {ecoIsCity(State.player.location), std::max(0, State.economy.marketCash),
-        ecoMarketBudget(State), renown::sellLimit(State.player.renown)};
+        ecoMarketBudget(State), 0, crafting::MarketCycleDurationDays, crafting::mfMarketDaysUntilRefresh(State)};
 }
 
 MarketSaleQuote mfQuoteMarketSale(const Game& State, const string& Kind, const string& ItemId, int UnitSalePrice) {
@@ -111,15 +114,14 @@ MarketSaleQuote mfQuoteMarketSale(const Game& State, const string& Kind, const s
     Quote.InCity = Context.InCity;
     Quote.RemainingCash = Context.RemainingCash;
     Quote.NextMonthBudget = Context.NextMonthBudget;
+    Quote.RefreshCycleDays = Context.RefreshCycleDays;
+    Quote.DaysUntilRefresh = Context.DaysUntilRefresh;
     if ((Kind != "potion" && Kind != "gear") || UnitSalePrice <= 0) {
         Quote.Reason = "此物无法出售。";
         return Quote;
     }
-    const int DemandLimit = Context.DemandLimit;
-    const auto Sold = State.economy.sold.find(Kind + ":" + ItemId);
-    const int SoldCount = Sold == State.economy.sold.end() ? 0 : std::max(0, Sold->second);
-    const int RemainingDemand = std::max(0, DemandLimit - SoldCount);
-    Quote.AffordableCount = std::min(RemainingDemand, Quote.RemainingCash / UnitSalePrice);
+    static_cast<void>(ItemId); // 保留旧报价签名；三年账期只受资金限制，不再消耗同类需求额度。
+    Quote.AffordableCount = Quote.RemainingCash / UnitSalePrice;
     if (!Quote.InCity) {
         Quote.AffordableCount = 0;
         Quote.Reason = "此处没有坊市。请前往五城之一。";
@@ -127,11 +129,10 @@ MarketSaleQuote mfQuoteMarketSale(const Game& State, const string& Kind, const s
         Quote.Reason = "坊市收购资金不足（余 " + std::to_string(Quote.RemainingCash) + "，单价 " +
             std::to_string(UnitSalePrice) + "）。";
         if (UnitSalePrice > Quote.NextMonthBudget)
-            Quote.Reason += "此单价超过当前条件的下月额度 " + std::to_string(Quote.NextMonthBudget) +
+            Quote.Reason += "此单价超过当前条件的下期额度 " + std::to_string(Quote.NextMonthBudget) +
                 "，需提高境界或声望；换城不另补资金。";
-        else Quote.Reason += "新规则额度 " + std::to_string(Quote.NextMonthBudget) + " 将在下月刷新，同月和读档不补资。";
-    } else if (RemainingDemand == 0) {
-        Quote.Reason = "本月此类货品需求已满（" + std::to_string(DemandLimit) + " 件），请下月出售。";
+        else Quote.Reason += "本期余额不补充，下个三年账期额度 " + std::to_string(Quote.NextMonthBudget) +
+            "，距刷新 " + std::to_string(Quote.DaysUntilRefresh) + " 天。";
     }
     return Quote;
 }
@@ -154,7 +155,7 @@ ActionQuote saleQuote(const Game& g, const string& kind, const string& id, const
     if (g.pending.has_value()) return reject("请先完成当前事件。");
     if (a.battle.has_value()) return reject("斗法中无法交易。");
     if (quote.returnStones <= 0) return reject("此物无法出售。");
-    if (static_cast<long long>(p.stones) + quote.returnStones > std::numeric_limits<int>::max())
+    if (static_cast<long long>(p.stones) + quote.returnStones > StateLimits::MaxPersistedInteger)
         return reject("出售后灵石余额超过支持范围。");
     const auto MarketQuote = mfQuoteMarketSale(g, kind, id, quote.returnStones, Context);
     quote.demandChecked = true;
@@ -180,7 +181,6 @@ SellResult sell(Game& g, const string& kind, const string& id) {
     Arts& a = p.arts;
     Economy& e = g.economy;
     const ActionQuote quote = saleQuote(g, kind, id);
-    const string key = kind + ":" + id;
     // 拒绝路径不提前插入需求或库存键；成功提交才更新关联账本。
     if (!quote.enabled) return fail(quote.reason);
     const int price = quote.returnStones;
@@ -199,7 +199,6 @@ SellResult sell(Game& g, const string& kind, const string& id) {
         return fail("此物无法出售。");
     }
 
-    e.sold[key] += 1;
     e.marketCash -= price;
     p.stones += price;
     a.progress.wealth = std::max(a.progress.wealth, p.stones);
@@ -418,7 +417,7 @@ ActionQuote mfQuoteCaveMove(const Game& State) {
     if (Quote.reason.empty() && State.player.cave == State.player.location) Quote.reason = "洞府已经在这里了。";
     if (Quote.reason.empty()) for (const auto& Plot : State.Garden.Plots)
         if (!Plot.Cohorts.empty() || Plot.ReserveStones > 0) {
-            Quote.reason = "迁府前请先收获或清理全部灵田，并取回格内灵石储备。";
+            Quote.reason = "迁府前请先收获或清理全部灵田；旧灵田余额会在下个真实世界日自动退回。";
             break;
         }
     if (Quote.reason.empty() && State.player.stones < Quote.costStones)
@@ -449,6 +448,7 @@ bool sectDaoAllowed(const string& sect, const string& dao) {
     if (sect == "zhushan") return dao == "木";
     if (sect == "lihuo") return dao == "火";
     if (sect == "huachen") return dao == "土" || dao == "体";
+    if (sect == "xuandao") return dao == "阵" || dao == "剑";
     return false;
 }
 // 用途：确定功法对应宗门藏经阁。
@@ -461,6 +461,7 @@ string manualSect(const Game& g, const string& dao) {
     if (dao == "木") return "zhushan";
     if (dao == "火") return "lihuo";
     if (dao == "土" || dao == "体") return "huachen";
+    if (dao == "阵") return "xuandao";
     return findSect(g.player.sect) ? g.player.sect : "";
 }
 // 用途：检查抄本与已修功法避免重复发放。
@@ -499,6 +500,20 @@ bool commonSpell(const SpellDef& spell) {
 // 返回值：ManualSource结果，包含说明所述状态或计算数据。
 ManualSource manualSource(const Game& g, const string& id) {
     ManualSource ms;
+    // 新传承不修改生成表；玄道宗只共享其五行剑完整模板所需抄本。
+    const auto* XuandaoProfile = [&]() -> const content::NpcCombatProfile* {
+        for (const auto& Profile : content::npcCombatProfiles()) if (Profile.sect == "xuandao") return &Profile;
+        return nullptr;
+    }();
+    if (id == "fiveSword" || (g.player.sect == "xuandao" && XuandaoProfile &&
+        std::find(XuandaoProfile->manuals.begin(), XuandaoProfile->manuals.end(), id) != XuandaoProfile->manuals.end())) {
+        ManualInfo Info;
+        if (!findManualInfo(id, Info)) return ms;
+        ms.valid = true; ms.id = Info.id; ms.name = Info.name; ms.stage = Info.stage; ms.price = Info.price;
+        ms.sect = "xuandao"; ms.points = libraryPoints(g, Info.stage);
+        ms.how = "玄道宗藏经阁兑换（" + std::to_string(ms.points) + " 贡献）；完整传承弟子亦可逐项请教";
+        return ms;
+    }
 
     // 先查拓展功法表：只有这张表带 source（所属宗门）。
     // 顺序很关键 —— BaseManualDef_TABLE 里其实也包含这 26 部，
@@ -552,6 +567,9 @@ vector<ManualSource> availableManuals(const Game& g) {
         if (ms.valid && (ownedManual(g, m.id) || (!ms.city.empty() && g.player.location == ms.city) ||
             (!ms.sect.empty() && ms.sect == g.player.sect && g.player.location == ms.sect))) out.push_back(ms);
     }
+    auto FiveSword = manualSource(g, "fiveSword");
+    if (FiveSword.valid && (ownedManual(g, "fiveSword") ||
+        (g.player.sect == FiveSword.sect && g.player.location == FiveSword.sect))) out.push_back(std::move(FiveSword));
     return out;
 }
 
@@ -628,7 +646,10 @@ LibrarySpellSource librarySpellSource(const Game& g, const string& id) {
     LibrarySpellSource source;
     const auto* spell = battleSpell(id);
     if (!spell || id == "strike" || id == "defend" || !findSect(g.player.sect)) return source;
-    if (!commonSpell(*spell) && !sectDaoAllowed(g.player.sect, spell->dao)) return source;
+    const bool IsElementalSword = id == "metalSword" || id == "waterSword" || id == "woodSword" ||
+        id == "fireSword" || id == "earthSword";
+    if (IsElementalSword ? g.player.sect != "xuandao" :
+        (!commonSpell(*spell) && !sectDaoAllowed(g.player.sect, spell->dao))) return source;
     source.valid = true;
     source.id = spell->id; source.name = spell->name; source.dao = spell->dao;
     source.sect = g.player.sect; source.stage = spell->stage;

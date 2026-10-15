@@ -356,7 +356,7 @@ void worldFromSeed(Game& g) {
     // 行情围绕 1.0 波动 ±15%
     g.world.market = 0.88 + rng.next() * 0.28;
 
-    // 灵脉初始归属：五宗之一
+    // 灵脉初始归属：登记宗门之一
     {
         const auto& sects = SECTS();
         const int idx = static_cast<int>(rng.next() * sects.size());
@@ -568,7 +568,7 @@ static void npcTurn(Game& g, Npc& n) {
     if (n.isNewborn && n.bornYear == g.year) return;
 
     n.pillState.poison = std::max(0, n.pillState.poison -
-        (artHas(artNpcLoadout(n), "丹", 2) ? 5 : 1));
+        BasePillPoisonDecayPerYear - (artHas(artNpcLoadout(n), "丹", 2) ? PillPoisonDaoDecayBonusPerYear : 0));
     n.pillState.repel = std::max(0, n.pillState.repel - 1);
     const int pillsTaken = npcConsumeUsefulPills(n);
     if (pillsTaken > 0) npcHistory(g, n, "服用行囊中适用的丹药 " + std::to_string(pillsTaken) + " 枚。");
@@ -845,7 +845,7 @@ void worldYear(Game& g) {
         w.mineOwner = sorted[0].id;
         w.coreStock = std::min(CORE_CAP, w.coreStock + 20);
         logEvent(g, "world",
-                 "五宗重议青石灵脉，" + string(findSect(w.mineOwner)->name) +
+                 "各宗重议青石灵脉，" + string(findSect(w.mineOwner)->name) +
                      (prev == w.mineOwner
                           ? "保住管领之位"
                           : "接替" + string(findSect(prev)->name) + "掌管矿脉") +
@@ -873,6 +873,8 @@ void worldYear(Game& g) {
     for (auto& n : g.npcs) {
         if (n.alive) npcTurn(g, n);
     }
+    // 常态世界维持宗门传承，不依赖是否开潮；已在途斗法和玩家资源保持原样。
+    content::mfEnsureSectTransmissions(g);
     // 开潮先于年度新人生成；在真实年度动作末登记存活新人，保留老参战者入场境界与积分。
     tide::mfEnrollEligibleNpcs(g);
     refreshSects(g);
@@ -987,7 +989,7 @@ void maybeChoice(Game& g) {
         ev.title = "山门来信";
         ev.subtitle = "机缘 · 宗门";
         ev.text =
-            "武陵城传来五宗招收新弟子的消息。散修之路自由，宗门之路有庇护与牵绊。你愿意如何选择？";
+            "武陵城传来各宗招收新弟子的消息。散修之路自由，宗门之路有庇护与牵绊。你愿意如何选择？";
         ev.options = {
             {"join", "赴金虹山门", "收到考核邀请 · 需赶往山门报名实战试炼", false},
             {"study", "先访各宗，再作打算", "悟性最多 +8 · 可稍后前往山门报名考核", false},
@@ -1142,7 +1144,7 @@ Game createGame(const CreateOptions& source) {
     ensureAdventure(g);
     ensureDungeons(g);
     tide::ensureTide(g);
-    content::ensureChampionNpcs(g);
+    content::mfEnsureSectTransmissions(g);
     socInitPayroll(g);
     // 五项开局天赋会发放实际物品（法器/丹炉/材料）
     adventureBirth(g);

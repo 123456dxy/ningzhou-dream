@@ -36,6 +36,9 @@ static Value enemyCombatToJson(const EnemyCombat& enemy) {
     enemyObject.set("burnTurns", num(enemy.burnTurns));
     enemyObject.set("swordSequence", num(enemy.swordSequence));
     enemyObject.set("comboDraws", num(enemy.comboDraws));
+    enemyObject.set("elementalSwordManaReturns", num(enemy.ElementalSwordManaReturns));
+    enemyObject.set("elementalSwordSequence", num(enemy.ElementalSwordSequence));
+    enemyObject.set("fireGrowthRounds", num(enemy.FireGrowthRounds));
     enemyObject.set("buff", num(enemy.buff));
     enemyObject.set("reduction", num(enemy.reduction));
     enemyObject.set("guard", num(enemy.guard));
@@ -87,6 +90,9 @@ static void enemyCombatFromJson(const Value& enemyObject, EnemyCombat& enemy) {
     enemy.burnTurns = enemyObject["burnTurns"].asInt(0);
     enemy.swordSequence = enemyObject["swordSequence"].asInt(0);
     enemy.comboDraws = enemyObject["comboDraws"].asInt(0);
+    enemy.ElementalSwordManaReturns = enemyObject["elementalSwordManaReturns"].asInt(0);
+    enemy.ElementalSwordSequence = enemyObject["elementalSwordSequence"].asInt(0);
+    enemy.FireGrowthRounds = enemyObject["fireGrowthRounds"].asInt(0);
     enemy.buff = enemyObject["buff"].asNumber();
     enemy.reduction = enemyObject["reduction"].asNumber();
     enemy.guard = enemyObject["guard"].asNumber();
@@ -187,6 +193,19 @@ Value battleToJson(const Battle& battle) {
     battleObject.set("intentScale", num(battle.intentScale));
     battleObject.set("intentRaw", num(battle.intentRaw));
     battleObject.set("intentSpell", str(battle.intentSpell));
+    {
+        json::Array Actions;
+        for (const auto& Action : battle.BeastActions) {
+            Value Item(json::Object{});
+            Item.set("id", str(string(BeastCombat::mfActionId(Action.Kind))));
+            Item.set("rawDamage", num(Action.RawDamage)); Item.set("shieldGain", num(Action.ShieldGain));
+            Item.set("healGain", num(Action.HealGain)); Item.set("poisonDamage", num(Action.PoisonDamage));
+            Item.set("burnDamage", num(Action.BurnDamage)); Item.set("weakenLayers", num(Action.WeakenLayers));
+            Item.set("chargeGain", num(Action.ChargeGain)); Item.set("piercePercent", num(Action.PiercePercent));
+            Actions.push_back(std::move(Item));
+        }
+        battleObject.set("beastActions", Value(std::move(Actions)));
+    }
     battleObject.set("enemyDao", str(battle.enemyDao));
     { json::Array arr; for (const auto& s : battle.enemySpells) arr.push_back(str(s));
       battleObject.set("enemySpells", Value(std::move(arr))); }
@@ -214,6 +233,9 @@ Value battleToJson(const Battle& battle) {
     battleObject.set("discardPower", num(battle.discardPower));
     battleObject.set("swordSequence", num(battle.swordSequence));
     battleObject.set("comboDraws", num(battle.comboDraws));
+    battleObject.set("elementalSwordManaReturns", num(battle.ElementalSwordManaReturns));
+    battleObject.set("elementalSwordSequence", num(battle.ElementalSwordSequence));
+    battleObject.set("fireGrowthRounds", num(battle.FireGrowthRounds));
     battleObject.set("last", str(battle.last));
     {
         json::Array lg;
@@ -299,6 +321,17 @@ void battleFromJson(const Value& battleObject, Battle& battle) {
     battle.intentScale = battleObject["intentScale"].asNumber();
     battle.intentRaw = battleObject["intentRaw"].asInt();
     battle.intentSpell = battleObject["intentSpell"].asString();
+    for (const auto& Item : battleObject["beastActions"].asArray()) {
+        const auto Kind = BeastCombat::mfParseActionKind(Item["id"].asString());
+        if (!Kind) continue; // 外层结构校验已经拒绝未知ID；直接内部调用仍不伪造有效动作。
+        BeastCombat::PlannedAction Action;
+        Action.Kind = *Kind; Action.RawDamage = Item["rawDamage"].asInt();
+        Action.ShieldGain = Item["shieldGain"].asInt(); Action.HealGain = Item["healGain"].asInt();
+        Action.PoisonDamage = Item["poisonDamage"].asInt(); Action.BurnDamage = Item["burnDamage"].asInt();
+        Action.WeakenLayers = Item["weakenLayers"].asInt(); Action.ChargeGain = Item["chargeGain"].asInt();
+        Action.PiercePercent = Item["piercePercent"].asInt();
+        battle.BeastActions.push_back(Action);
+    }
     battle.enemyDao = battleObject["enemyDao"].asString();
     battle.enemySpells = jsonToStringVec(battleObject["enemySpells"]);
     battle.enemyBeast = battleObject["enemyBeast"].asBool();
@@ -325,6 +358,9 @@ void battleFromJson(const Value& battleObject, Battle& battle) {
     battle.discardPower = battleObject["discardPower"].asNumber();
     battle.swordSequence = battleObject["swordSequence"].asInt();
     battle.comboDraws = battleObject["comboDraws"].asInt();
+    battle.ElementalSwordManaReturns = battleObject["elementalSwordManaReturns"].asInt(0);
+    battle.ElementalSwordSequence = battleObject["elementalSwordSequence"].asInt(0);
+    battle.FireGrowthRounds = battleObject["fireGrowthRounds"].asInt(0);
     battle.last = battleObject["last"].asString();
     battle.log = jsonToStringVec(battleObject["log"]);
     battle.advKind = battleObject["advKind"].asString();

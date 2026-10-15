@@ -18,7 +18,8 @@ string localDao(const string& id) {
     if (id == "lihuo" || id == "wojiao") return "火";
     if (id == "huachen" || id == "zhengyang" || id == "qingshi") return "土";
     if (id == "zhushan" || id == "fanghu" || id == "yunxi" || id == "jiuyi") return "木";
-    if (id == "tianji" || id == "xiuluo" || id == "xuandao" || id == "tianmo") return "神";
+    if (id == "xuandao") return "阵";
+    if (id == "tianji" || id == "xiuluo" || id == "tianmo") return "神";
     return "气";
 }
 }
@@ -53,8 +54,6 @@ vector<LocationService> locationServices(const Game& g, const string& id) {
     } else if (id == "tianji") {
         add("insight", "外务研读", "研读各地情报：神道经验+12；每月一次。", 2, 8);
         add("intel", "秘境情报兑换", "查看并兑换野外秘境情报，探索高阶药材与炼器材料的来源。", 0, 0, 0, "dungeon");
-    } else if (id == "xuandao") {
-        add("insight", "天魔眼集结讲法", "研究魔物应对：神道经验+12；每月一次。", 3, 8, 3);
     } else if (type == "wild") {
         const int stage = loc->danger >= 60 ? 3 : 0;
         add("gather", "本地采药", "采集当前境界可得的本地草药3份、木道经验+4；取得难度按最早丹方用途匹配，高品草药仍受原生境限制，妖丹需猎妖或秘境。", 4, 2, stage);

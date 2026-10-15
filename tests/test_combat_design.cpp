@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <set>
 
+#include "core/adventure.h"
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/sim.h"
@@ -12,6 +13,7 @@ using namespace nz;
 
 namespace nztest {
 
+// 用途：验证流派组件与真实新角初装；流程：统一规则测试入口；用法：隔离内存建角后调用；返回：无，失败计入harness。
 void runCombatDesignTests() {
     std::printf("\n-- 流派组合与功法触发回归 --\n");
     {
@@ -70,7 +72,7 @@ void runCombatDesignTests() {
     {
         Arts fire; fire.nodes = {"3-4", "3-5"};
         ArtMods mods = artModsOf(fire);
-        check(mods.burnStack > 0 && mods.burnExplosion > 0 && mods.discardShield == 0,
+        check(mods.BurnGrowthStackPerRound > 0 && mods.BurnGrowthExplosionPerRound > 0 && mods.discardShield == 0,
               "高阶火道改变灼烧积累与引爆而非开启其它道机制");
         checkNear(mods.cult, 1, "高阶节点不再统一提供修炼面板加成");
         checkNear(mods.attack, 1, "高阶节点不再统一提供攻击面板加成");
@@ -86,10 +88,61 @@ void runCombatDesignTests() {
               "剑道真境要求连续剑招才在实际预览中追加伤害段");
     }
     {
+        // 真正新建角色保持吐纳一层、无悟道与装备，只更换四张合法初装神通。
+        CreateOptions Options;
+        Options.name = "初装回归"; Options.seed = 31;
+        Options.traitsExplicit = true; Options.allocationExplicit = true;
+        Options.allocation = {{"apt", 10}};
+        Game Starter = createGame(Options);
+        const vector<string> ExpectedSpells = {"gold", "fire", "water", "gather"};
+        check(Starter.player.arts.spells == ExpectedSpells, "真实新档携带金芒、焰火、水盾、聚气初装");
+        check(Starter.player.arts.main == "tuna" && Starter.player.arts.manuals.at("tuna") == 1 &&
+              Starter.player.arts.aux.empty() && Starter.player.arts.nodes.empty() && Starter.player.arts.gear.empty(),
+              "新初装不赠高层功法、悟道或额外装备");
+        bool KeepsKnownSpells = true;
+        for (const string SpellId : {"sword", "water", "wood", "skim", "refresh", "purge", "gold", "fire", "gather"})
+            KeepsKnownSpells = KeepsKnownSpells && std::find(Starter.player.arts.knownSpells.begin(),
+                Starter.player.arts.knownSpells.end(), SpellId) != Starter.player.arts.knownSpells.end();
+        check(KeepsKnownSpells, "新档保留原六种已知神通并新增三种初装神通");
+        const auto KnownBefore = Starter.player.arts.knownSpells;
+        const auto RngBefore = Starter.rng;
+        ensureArts(Starter); ensureArts(Starter);
+        check(Starter.player.arts.spells == ExpectedSpells && Starter.player.arts.knownSpells == KnownBefore && Starter.rng == RngBefore,
+              "重复ensureArts不替换初装、不重复添加已知神通、不推进随机数");
+
+        Game Existing = Starter;
+        const vector<string> PreviousLoadout = {"sword", "water", "wood", "skim"};
+        Existing.player.arts.spells = PreviousLoadout;
+        Existing.player.arts.knownSpells = {"sword", "water", "wood", "skim", "refresh", "purge"};
+        ensureArts(Existing);
+        check(Existing.player.arts.spells == PreviousLoadout && Existing.player.arts.knownSpells.size() == 6,
+              "已初始化角色保留旧配装，不因新开局方案赠送或替换神通");
+
+        adventureEvent(Starter, "bandit");
+        check(adventureChoose(Starter, "fight") && battleActive(Starter), "真实山道劫修事件可用新初装开战");
+        if (Starter.player.arts.battle) {
+            const auto& BattleState = *Starter.player.arts.battle;
+            map<string, int> CardCounts;
+            std::set<string> CardUids;
+            bool LegalDeck = true;
+            for (const auto& Card : BattleState.deck) {
+                ++CardCounts[Card.spell];
+                const auto* Spell = battleSpell(Card.spell);
+                const bool IsBasic = Card.spell == "strike" || Card.spell == "defend";
+                LegalDeck = LegalDeck && CardUids.insert(Card.uid).second && Spell && Spell->stage <= Starter.player.stage &&
+                    (IsBasic || std::find(Starter.player.arts.knownSpells.begin(), Starter.player.arts.knownSpells.end(), Card.spell) !=
+                        Starter.player.arts.knownSpells.end());
+            }
+            check(LegalDeck && BattleState.deck.size() == 18 && CardCounts["strike"] == 5 && CardCounts["defend"] == 5 &&
+                  CardCounts["gold"] == 2 && CardCounts["fire"] == 2 && CardCounts["water"] == 2 && CardCounts["gather"] == 2,
+                  "实际开战牌堆为18张唯一UID，四初装各两张且都已学会并满足炼气境界");
+        }
+    }
+    {
         Game g = createGame(CreateOptions{});
         checkEq(g.player.arts.spells.size(), 4, "新档有四个额外神通");
-        check(std::find(g.player.arts.spells.begin(), g.player.arts.spells.end(), "skim") !=
-              g.player.arts.spells.end(), "新档带明心咒建立初始抽牌组合");
+        check(std::find(g.player.arts.spells.begin(), g.player.arts.spells.end(), "gather") !=
+              g.player.arts.spells.end(), "新档带聚气支持初始攻防与叠焰，已知明心咒可自行换装");
         check(!artInstant(g, "spell", "strike").ok &&
               !artInstant(g, "spell", "defend").ok,
               "固定灵击和守势不能被配装卸下");
@@ -103,8 +156,8 @@ void runCombatDesignTests() {
 
         g.player.stage = 3;
         g.player.arts.spells = {"sword", "water", "wood", "skim"};
-        check(!artInstant(g, "spell", "gold").ok, "未领悟神通即使境界够也不能凭空装备");
-        g.player.arts.knownSpells.insert(g.player.arts.knownSpells.end(), {"gold", "fire", "earth"});
+        check(!artInstant(g, "spell", "earth").ok, "未领悟神通即使境界够也不能凭空装备");
+        g.player.arts.knownSpells.push_back("earth");
         check(artInstant(g, "spell", "gold").ok, "境界提高后可配装第五个额外神通");
         check(artInstant(g, "spell", "fire").ok, "境界提高后可配装第六个额外神通");
         check(!artInstant(g, "spell", "earth").ok,

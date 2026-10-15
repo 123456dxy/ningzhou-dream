@@ -6,7 +6,9 @@
 
 ## 统计口径
 
-本轮新增入口另列，不改写2026-10-12的历史口径：`crafting/craft_prices.h`提供完整材料定价报价，`crafting/craft_timing.h`提供品阶时长，`crafting/cave_garden.h`提供灵田纯报价和原子命令；`resource_points.h`提供默认关闭的强ID开发目录与功能闸门。`combat/battle_scaling.h`集中攻击、毒伤、灼烧的战力伤害基数。`shop.h`新增纯迁府报价。洞府和定价维护方式分别见 [洞府灵田](CAVE_GARDEN.md)、[制作时长](CRAFT_TIMING.md)、[资源点设计](RESOURCE_POINTS.md)。`interface/cave_views.h`和`interface/craft_price_views.h`为只读JSON适配，仍归内部接口而非新的HTTP协议入口。
+本轮新增入口另列，不改写2026-10-12的历史口径：`crafting/craft_prices.h`提供完整材料定价报价，`crafting/craft_timing.h`提供品阶时长，`crafting/cave_garden.h`提供灵田纯报价和原子命令；`resource_points.h`提供默认关闭的强ID开发目录与功能闸门。`combat/battle_scaling.h`集中攻击、毒伤、灼烧的战力伤害基数。`shop.h`新增纯迁府报价。洞府和定价维护方式分别见 [洞府灵田](CAVE_GARDEN.md)、[制作时长](CRAFT_TIMING.md)、[资源点设计](RESOURCE_POINTS.md)。`interface/cave_views.h`和`interface/craft_price_views.h`为只读JSON适配。
+
+2026-10-15新增：`crafting/green_bottle.h`集中永久瓶阶状态/日增、逐阶升级报价/命令、六品成熟周期和专属秘境入口报价/进入；`content/green_bottle_content.h`提供三种专属灵材白名单与等级定义；`dungeon.h::mfOpenBottleMaterialDungeon`负责候选状态新建真实秘境。`interface/green_bottle_api.h`提供纯JSON视图和严格命令解析，两个HTTP写端点见[HTTP API参考](HTTP_API_REFERENCE.md#洞府灵田与永久小绿瓶)。
 
 - 公共统计范围：core 根目录保留的兼容公共头，加 `content/game_ids.h`、`content/text_table.h` 、`interface/routes.h` 和 `crafting/material_supply.h`。这里的“公共”指调用方可使用的 C++ 入口；项目目前没有安装/导出头的独立边界。
 - 只计 namespace 顶层、以分号结束的显式自由函数声明。每一处声明计 1 条，函数重载分别计数；重复声明仍是两条声明，另给去重数。
@@ -1040,3 +1042,28 @@ std::string breakthroughReason(const Game& game, const BreakthroughInfo& info);
 | `content/herb_habitats.h` | `nz::content::mfHerbHabitatIds(LocationId)` | 返回稳定地点 ID 对应的药材 ID 常量目录；未知地点为空 |
 
 维护与实际规则见 [丹药效果](PILL_EFFECTS.md)、[药材取得](HERB_ACQUISITION.md) 和 combat/crafting 模块 README。
+
+### 2026-10-15 领域入口补充
+
+以下按新模块列出维护边界，不混入上方历史统计：
+
+- `crafting/green_bottle.h`：瓶阶合法性/日增/六品成熟天数、升级报价与执行、专属秘境报价/入口、灵材容量校验。报价只读；真实动作复核阶位、材料、灵石及访问条件。
+- `crafting/market_cycle.h`：`mfMonthlyEquivalentMarketBudget`、`mfMarketCycleBudget`、`mfMarketDaysUntilRefresh` 为纯查询；`mfRefreshMarketCycle` 仅在真实动作日历刷新账期。
+- `combat/elemental_sword.h`：五剑白名单、有效五行识别、相生判定、独立连段推进与资源/命中收益。双方、预览与真实执行共用；跨回合保留，不由前端推导。
+- `combat/battle_lab.h`：独立内存实验场景与合法初始/完整构筑，只用于本机斗法测试；没有人生存档和世界收益入口。
+- `content/advanced_builds.h` / `npc_combat_profiles.h`：六宗八构筑与常态传承导师目录；老师的请教仍走既有真实资格、费用和结算。
+
+JSON编码、实验HTTP与绿瓶请求解析属于interface协作入口，不作为稳定领域扩展API。正式HTTP统计另见 [HTTP清单](HTTP_API_REFERENCE.md)。
+
+### 2026-10-15 秘境改良补充
+
+本轮新增13条领域自由函数声明，作为上方历史主表之外的增量清单；不把它与尚未重统计的其他新增模块相加后宣称全仓总数。
+
+| 头文件 | 新增接口 | 条数 |
+| --- | --- | ---: |
+| `dungeon.h` | `mfQuoteDungeonSweep`、`mfSweepDungeon`：纯报价与原子扫荡，复用冻结终奖 | 2 |
+| `exploration/dungeon_events.h` | `mfDescribeDungeonEvent`、`mfDungeonEventRewards`、`mfQuoteDungeonEvent`、`mfDungeonEventStateError`、`mfClaimDungeonEvent` | 5 |
+| `exploration/dungeon_encounters.h` | `mfDescribeDungeonEncounter`：预告与实际开战共享EnemySpec | 1 |
+| `exploration/dungeon_reward_rules.h` | `mfDungeonRewardRulesForStage`、`mfIsFrozenDungeonStoneReward`、`mfDungeonEntryRewardStage`、`mfDungeonHerbRewardPool`、`mfDungeonMaterialRewardPool` | 5 |
+
+规则与存档边界见 [现有秘境改良](DUNGEON_EXPLORATION_V2.md)。

@@ -34,3 +34,7 @@
 `tests/test_arts.cpp`、`test_talents.cpp`、`test_craft.cpp`、`test_numeric_previews.cpp`、`test_core.cpp`、`test_passive_life_travel.cpp`、`test_mechanics_regression.cpp`、`test_equipment_task.cpp`、`test_api.cpp`。统一 `ningzhou_tests` 提供现有回归覆盖。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。
+
+## 新角色初装
+
+`ensureArts` 首次初始化携带金芒刺、焰火诀、水灵盾、聚气，并保留原有入门神通供换装。已初始化角色的配装不被替换。真实建角、劫修对照与策略限制见 [新角色初装诊断](../../../docs/STARTER_COMBAT.md)；独立 Lab 模板不代替真实开局。

@@ -6,6 +6,7 @@
 #include "core/crafting/craft_timing.h"
 #include "core/crafting/craft_prices.h"
 #include "core/crafting/cave_garden.h"
+#include "core/crafting/market_cycle.h"
 #include "core/renown.h"
 
 #include <algorithm>
@@ -82,6 +83,11 @@ static bool lookupManual(const string& id, ManualView& out) {
         out = {m.id, m.name, m.dao, m.effect, m.stage, m.price};
         return true;
     }
+    ManualInfo Definition;
+    if (findManualInfo(id, Definition)) {
+        out = {Definition.id, Definition.name, Definition.dao, Definition.effect, Definition.stage, Definition.price};
+        return true;
+    }
     return false;
 }
 
@@ -96,19 +102,7 @@ int ecoMarketTier(const Player& player) {
 // 流程：初始化或换月时取声望额度、本层级最高单枚丹价及标准法器售值的较高值，再乘基础三倍与大境界倍率。
 // 返回值：当期行情下的月预算；只读，不给本月已花掉的资金充值。
 int ecoMarketBudget(const Game& game) {
-    const auto& Rules = crafting::mfCraftEconomyRules();
-    int BaseBudget = renown::marketCashCap(clampInt(game.player.renown, 0, Rules.MaximumBudgetRenown));
-    const int MarketTier = ecoMarketTier(game.player);
-    for (const auto& Recipe : data::RecipeDef_TABLE()) {
-        if (Recipe.grade <= MarketTier)
-            BaseBudget = std::max(BaseBudget, shop::salePrice(game, "potion", Recipe.id));
-    }
-    for (int Grade = 1; Grade <= MarketTier; ++Grade) {
-        const auto Quote = crafting::mfQuoteStandardGearPrice(game, Grade);
-        if (Quote.Valid) BaseBudget = std::max(BaseBudget, Quote.SellPrice);
-    }
-    const std::int64_t Budget = static_cast<std::int64_t>(BaseBudget) * Rules.MonthlyBudgetMultiplier * mfMarketRealmMultiplier(game.player);
-    return static_cast<int>(std::min<std::int64_t>(Budget, Rules.MaximumMonthlyBudget));
+    return crafting::mfMarketCycleBudget(game);
 }
 
 // 用途：查询月度收购预算的境界乘区；流程：资金预览/换月；用法：传只读角色，小境界不改变倍率；返回：炼气至化神1/2/4/8/16，越界饱和，无状态写入。
@@ -125,7 +119,7 @@ string mfMarketBudgetRule() {
         std::to_string(Rules.MonthlyBudgetMultiplier) + "，再按大境界翻倍（最高 " +
         std::to_string(1 << Rules.MaximumMajorRealmIndex) + " 倍），总预算上限 " +
         std::to_string(Rules.MaximumMonthlyBudget) +
-        " 灵石；五城收购且同类有月需求上限。旧档和同月晋阶不充值，新预算下月生效。";
+        " 灵石作为原月额度，再乘50作为三年收购资金；每1080世界日刷新，不限制每月出售件数。切页、读档、换城或晋阶不补充本期余额。";
 }
 // ------------------------------------------------------------
 // 初始化与每月刷新
@@ -149,6 +143,7 @@ void ensureEconomy(Game& g) {
     g.economy.orders.clear();
     g.economy.sold.clear();
     g.economy.marketCash = ecoMarketBudget(g);
+    g.economy.MarketCycleIndex = g.clock.days / crafting::MarketCycleDurationDays;
     g.economy.seq = 0;
 }
 
@@ -158,13 +153,13 @@ void ensureEconomy(Game& g) {
 // 返回值：无；完成说明所述写入或展示操作。
 void ecoRefresh(Game& g) {
     Economy& e = g.economy;
+    crafting::mfRefreshMarketCycle(g);
     const int month = g.clock.days / 30;
     if (month == e.month) return;
     e.month = month;
     e.orders.clear();
     e.taskCounts.clear();
     e.sold.clear();
-    e.marketCash = ecoMarketBudget(g);
 }
 
 // 用途：把已得功法抄本同步到学习书单。

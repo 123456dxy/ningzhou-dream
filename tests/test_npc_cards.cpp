@@ -144,7 +144,7 @@ void runNpcCardTests() {
         battleTurn(g, "end");
         checkEq(openingHp - b.hp, opening.damage, "无火功法NPC双火诀直接伤害等于预览");
         check(b.enemyCards.burn > 0 && b.enemyCards.burnTurns == 3, "离火NPC真实施加灼烧");
-        checkEq(b.enemyCards.burn, 2 * jsRound(mfBattleDamageBasis(b.enemyStage) * 0.1),
+        checkEq(b.enemyCards.burn, 2 * jsRound(mfBattleDamageBasis(b.enemyStage) * 0.08),
                 "NPC同样无需火功法即可天然叠加两次灼烧");
         enemyHand(b, {"fireburst"});
         const auto preview = battleEnemyPreview(g);
@@ -167,7 +167,7 @@ void runNpcCardTests() {
         enemyHand(b, {"corrode", "corrode"}); battleTurn(g, "end");
         enemyHand(b, {"corrode"}); battleTurn(g, "end");
         checkEq(b.enemyCards.poison, 9, "NPC无木功法也能跨回合施毒超过六层");
-        checkEq(b.playerPoison, jsRound(mfBattleDamageBasisFromPower(b.enemyPower) * 0.035 * 9), "NPC九层毒同步为真实玩家毒伤");
+        checkEq(b.playerPoison, jsRound(mfBattleDamageBasisFromPower(b.enemyPower) * 0.045 * 9), "NPC九层毒同步为真实玩家毒伤");
         Game loaded; string error;
         const bool saved = loadFromJson(saveToJson(g), loaded, &error);
         check(saved, "九层NPC毒的真实战斗可以保存并读回");

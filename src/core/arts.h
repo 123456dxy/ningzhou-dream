@@ -52,6 +52,9 @@ struct ManualInfo {
 // 使用方式：传 ID 和可写输出记录。
 // 返回值：找到时为真并填写 out；无定义时为假。
 bool findManualInfo(const string& id, ManualInfo& out);
+// 用途：读取包含本地新功法的完整不可变目录；流程：展示、授业与来源筛选。
+// 使用：按稳定ID迭代，动态资格另行报价；返回：静态内容目录常量引用，无角色状态/RNG/IO副作用。
+const map<string, ManualInfo>& mfManualCatalog();
 
 // 可组合的流派提示；引用本地真实功法、神通和悟道节点 ID。
 struct BuildInfo {
@@ -113,12 +116,15 @@ int daoIndex(const string& dao);
 // 主修按层数全额累计，辅修按层数的一半累计。
 // 整数收益在触发时向下取整，比例收益由 battle 按对应上限结算。
 struct CombatHooks {
+    double ElementalSwordMastery = 0; // 五行剑诀相生返灵系数，主满辅半；整数收益向下取整
     double discardShield = 0;   // 每张未打出而弃置的牌：气血上限比例护盾
     double discardPower = 0;    // 每张弃牌：下一直接攻击的增伤
     double waterMana = 0;       // 浪击每消耗一层水势：恢复灵力
     double waterKeep = 0;       // 浪击保留的水势比例
     double burnStack = 0;       // 每次新施加的灼烧额外增加比例，旧灼烧天然保留
     double burnExplosion = 0;   // 引爆灼烧的额外伤害比例
+    double BurnGrowthStackPerRound = 0; // 每个已实际结算灼烧的完整回合，为之后新施加量提供附加比例。
+    double BurnGrowthExplosionPerRound = 0; // 本场已兑现灼烧回合提供的引爆成长，轮数独立封顶。
     double poisonHeal = 0;      // 每新增一层毒：气血上限比例治疗
     double poisonGrowth = 0;    // 回合结束：已有毒增加层数
     double shieldCharge = 0;    // 技能实际获得护盾时：增加蓄势

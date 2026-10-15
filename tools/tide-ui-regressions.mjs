@@ -68,7 +68,7 @@ try {
   check(await page.locator('[data-battlefield="2"]').isDisabled(), '高境界战场受权威门槛禁用');
   await page.locator('.tide-goldboard summary').click();
   check(await page.locator('.tide-ranking-scroll').isVisible(), '金榜可点击展开');
-  check((await page.locator('.tide-ranking-scroll').innerText()).includes('完整流派'), '特殊 NPC 构筑标记可见');
+  check((await page.locator('.tide-ranking-scroll').innerText()).includes('流派高手'), '特殊 NPC 构筑标记可见');
   await page.locator('[data-battlefield="1"]').click();
   await page.locator('.tide-combat-clock').waitFor();
   check(requests.at(-1).body.battlefield === 1, '选定筑基战场使用数字权威 ID 请求');

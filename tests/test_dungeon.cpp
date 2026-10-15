@@ -1,11 +1,14 @@
 #include "harness.h"
 #include <algorithm>
+#include <deque>
 #include <set>
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/calendar.h"
 #include "core/checkpoint.h"
 #include "core/dungeon.h"
+#include "core/exploration/dungeon_events.h"
+#include "core/exploration/dungeon_reward_rules.h"
 #include "core/json.h"
 #include "core/save.h"
 #include "core/sim.h"
@@ -59,6 +62,43 @@ void completeRoute(Game& g, bool claimBoss = true) {
             dungeonChoose(g, available.front());
         }
     }
+}
+// 用途：按真实连线查找可达目标房间；流程：新版随机列路线交互回归。
+// 使用方式：传当前route状态与目标type；返回：包含目标的最短节点ID路线，找不到时为空。
+vector<string> mfRouteToRoomType(const DungeonRun& Run, const string& Type) {
+    std::deque<vector<string>> Paths;
+    for (const auto& Node : Run.nodes)
+        if (dungeonNodeAvailable(Run, Node.id)) Paths.push_back({Node.id});
+    std::set<string> Seen;
+    while (!Paths.empty()) {
+        auto Path = std::move(Paths.front()); Paths.pop_front();
+        const string NodeId = Path.back();
+        if (!Seen.insert(NodeId).second) continue;
+        const auto Node = std::find_if(Run.nodes.begin(), Run.nodes.end(), [&](const auto& Entry) { return Entry.id == NodeId; });
+        if (Node == Run.nodes.end()) continue;
+        if (Node->type == Type) return Path;
+        for (const auto& NextId : Node->next) {
+            auto NextPath = Path; NextPath.push_back(NextId); Paths.push_back(std::move(NextPath));
+        }
+    }
+    return {};
+}
+// 用途：逐层实际行走到目标房间；流程：事件、游商、营地与首领奖励回归。
+// 使用方式：仅在隔离夹具调用，途中以已有胜利夹具结束斗法、跳过奖励；返回：是否真实抵达目标。
+// 说明：该辅助只验证路线与兑现，不使用自动判胜结果说明任何自然战斗胜率。
+bool mfVisitRoomType(Game& State, const string& Type) {
+    if (!State.dungeons.run || State.dungeons.run->phase != "route") return false;
+    const auto Path = mfRouteToRoomType(*State.dungeons.run, Type);
+    if (Path.empty()) return false;
+    for (const auto& NodeId : Path) {
+        if (!dungeonChoose(State, NodeId).empty() || !State.dungeons.run) return false;
+        if (NodeId == Path.back()) return true;
+        if (State.player.arts.battle) winCurrentBattle(State, 70);
+        if (!State.dungeons.run) return false;
+        if (State.dungeons.run->phase == "reward" && !dungeonClaim(State, "skip").empty()) return false;
+        if (State.dungeons.run->phase != "route") return false;
+    }
+    return false;
 }
 int stashTarget(const DungeonRun& run) {
     const auto& inventory = run.targetKind == "herb" ? run.herbs : run.materials;
@@ -151,23 +191,32 @@ void runDungeonTests() {
         check(site && site->targetKind.empty() && !site->bossRewards.empty(), "周期" + type + "秘境以冻结永久奖励作为主目标");
         if (!site) continue;
         const auto cash = std::find_if(site->bossRewards.begin(), site->bossRewards.end(), [](const auto& reward) { return reward.kind == "stones"; });
-        const int expected = 250 + 6 * 80 + (type == "sea" ? 100 : 180);
+        const int expected = mfDungeonRewardRulesForStage(6, type).MainStones;
         check(cash != site->bossRewards.end() && cash->amount == expected, "海域和天魔眼提供比同境野外更多的灵石宝藏");
+        const int EntryStage = site->stage;
         const string id = site->id; g.player.location = site->location;
         check(dungeonEnter(g, id).empty(), "进入周期秘境检验真实首领奖励");
         completeRoute(g, false);
         check(g.dungeons.run && g.dungeons.run->cleared && !g.dungeons.run->targetGranted, "周期秘境真实通关不再固定发材料十份");
         if (!g.dungeons.run) continue;
-        bool lowGrade = true;
+        const auto HerbPool = mfDungeonHerbRewardPool(EntryStage);
+        const auto MaterialPool = mfDungeonMaterialRewardPool(EntryStage);
+        const int EntryGrade = mfDungeonRewardRulesForStage(EntryStage, type).MaterialGrade;
+        bool FitsEntryPools = true, SawHighGradeMaterial = false;
         for (const auto& [name, count] : g.dungeons.run->herbs) {
             const auto* herb = findHerbByName(name);
-            lowGrade = lowGrade && herb && herb->grade <= 2 && count >= 0;
+            FitsEntryPools = FitsEntryPools && herb && count > 0 && std::any_of(HerbPool.begin(), HerbPool.end(),
+                [&](const auto* Allowed) { return herb && Allowed->id == herb->id; });
+            SawHighGradeMaterial = SawHighGradeMaterial || (herb && herb->grade == EntryGrade && herb->grade > 2 && count > 0);
         }
         for (const auto& [id, count] : g.dungeons.run->materials) {
             const auto item = std::find_if(data::MaterialDef_TABLE().begin(), data::MaterialDef_TABLE().end(), [&](const auto& def) { return def.id == id; });
-            lowGrade = lowGrade && item != data::MaterialDef_TABLE().end() && item->grade <= 2 && count >= 0;
+            FitsEntryPools = FitsEntryPools && item != data::MaterialDef_TABLE().end() && count > 0 &&
+                std::any_of(MaterialPool.begin(), MaterialPool.end(), [&](const auto* Allowed) { return Allowed->id == id; });
+            SawHighGradeMaterial = SawHighGradeMaterial || (item != data::MaterialDef_TABLE().end() && item->grade == EntryGrade && item->grade > 2 && count > 0);
         }
-        check(lowGrade, "高境周期秘境沿途仅发一二阶附带材料");
+        check(FitsEntryPools, "高境周期秘境沿途材料属于冻结入口的真实适阶池");
+        check(SawHighGradeMaterial, "高境周期秘境真实获得入口对应的三阶材料，不再固定一二阶");
         const int stored = g.dungeons.run->stones;
         check(dungeonClaim(g, "skip").empty(), "周期秘境首领选择可领取永久灵石兜底");
         checkEq(g.dungeons.run->stones, stored + expected, "周期秘境主奖励真实进入探索行囊");
@@ -262,12 +311,21 @@ void runDungeonTests() {
         check(!dungeonEnter(g, id).empty(), "买到情报之后仍须赶往地图真实入口");
         g.player.location = location;
         check(dungeonEnter(g, id).empty(), "定向副本到达后可以进入");
+        check(mfVisitRoomType(g, "boss"), "定向秘境沿真实合法路线抵达首领");
+        check(g.player.arts.battle.has_value(), "终点材料验证停在实际首领战尚未结算时");
+        if (!g.dungeons.run || !g.player.arts.battle) return;
+        const int BeforeBossTargetCount = stashTarget(*g.dungeons.run);
+        check(!g.dungeons.run->targetGranted, "首领战前未发放保底目标材料");
+        winCurrentBattle(g, 75);
+        check(g.dungeons.run && g.dungeons.run->targetGranted, "首领胜利实际发放终点保底");
+        if (!g.dungeons.run) return;
+        checkEq(stashTarget(*g.dungeons.run) - BeforeBossTargetCount, 10, "首领相对沿途既有库存恰好追加十份目标材料");
         completeRoute(g);
         check(g.dungeons.run && g.dungeons.run->phase == "complete", "沿路线击败终点首领后真实通关");
         if (!g.dungeons.run) return;
         check(g.dungeons.run->targetGranted && g.dungeons.run->cleared, "Boss结算登记一次终点固定掉落");
         const int targetCount = stashTarget(*g.dungeons.run);
-        checkEq(targetCount, 10, "指定高级目标材料仅在终点保底获得十份");
+        check(targetCount >= 10, "定向目标最终库存包含十份保底及可能沿途掉落");
         check(g.dungeons.run->bossRewardClaimed, "定向副本保底材料之外仍实际选择永久通关奖励");
         checkEq(bagTarget(g.player, target.kind, target.id, target.name), original, "通关前后材料先放探索行囊，未提前写入普通行囊");
         check(dungeonStateError(g).empty(), "完整通关路线与终点掉落通过校验");
@@ -436,49 +494,75 @@ void runDungeonTests() {
     {
         Game g = dungeonGame(3); startWild(g);
         if (!g.dungeons.run) return;
-        auto chooseLaneZero = [&]() {
-            const auto available = availableNodes(g);
-            if (!available.empty()) dungeonChoose(g, available.front());
-        };
-        chooseLaneZero(); winCurrentBattle(g, 70);
-        if (g.dungeons.run->rewards.empty()) return;
-        dungeonClaim(g, g.dungeons.run->rewards.front().id);
-        chooseLaneZero();
-        const auto cache = std::find_if(g.dungeons.run->rewards.begin(), g.dungeons.run->rewards.end(), [](const auto& reward) { return reward.kind == "cache"; });
-        check(cache != g.dungeons.run->rewards.end(), "奇遇节点提供休整、搜藏和付血三种真实选项");
-        if (cache != g.dungeons.run->rewards.end()) dungeonClaim(g, cache->id);
-        else dungeonClaim(g, "skip");
-        chooseLaneZero(); winCurrentBattle(g, 60); dungeonClaim(g, "skip");
-        chooseLaneZero();
-        const auto shop = std::find_if(g.dungeons.run->rewards.begin(), g.dungeons.run->rewards.end(), [](const auto& reward) { return reward.kind == "buyRelic"; });
-        check(shop != g.dungeons.run->rewards.end(), "游商拥有可付费购买的真实秘境遗物");
-        if (shop != g.dungeons.run->rewards.end()) {
+        check(mfVisitRoomType(g, "event"), "根据真实随机路线逐层抵达奇遇，不假设固定列");
+        if (!g.dungeons.run) return;
+        check(g.dungeons.run->phase == "reward" && !g.dungeons.run->rewards.empty() &&
+            std::all_of(g.dungeons.run->rewards.begin(), g.dungeons.run->rewards.end(),
+                [](const auto& Reward) { return Reward.kind == "eventChoice"; }),
+            "新版奇遇生成实际主题对应的冻结事件选项");
+        const auto EventChoice = std::find_if(g.dungeons.run->rewards.begin(), g.dungeons.run->rewards.end(),
+            [&](const auto& Reward) { return mfQuoteDungeonEvent(g, Reward.id).Enabled; });
+        check(EventChoice != g.dungeons.run->rewards.end(), "真实奇遇存在符合当前资源的可选取舍");
+        if (EventChoice != g.dungeons.run->rewards.end()) {
+            const string EventRewardId = EventChoice->id;
+            const auto Quote = mfQuoteDungeonEvent(g, EventRewardId);
+            const auto KnownSpells = g.player.arts.knownSpells;
+            const int Health = g.dungeons.run->health, Stones = g.dungeons.run->stones;
+            const auto DeckCount = g.dungeons.run->deck.size(), RelicCount = g.dungeons.run->relics.size();
+            check(dungeonClaim(g, EventRewardId).empty(), "通过正式领奖入口实际兑现奇遇取舍");
+            check(g.dungeons.run->phase == "route" && g.dungeons.run->rewards.empty(), "奇遇兑现后清空其他选项并回到路线");
+            if (Quote.HealthCost > 0) checkEq(g.dungeons.run->health, Health - Quote.HealthCost, "奇遇实际付血与报价一致");
+            if (Quote.StoneCost > 0) checkEq(g.dungeons.run->stones, Stones - Quote.StoneCost, "奇遇实际费用与报价一致");
+            check(g.dungeons.run->health != Health || g.dungeons.run->stones != Stones ||
+                g.dungeons.run->deck.size() != DeckCount || g.dungeons.run->relics.size() != RelicCount,
+                "选中的奇遇实际改变临时物资、牌组、遗物或气血");
+            check(g.player.arts.knownSpells == KnownSpells, "奇遇临时构筑收益不写入永久神通");
+            const string AfterEvent = saveToJson(g);
+            check(!dungeonClaim(g, EventRewardId).empty() && saveToJson(g) == AfterEvent, "奇遇选择不能重复领取或重复扣资源");
+        }
+        check(dungeonStateError(g).empty(), "新版奇遇实际交互后状态保持一致");
+
+        // 各房间使用独立初始run，避免先前选择的合法分支让其他类型变得不可达。
+        Game Merchant = dungeonGame(3); check(startWild(Merchant), "游商交互建立独立合法路线");
+        check(mfVisitRoomType(Merchant, "merchant"), "根据真实连线逐层抵达游商");
+        if (!Merchant.dungeons.run) return;
+        const auto shop = std::find_if(Merchant.dungeons.run->rewards.begin(), Merchant.dungeons.run->rewards.end(), [](const auto& reward) { return reward.kind == "buyRelic"; });
+        check(shop != Merchant.dungeons.run->rewards.end(), "游商拥有可付费购买的真实秘境遗物");
+        if (shop != Merchant.dungeons.run->rewards.end()) {
             const string rewardId = shop->id, relicId = shop->relic;
-            const int cost = shop->amount, originalStones = g.dungeons.run->stones;
-            g.dungeons.run->stones = 0;
-            const auto noCash = saveToJson(g);
-            check(!dungeonClaim(g, rewardId).empty(), "探索灵石不足不能挪用玩家普通行囊购买秘境遗物");
-            check(saveToJson(g) == noCash, "游商购买失败不改变遗物和探索资金");
-            g.dungeons.run->stones = std::max(originalStones, cost);
-            const int before = g.dungeons.run->stones;
-            check(dungeonClaim(g, rewardId).empty(), "可用本次探索获得的灵石购买遗物");
-            checkEq(g.dungeons.run->stones, before - cost, "游商消耗实际探索资金");
-            check(std::find(g.dungeons.run->relics.begin(), g.dungeons.run->relics.end(), relicId) != g.dungeons.run->relics.end(), "购买的遗物成为本次探索战斗被动");
-        } else dungeonClaim(g, "skip");
-        chooseLaneZero();
-        const auto remove = std::find_if(g.dungeons.run->rewards.begin(), g.dungeons.run->rewards.end(), [](const auto& reward) { return reward.kind == "remove"; });
-        check(remove != g.dungeons.run->rewards.end(), "营地提供针对额外神通的实际删牌选项");
-        check(std::none_of(g.dungeons.run->rewards.begin(), g.dungeons.run->rewards.end(), [&](const auto& reward) {
+            const int cost = shop->amount, originalStones = Merchant.dungeons.run->stones;
+            Merchant.dungeons.run->stones = 0;
+            const auto noCash = saveToJson(Merchant);
+            check(!dungeonClaim(Merchant, rewardId).empty(), "探索灵石不足不能挪用玩家普通行囊购买秘境遗物");
+            check(saveToJson(Merchant) == noCash, "游商购买失败不改变遗物和探索资金");
+            Merchant.dungeons.run->stones = std::max(originalStones, cost);
+            const int before = Merchant.dungeons.run->stones;
+            check(dungeonClaim(Merchant, rewardId).empty(), "可用本次探索获得的灵石购买遗物");
+            checkEq(Merchant.dungeons.run->stones, before - cost, "游商消耗实际探索资金");
+            check(std::find(Merchant.dungeons.run->relics.begin(), Merchant.dungeons.run->relics.end(), relicId) != Merchant.dungeons.run->relics.end(), "购买的遗物成为本次探索战斗被动");
+            const string Purchased = saveToJson(Merchant);
+            check(!dungeonClaim(Merchant, rewardId).empty() && saveToJson(Merchant) == Purchased, "游商购买不能重复提交再次扣费");
+        }
+        check(dungeonStateError(Merchant).empty(), "游商实际购买后状态保持一致");
+
+        Game Camp = dungeonGame(3); check(startWild(Camp), "营地交互建立独立合法路线");
+        check(mfVisitRoomType(Camp, "camp"), "根据真实连线逐层抵达营地");
+        if (!Camp.dungeons.run) return;
+        const auto remove = std::find_if(Camp.dungeons.run->rewards.begin(), Camp.dungeons.run->rewards.end(), [](const auto& reward) { return reward.kind == "remove"; });
+        check(remove != Camp.dungeons.run->rewards.end(), "营地提供针对额外神通的实际删牌选项");
+        check(std::none_of(Camp.dungeons.run->rewards.begin(), Camp.dungeons.run->rewards.end(), [&](const auto& reward) {
             if (reward.kind != "remove") return false;
-            const auto card = std::find_if(g.dungeons.run->deck.begin(), g.dungeons.run->deck.end(), [&](const auto& item) { return item.uid == reward.spell; });
-            return card != g.dungeons.run->deck.end() && (card->spell == "strike" || card->spell == "defend");
+            const auto card = std::find_if(Camp.dungeons.run->deck.begin(), Camp.dungeons.run->deck.end(), [&](const auto& item) { return item.uid == reward.spell; });
+            return card != Camp.dungeons.run->deck.end() && (card->spell == "strike" || card->spell == "defend");
         }), "营地不能删除必带普通攻击或普通防御");
-        if (remove != g.dungeons.run->rewards.end()) {
-            const string id = remove->id; const int count = g.dungeons.run->deck.size();
-            check(dungeonClaim(g, id).empty(), "营地确认删除一张额外神通");
-            checkEq(g.dungeons.run->deck.size(), count - 1, "临时牌组实际移除所选的一张牌");
-        } else dungeonClaim(g, "skip");
-        check(dungeonStateError(g).empty(), "事件、游商、营地交互后状态保持一致");
+        if (remove != Camp.dungeons.run->rewards.end()) {
+            const string id = remove->id, CardUid = remove->spell; const int count = Camp.dungeons.run->deck.size();
+            check(dungeonClaim(Camp, id).empty(), "营地确认删除一张额外神通");
+            checkEq(Camp.dungeons.run->deck.size(), count - 1, "临时牌组实际移除所选的一张牌");
+            check(std::none_of(Camp.dungeons.run->deck.begin(), Camp.dungeons.run->deck.end(),
+                [&](const auto& Card) { return Card.uid == CardUid; }), "营地删除的确为所选UID实例");
+        }
+        check(dungeonStateError(Camp).empty(), "营地实际删牌后状态保持一致");
     }
     {
         Game g = dungeonGame(9);

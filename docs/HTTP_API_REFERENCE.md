@@ -1,8 +1,8 @@
 # HTTP API 参考与统计
 
-核对日期：2026-10-13。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
+核对日期：2026-10-15。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
 
-2026-10-13 补充核对：以下建角协议、学习报价、炼丹经济与 NPC 服丹字段按当前实现更新；本轮新增五个洞府灵田写端点，并保留兽潮端点；下方总数按当前RouteInfo重新统计。
+2026-10-15 补充核对：新增小绿瓶升阶、专属秘境及低阶秘境扫荡三个写端点，旧灵田储备端点保留为明确拒绝的兼容入口。下方按当前 RouteInfo 重新统计。独立斗法实验服务的四个本机端点不计入正式游戏。
 
 责任边界：我们维护核心规则与桌面 UI；账号、联机传输、天机大比由另一位成员维护。服务层增加可选本地启动模式与只读模式探测；默认公网模式和 Tianji Store 业务实现保持原样。
 
@@ -10,16 +10,16 @@
 
 | 分派归属 | 精确端点 | 查询 | 写操作 | ReplaceGame | Persistence |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 核心 RouteInfo 表 | 91 | 20 ReadOnly | 65 Mutation | 3 | 3 |
+| 核心 RouteInfo 表 | 94 | 20 ReadOnly | 68 Mutation | 3 | 3 |
 | 服务层模式/账号/社区（排除转发Tianji） | 8 | 4 | 4 | 0 | 0 |
 | Tianji Store | 5 | 2 | 3 | 0 | 0 |
-| 总计（路径去重） | **104** | **26** | **72** | **3** | **3** |
+| 总计（路径去重） | **107** | **26** | **75** | **3** | **3** |
 
 核心四类取自真实 `RouteEffect`。服务层/Tianji 的查询与写操作按用途列示，它们没有使用该 enum；查询可维护会话、缓存或天机窗口记录，不能据此推断服务器完全没有 I/O。`/api/tianji/board` 在 web_main 与 Store 均出现，但最终归 Tianji，仅计一次。web_main 的精确分派共9条，其中8条为服务专属。
 
 ## 请求、登录与通用返回
 
-- 多人 Web 服务中，全部91个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
+- 多人 Web 服务中，全部94个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
 - 显式 `--local` 启动时强制监听 `127.0.0.1`，使用内置本地会话，空档按默认配置开局。账号、反馈、排行榜、导出及全部 `/api/tianji/` 返回404；不初始化或读取 Tianji Store。默认不加此参数，继续使用上述公网鉴权。
 - 核心输入从 JSON **请求正文**读取，不从URL查询串读取；需要参数的查询建议使用POST JSON。表中未列默认值的字符串参数缺省为`""`，随后由对应规则校验；“无”表示没有业务输入。非空正文必须是JSON对象。
 - 所有20条核心 ReadOnly 端点均支持 **GET和POST**；其余核心端点只支持POST。成功的核心动作通常返回 `{ok:true,state:{...}}`，某些动作附加text/report；可能出现checkpointWarning。state包括玩家、功法、世界、经济、社交、秘境与恢复点视图。
@@ -159,6 +159,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 | 路径 | 方法 | 类别 | 登录 | 主要输入/默认值 | 返回概要/副作用 |
 | --- | --- | --- | --- | --- | --- |
 | `/api/dungeon/enter` | POST | 动作 | 是 | `id` 秘境标识 | 进入秘境；状态、targetTab=dungeon |
+| `/api/dungeon/sweep` | POST | 动作 | 是 | 仅非空字符串`id` | 至少高于入口一个大境界，复用所在地/有效期/空闲资格；直接进入冻结终奖选择，不自动替选、不发沿途奖励，离境结算1天 |
 | `/api/dungeon/choose` | POST | 动作 | 是 | `id` 选项/节点标识 | 选择当前秘境行动；状态、targetTab=dungeon |
 | `/api/dungeon/claim` | POST | 动作 | 是 | `id` 奖励选项标识 | 领取秘境奖励；状态、targetTab=dungeon |
 | `/api/dungeon/leave` | POST | 动作 | 是 | 无 | 结束/退出秘境探索；状态 |
@@ -229,7 +230,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 - `arts/spells[].preview`与携带spellList/mandatorySpells含damage/shield/heal/healPotential、cost、energy/manaGain、qi/draw/drawNext、hpMaxChange/manaRegenDelta、storedMana、damageBonusPct/reductionPct/guardPct、statuses、conditions。known/learned/equipped/canEquip/canUnequip等用于学习与携带资格。
 - `state.gears[].ability.preview`、passive.delta与canEquip来自局部装备投影；actions包含enabled/reason/costStones/returnStones。forge-preview补充材料角色与缺口、灵石缺口、blockers以及inscribedAbility/inscribedPassive。
 - `state.pillCatalog[]`覆盖全部丹药，包括effect/effectValue/baseEffect/catalogEffect/usage、owned/used/tolerance、poisonAfter/poisonDelta、requiredStage/requiredRealm和enabled/reason；breakthrough给出真实chance/cost/days/failureLoss及消耗说明。`catalogEffect` 为角色无关的本地标称能力，不受当前境界、属性、天赋、耐药与库存截断；修为丹另提供 `catalogEffectValue`（本地标称修为点）。`effect` / `effectValue` 仍为当前真实服用结果，不能互换；修为丹 `usage` 列出标称值、小境25%上限及距圆满余量。`market[].grade` 来自物品定义，未知为0；丹药市场与 `brewOptions[]` 也提供 `catalogEffect`，后者增加真实配方品阶。
-- battle视图的hand/artifacts使用实时battlePreview，enemyMana/enemyMaxMana与intentDescription/intentDamage/intentShield/intentHeal/intentSpells反映当前战斗；Tianji encounter复用公开battleView。
+- battle视图的hand/artifacts使用实时battlePreview，enemyMana/enemyMaxMana与intentDescription/intentDamage/intentShield/intentHeal/intentSpells反映当前战斗；Tianji encounter复用公开battleView。enemyActionCount为当前预演实际招式数，enemyActionLimit为境界行动上限，护盾/治疗/抽牌也计作动作；修士没有预演招式时intentName明确显示不行动或斗法已结束，不回退旧攻击标题。妖兽使用独立的beastActionLimit/beastEnergyBudget/beastActions逐段信息，字段与冻结计划见BEAST_ACTIONS.md。
 
 业务标识采用服务端实际id；界面展示名称、中文兼容值与HTTP字段不应被用于推导或复制数值公式。JSON中直接使用上述已存在字段，前端别名如isLearned不构成额外HTTP端点。
 
@@ -276,16 +277,22 @@ NPC新增记录保存在导出/导入JSON中的 `npcs[].pillState`，**不作为
 炼丹支持1/3/5/10炉；炼器支持1至100份备料，保持实际每次开炉1件。报价叠加本地货源、总库存容量、当前灵石和工作阻塞。客户端建议传expectedCost，金额变化时拒绝确认。
 state新增herbCatalog/materialCatalog供野外行囊识别名称与品阶；每件gears.salvage含materials、costStones、estimated、sourceNote，与实际gear/salvage共用回收规则。
 
-## 洞府灵田（本轮新增5个核心Mutation端点）
+## 洞府灵田与永久小绿瓶
 
-所有动作必须POST，并要求回到自己的洞府且无进行中的斗法、抉择、工作或秘境。数量及转账金额为严格整数，拒绝不改变材料、余额、日期或RNG。
+所有动作必须POST，并要求回到自己的洞府且无进行中的斗法、抉择、工作或秘境。数量和阶位为严格整数，拒绝不改变材料、余额、日期或RNG。规则版本2移除储备与日费，成长和费用由后端统一报价。
 
 | 路径 | 正文 | 成功行为 |
 | --- | --- | --- |
-| `/api/cave/garden/plant` | `plotId,herbId,count` | 扣已有药材，按独立批次播种，同格同种最多99份 |
+| `/api/cave/garden/plant` | `plotId,herbId,count` | 扣已有药材，按独立批次播种，同格同种最多12份 |
 | `/api/cave/garden/harvest` | `plotId` | 只收成熟批次，每份种苗产3份草药 |
-| `/api/cave/garden/reserve/deposit` | `plotId,amount` | 必须持有小绿瓶；从背包转入指定格的灵石储备，无瓶拒绝且不改状态 |
-| `/api/cave/garden/reserve/withdraw` | `plotId,amount` | 取回本格储备，不推进世界日 |
-| `/api/cave/garden/clear` | `plotId` | 放弃所有种苗，保留储备；界面须确认 |
+| `/api/cave/garden/reserve/deposit` | 旧接口 | 机制已移除，明确拒绝且不改状态 |
+| `/api/cave/garden/reserve/withdraw` | 旧接口 | 机制已移除，明确拒绝且不改状态；旧余额在真实日或园艺动作自动退回 |
+| `/api/cave/garden/clear` | `plotId` | 放弃所有种苗；界面须确认 |
+| `/api/cave/green-bottle/upgrade` | `expectedGrade` | 按同一报价永久升一级；阶位0至6，过期/资源不足不扣费 |
+| `/api/cave/green-bottle/dungeon` | `grade,expectedGrade` | grade为4/5/6，瓶阶至少3/4/5；洞府内创建并进入一次真实秘境，无额外门票 |
+
+两个绿瓶端点在 `interface/routes.cpp` 登记为 `Mutation`，沿用全部默认忙碌阻断，不开放斗法、抉择、工作或秘境中调用；领域再次校验真实洞府位置和资格。请求拒绝未知键、缺字段、非整数、越界和过期阶位。
+
+`state.cave.greenBottle` 无天赋仅有 `hasTalent:false`；持有者含当前/下阶品阶与附加日增、自然/总日增、`upgrade`统一灵石及材料缺量报价、两组固定6项`{grade,days}`成熟周期对比，以及已解锁`dungeons`入口（品阶、专属材料名、保底10份、最低瓶阶、资格/原因）。`garden.plots`提供`naturalUnitsPerDay/bottleBonusUnitsPerDay/effectiveUnitsPerDay`和各批`estimatedDays`，不再暴露储备、日费或灵气催生计划。
 
 `state.cave.access/training/garden`为纯只读快照；`state.workshopAvailable`仅表示所在城市或自己的洞府有工坊条件，不改变野外坊市资格。`state.*.pricing`给出完整材料价值、1.5/3倍基价和法器逐项额外出售乘数；操作时重新按权威价格检查。`/api/mode.features.resourcePoints`给出requested/available/mutationsAllowed/status。骨架即使请求开启也不可变更游戏。

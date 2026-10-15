@@ -16,6 +16,7 @@
 namespace nz::persistence {
 
 void migrateLegacySave(const Value& root, Game& game) {
+    crafting::mfMigrateGardenRules(game);
     // 旧版本两个聚气神通共用 gather，实际执行总会选到持续聚气。
     // 带版本标记的新档保留基础聚气；旧档只迁移已有牌，不重置斗法。
     if (root["combatRulesVersion"].asInt(1) < 2) {
@@ -129,6 +130,10 @@ void completeLoadedSave(const Value& root, Game& game, bool detached) {
             return npc.asObject().find("combatProfileId")==npc.asObject().end();
         });
         if (legacyProfiles) content::ensureChampionNpcs(game);
+        // 老世界没有玄道宗时，在已授权读档初始化边界补山门和常态传承者。
+        // 留影 detached 不补世界；已有六宗账簿的新档也不重赋人物身份。
+        if (!game.npcs.empty() && !game.world.sects.contains("xuandao"))
+            content::mfEnsureSectTransmissions(game);
         tide::ensureTide(game);
     }
 

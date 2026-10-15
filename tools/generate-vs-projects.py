@@ -5,7 +5,7 @@ from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parent.parent
 DEST = ROOT / "visual-studio"
-PROJECTS = ["ningzhou_web", "nzcore", "ningzhou", "ningzhou_tests"]
+PROJECTS = ["ningzhou_web", "nzcore", "ningzhou", "ningzhou_tests", "ningzhou_battle_lab"]
 GUIDS = {name: "{" + str(uuid5(NAMESPACE_URL, "ningzhou-dream/" + name)).upper() + "}" for name in PROJECTS}
 
 
@@ -24,7 +24,7 @@ def items(name):
     elif name == "ningzhou":
         files = [ROOT / "src/ui.cpp"]
     else:
-        files = [ROOT / "src/web_main.cpp"]
+        files = [ROOT / ("src/battle_lab_main.cpp" if name == "ningzhou_battle_lab" else "src/web_main.cpp")]
         files += [file for file in (ROOT / "web").rglob("*") if file.suffix in {".mjs", ".css", ".html"}]
     result = []
     for file in sorted(files):
@@ -84,8 +84,10 @@ def generate():
         xml += ['</ItemGroup>']
         if name != "nzcore":
             xml.append(f'<ItemGroup><ProjectReference Include="nzcore.vcxproj"><Project>{GUIDS["nzcore"]}</Project></ProjectReference></ItemGroup>')
-        if name == "ningzhou_web":
-            xml += ['<ItemGroup><WebAssets Include="..\\web\\**\\*"/></ItemGroup>', '<Target Name="CopyWebAssets" AfterTargets="Build"><Copy SourceFiles="@(WebAssets)" DestinationFiles="@(WebAssets->\'$(OutDir)web\\%(RecursiveDir)%(Filename)%(Extension)\')" SkipUnchangedFiles="true"/></Target>']
+        if name in {"ningzhou_web", "ningzhou_battle_lab"}:
+            exclude = ' Exclude="..\\web\\battle-lab.html;..\\web\\battle-lab.mjs;..\\web\\battle-lab.css"' if name == "ningzhou_web" else ""
+            asset_directory = "battle-lab-web" if name == "ningzhou_battle_lab" else "web"
+            xml += [f'<ItemGroup><WebAssets Include="..\\web\\**\\*"{exclude}/></ItemGroup>', f'<Target Name="CopyWebAssets" AfterTargets="Build"><Copy SourceFiles="@(WebAssets)" DestinationFiles="@(WebAssets->\'$(OutDir){asset_directory}\\%(RecursiveDir)%(Filename)%(Extension)\')" SkipUnchangedFiles="true"/></Target>']
         xml += ['<Import Project="$(VCTargetsPath)\\Microsoft.Cpp.targets"/>', '</Project>']
         write(name + ".vcxproj", "\n".join(xml) + "\n")
         groups = set()

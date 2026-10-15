@@ -1,5 +1,6 @@
 #include "harness.h"
 #include "core/crafting/cave_garden.h"
+#include "core/crafting/garden_rules.h"
 #include "core/crafting/herb_acquisition.h"
 #include "core/json.h"
 #include "core/arts.h"
@@ -32,9 +33,9 @@ nz::Game mfGardenForecastFixture(const nz::data::HerbDef& Herb, int ReserveStone
     State.player.stage = 12; State.player.lifespan = 2000;
     State.player.cave = State.player.location = "wuling"; State.player.caveTier = 2;
     State.player.qiSupply = QiLevel; State.player.traits = HasBottle ? nz::vector<nz::string>{"greenBottle"} : nz::vector<nz::string>{};
-    constexpr int BaseDays[] = {30, 60, 120, 240, 480, 960};
+    State.player.arts.GreenBottleGrade = HasBottle ? 3 : 0;
     auto& Plot = State.Garden.Plots[0]; Plot.HerbId = Herb.id; Plot.ReserveStones = ReserveStones;
-    Plot.Cohorts = {{1, 0}, {1, BaseDays[Herb.grade - 1] * 100 - 100}, {3, 100}};
+    Plot.Cohorts = {{1, 0}, {1, nz::crafting::GardenMaturityUnits[Herb.grade - 1] - 20}, {3, 100}};
     return State;
 }
 }
@@ -104,25 +105,26 @@ void mfRunTimePerformanceTests() {
                     const int PreviousBackpack = State.player.stones;
                     ++State.clock.days; mfGardenDayTick(State);
                     const auto& Result = State.Garden.Plots[0];
-                    checkEq(Result.ReserveStones, ReserveStones - (Info.AccelerationFunded ? Info.DailyCostStones : 0),
-                        "下一日真实储备扣费与权威报价一致");
+                    checkEq(Result.ReserveStones, 0, "真实日只退还旧储备，不存在成长收费");
                     bool ProgressMatches = Result.Cohorts.size() == PreviousCohorts.size();
                     for (std::size_t BatchIndex = 0; BatchIndex < Result.Cohorts.size(); ++BatchIndex)
                         ProgressMatches = ProgressMatches && Result.Cohorts[BatchIndex].ProgressUnits ==
                             std::min(Info.RequiredUnits, PreviousCohorts[BatchIndex].ProgressUnits + Info.EffectiveUnitsPerDay);
                     check(ProgressMatches, "所有播种批次真实成长与权威报价一致，含临成熟批次");
-                    check(State.rng == PreviousRng && State.player.stones == PreviousBackpack,
-                        "日结算不推进RNG且不挪用背包灵石");
+                    check(State.rng == PreviousRng && State.player.stones == PreviousBackpack + ReserveStones,
+                        "日结算不推进RNG，旧余额恰好退还一次");
                     const auto DaySnapshot = saveToJson(State); mfGardenDayTick(State);
                     check(saveToJson(State) == DaySnapshot, "重复同日结算不重复收费或成长");
-                    int ElapsedDays = 1;
-                    while (ElapsedDays < Info.EstimatedEffectiveDays) {
-                        ++State.clock.days; mfGardenDayTick(State); ++ElapsedDays;
+                    if (Grade == 1 && ReserveStones == 0 && QiLevel == 0) {
+                        int ElapsedDays = 1;
+                        while (ElapsedDays < Info.EstimatedEffectiveDays) {
+                            ++State.clock.days; mfGardenDayTick(State); ++ElapsedDays;
+                        }
+                        bool AllMature = true;
+                        for (const auto& Batch : State.Garden.Plots[0].Cohorts)
+                            AllMature = AllMature && Batch.ProgressUnits == Info.RequiredUnits;
+                        check(AllMature, "代表性完整生长期与只读预报一致，不无依据重复数十万日长测");
                     }
-                    bool AllMature = true;
-                    for (const auto& Batch : State.Garden.Plots[0].Cohorts)
-                        AllMature = AllMature && Batch.ProgressUnits == Info.RequiredUnits;
-                    check(AllMature, "储备耗尽、分批成熟的真实完成日与只读预报一致");
                 }
             }
         }

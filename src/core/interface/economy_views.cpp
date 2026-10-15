@@ -1,6 +1,7 @@
 #include "core/interface/routes.h"
 #include "core/roster.h"
 #include "core/interface/views.h"
+#include "core/content/green_bottle_content.h"
 #include "core/interface/view_helpers.h"
 #include "core/arts.h"
 #include "core/economy.h"
@@ -104,6 +105,12 @@ void mfAppendEconomyState(const Game& GameState, Value& State, const shop::Marke
             Value item(json::Object{}); item.set("id",str(material.id)); item.set("name",str(material.name)); item.set("grade",num(material.grade));
             item.set("desc",str(std::to_string(material.grade)+"阶材料 · "+material.element+" · "+material.polarity)); materials.push_back(std::move(item));
         }
+        for (const auto& Definition : content::mfGreenBottleMaterials()) {
+            const auto& Material = Definition.Material;
+            Value Item(json::Object{}); Item.set("id", Material.id); Item.set("name", Material.name); Item.set("grade", Material.grade);
+            Item.set("desc", std::to_string(Material.grade) + "阶专属秘境灵材 · 可恢复绿瓶灵性或作炼器配料");
+            materials.push_back(std::move(Item));
+        }
         State.set("herbCatalog",Value(std::move(herbs))); State.set("materialCatalog",Value(std::move(materials)));
     }
 
@@ -203,6 +210,9 @@ void mfAppendEconomyState(const Game& GameState, Value& State, const shop::Marke
     }
     State.set("marketCash", num(GameState.economy.marketCash));
     State.set("marketBudget", num(MarketContext.NextMonthBudget));
+    State.set("marketRefreshCycleDays", num(MarketContext.RefreshCycleDays));
+    State.set("marketDaysUntilRefresh", num(MarketContext.DaysUntilRefresh));
+    State.set("marketSaleCountUnlimited", true);
     State.set("marketTier", num(ecoMarketTier(GameState.player)));
     State.set("marketRealmMultiplier", num(mfMarketRealmMultiplier(GameState.player)));
     State.set("marketBudgetRule", str(mfMarketBudgetRule()));

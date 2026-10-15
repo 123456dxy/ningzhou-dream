@@ -11,6 +11,7 @@
 'use strict';
 
 import { createBuildPanel } from './build-panel.mjs';
+import { effectPurpose, renderArtsDetails } from './compact-arts.mjs';
 import { createTianji, renderTianjiReminder } from './tianji.mjs';
 import { ensureLogin } from './login.mjs';
 import { mode, hideOnlineEntries } from './nz-mode.mjs';
@@ -22,8 +23,9 @@ import { loadEcoOptions, loadForgeOptions, invalidateEco, renderEconomy, actionR
 import { loadLegacy, invalidateLegacy, draftTalents, renderEnding, renderLegacyPanel, renderDraftPanel } from './legacy.mjs';
 import { loadSects, loadAchievements, invalidateSects, renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks, renderAchievements } from './sects.mjs';
 import { renderRenownBar, renownChip } from './renown.mjs';
-import { cardKind, cardRule, cardNumbers, battleStatusRows } from './cards.mjs';
+import { cardKind, cardRule, cardNumbers, battleStatusRows, cardGenerationHint } from './cards.mjs';
 import { renderNumericPreview } from './numeric-preview.mjs';
+import { renderBeastIntent } from './beast-intent.mjs';
 import { renderAtlas, selectedTravelMode, travelFeedback, isTravelJob } from './map.mjs';
 import { renderLocationArt } from './location-art.mjs';
 import { renderPortrait, battleImpacts, animateBattleImpacts } from './portraits.mjs';
@@ -111,6 +113,7 @@ let forgePreview = null;
 let forgePreviewSerial = 0;
 let forgePreviewLoading = null;
 let artBuildFilter = 'all';
+let artBuildTier = 'initial';
 let spellDaoFilter = 'all';
 let removalSelection = null;
 let dungeonView = 'sites';
@@ -722,7 +725,7 @@ function manualCards() {
   if (!list.length) return `<div class="empty">还没有修习任何功法。</div>`;
   return `<div class="manual-list">` + list.map(m => `
     <div class="manual-card ${m.isMain ? 'is-main' : ''} ${m.isAux ? 'is-aux' : ''}">
-      ${renderManualIllustration(m)}
+      ${renderManualIllustration(m, { compact: true })}
       <div class="mc-top">
         <strong>${escape(m.name)}</strong>
         <span class="mc-dao">${escape(m.dao)}</span>
@@ -730,7 +733,7 @@ function manualCards() {
         ${m.isMain ? '<span class="tag">主修</span>' : ''}
         ${m.isAux ? '<span class="tag aux">辅修</span>' : ''}
       </div>
-      <div class="mc-effect">${escape(m.effect || '')}</div>
+      ${renderArtsDetails(effectPurpose(m.effect), `<div class="mc-effect">${escape(m.effect || '')}</div>`)}
       <div class="mc-foot">
         ${m.maxed
           ? '<span class="mc-note">已修满五层</span>'
@@ -788,8 +791,7 @@ function spellCards() {
         <span class="card-kind">${escape(cardKind(sp))}</span>
       </div>
       <div class="sc-dao">${escape(sp.dao)}系${sp.cooldown ? ` · 冷却 ${sp.cooldown} 回合` : ''} · 所需境界：${escape(sp.stageName || '炼气初期')}</div>
-      <div class="sc-rule">${escape(cardRule(sp))}</div>
-      ${renderNumericPreview(sp.preview, { compact: true })}
+      ${renderArtsDetails(`用途：${cardKind(sp)}`, `<div class="sc-rule">${escape(cardRule(sp))}</div>${renderNumericPreview(sp.preview, { compact: true })}`)}
     </div>`).join('') + `</div>`;
 }
 
@@ -838,14 +840,14 @@ function viewArts() {
       if (tab === 'arts') render();
     });
   }
-  const selectedBuild = (S.artBuilds || []).find(b => b.id === artBuildFilter);
+  const selectedBuild = (artBuildTier === 'advanced' ? S.advancedBuilds || [] : S.artBuilds || []).find(b => b.id === artBuildFilter);
   const picker = spellsReady
     ? renderSpellPicker(spellData, S, { dao: spellDaoFilter, spells: selectedBuild?.spells?.map(s => typeof s === 'string' ? s : s.id) })
     : `<div class="empty">正在读取神通表……</div>`;
   const slots = a.spellSlots ?? spellData?.max ?? 4;
   const mandatoryIds = (a.mandatorySpells || []).map(s => typeof s === 'string' ? s : s.id);
   const extraCount = (a.spells || []).filter(id => !mandatoryIds.includes(id)).length;
-  const builds = renderArtBuilds(S, spellData, artsNodes, artBuildFilter);
+  const builds = renderArtBuilds(S, spellData, artsNodes, artBuildFilter, artBuildTier);
 
   const sub = subOf('arts', 'practice');
   const top = heading('功法与悟道',
@@ -990,7 +992,7 @@ function viewSociety() {
 
   // 五宗一览：拜入山门后可做差事、以贡献兑换藏经阁功法
   const sectPanel = `<div class="chronicle-layout" style="margin-top:22px">`
-    + panel('五宗一览', '拜入山门后可做差事、以贡献兑换藏经阁功法',
+    + panel('六宗一览', '拜入山门后可做差事、以贡献兑换藏经阁功法',
             `<div style="padding:16px 22px 20px">${renderSectPicker(sectData, S.player)}</div>`)
     + `<aside class="plan-panel">`
     + asideBlock('宗门', `<div class="detail-list" style="border-top:0;padding-top:0">
@@ -1544,7 +1546,7 @@ function viewMarket() {
   + `</div>`
   + hintBox(['本地出产的药材便宜两成。',
              '炼丹会花费时间；遇事暂停后，可回岁月纪事继续推进。',
-             '出售受坊市收购资金限制，每月同类最多 8 件。']);
+             `出售不限制每月件数；坊市资金每三年刷新，距下次刷新 ${S.marketDaysUntilRefresh ?? '—'} 天。`]);
 
   // 子页签：买卖 / 炼丹 / 丹炉法器。
   // 之前这一页是「坊市 + 炼丹 + 丹炉 + 书坊 + 藏经阁」一路拉到底。
@@ -1593,6 +1595,7 @@ function viewMarket() {
 // 返回值：战斗HTML字符串。
 function viewBattle() {
   const b = S.battle;
+  const beastIntent = renderBeastIntent(b);
   // 用途：计算气血条可见宽度。
   // 流程：限制当前值与上限之比在0至100%。
   // 调用方式：战斗人物渲染传入v与m。
@@ -1638,13 +1641,16 @@ function viewBattle() {
   // 不能出的牌直接置灰并写明原因，不用玩家一张张试。
   const hand = b.hand.map(c => {
     const playable = c.playable !== false;
+    const generationHint = cardGenerationHint(c);
     return `<button class="card card-combat ${playable ? '' : 'card-disabled'}"
+                    data-elemental-generation-ready="${Boolean(generationHint)}"
                     data-action="play" data-id="${c.uid}"
                     ${playable ? '' : 'disabled'}>
       <div class="card-top"><span class="card-energy">${c.cost}</span>`
   + `<strong>${escape(c.name)}</strong>`
   + `<span class="card-kind">${escape(cardKind(c))}</span></div>`
   + `<span class="card-school">${escape(c.dao)}系</span>`
+  + (generationHint ? `<span class="elemental-generation-badge">${generationHint}</span>` : '')
   + `<span class="card-effect">${escape(cardNumbers(c)) || '—'}</span>`
   + `<span class="card-rule">${escape(cardRule(c))}</span>`
   + (playable
@@ -1685,9 +1691,10 @@ function viewBattle() {
 
     + `<div class="combat-field">`
     + actor(S.player.name, b.hp, b.max, b.shield, false)
-    + `<div class="combat-intent"><span>敌方意图</span>`
+    + `<div class="combat-intent${beastIntent ? ' has-beast-intent' : ''}"><span>敌方意图</span>`
     + `<strong>${b.intentDamage ?? b.intentRaw ?? 0}</strong><b>${escape(b.intentName)}</b>`
-    + `<p>${escape(b.intentDescription || '敌方在结束回合后行动；继续出牌会影响实际结算。')}</p>`
+    + (beastIntent || `<p>${escape(b.intentDescription || '敌方在结束回合后行动；继续出牌会影响实际结算。')}</p>`)
+    + (!b.enemyBeast ? `<small>预计行动 ${b.enemyActionCount ?? '—'} / ${b.enemyActionLimit ?? '—'} · 灵力 ${b.enemyMana ?? '—'}；抽牌、护盾和治疗也占行动</small>` : '')
     + `<small>预估气血伤害，含本次结束回合的已有持续伤害${b.intentShield ? ` · 预计获得 ${b.intentShield} 护盾` : ''}${b.intentHeal ? ` · 预计治疗 ${b.intentHeal}` : ''}</small></div>`
     + actor(b.enemy, b.enemyHp, b.enemyMax, b.enemyShield, true)
     + `</div>`
@@ -1745,18 +1752,18 @@ function renderRemoval() {
   const card = S?.battle?.hand?.find(c => c.uid === removalSelection.uid);
   const options = card ? removalOptions(card) : [];
   if (!card || card.playable === false || !options.length) { closeRemoval(); return; }
-  if (!options.some(sp => sp.id === removalSelection.target)) removalSelection.target = null;
-  const chosen = options.find(sp => sp.id === removalSelection.target);
+  if (!options.some(sp => (sp.uid || sp.id) === removalSelection.target)) removalSelection.target = null;
+  const chosen = options.find(sp => (sp.uid || sp.id) === removalSelection.target);
   const dlg = $('#battle-target-modal');
   dlg.innerHTML = `<div class="modal-inner removal-dialog"><div class="modal-heading"><div>`
     + `<div class="eyebrow">本场移除 · ${escape(card.name)}</div><h2>选择要移除的神通</h2></div>`
     + `<button class="subtle" data-action="removal-cancel" aria-label="取消移除">取消</button></div>`
-    + `<p>移除所选神通在手牌、抽牌堆与弃牌堆中的全部副本，下一场斗法恢复。`
+    + `<p>从手牌、抽牌堆或弃牌堆选择一张卡，仅移除这一张。同名其它卡仍保留，下一场斗法恢复。`
     + `确认才会消耗此牌与 ${card.cost} 点灵力。</p>`
-    + `<div class="removal-options">${options.map(sp => `<button class="removal-option${sp.id === removalSelection.target ? ' selected' : ''}" `
-      + `data-action="removal-select" data-id="${escape(sp.id)}" aria-pressed="${sp.id === removalSelection.target}">`
-      + `<strong>${escape(sp.name)}</strong><span>${escape(sp.dao)}系 · 移除 ${sp.copies} 张</span></button>`).join('')}</div>`
-    + `<div class="removal-confirm"><span>${chosen ? `将移除「${escape(chosen.name)}」${chosen.copies} 张` : '先选择一种神通'}</span>`
+    + `<div class="removal-options">${options.map((sp, index) => `<button class="removal-option${(sp.uid || sp.id) === removalSelection.target ? ' selected' : ''}" `
+      + `data-action="removal-select" data-id="${escape(sp.uid || sp.id)}" aria-pressed="${(sp.uid || sp.id) === removalSelection.target}">`
+      + `<strong>${escape(sp.name)}</strong><span>${escape(sp.dao)}系 · 第 ${index + 1} 张 · 仅移除 1 张</span></button>`).join('')}</div>`
+    + `<div class="removal-confirm"><span>${chosen ? `将移除「${escape(chosen.name)}」1 张` : '先选择一张卡'}</span>`
     + `<button class="primary" data-action="removal-confirm" ${chosen ? '' : 'disabled'}>确认移除并出牌</button></div></div>`;
   if (!dlg.open) dlg.showModal();
 }
@@ -2367,6 +2374,9 @@ document.addEventListener('click', async e => {
     case 'dungeon-enter':
       await call('dungeon/enter', { id });
       break;
+    case 'dungeon-sweep':
+      await call('dungeon/sweep', { id });
+      break;
     case 'dungeon-choose':
       await call('dungeon/choose', { id });
       break;
@@ -2529,11 +2539,12 @@ document.addEventListener('click', async e => {
     case 'cave-garden-harvest':
       await call('cave/garden/harvest', { plotId: btn.dataset.plotId });
       break;
-    case 'cave-garden-deposit':
-    case 'cave-garden-withdraw': {
-      const plotId = btn.dataset.plotId;
-      const amount = Number(btn.closest('.cave-plot')?.querySelector('[data-cave-reserve-amount]')?.value || gardenSelections[plotId]?.reserveAmount);
-      await call(`cave/garden/reserve/${a === 'cave-garden-deposit' ? 'deposit' : 'withdraw'}`, { plotId, amount });
+    case 'green-bottle-upgrade':
+      await call('cave/green-bottle/upgrade', { expectedGrade: Number(btn.dataset.bottleGrade) });
+      break;
+    case 'green-bottle-dungeon': {
+      const result = await call('cave/green-bottle/dungeon', { grade: Number(btn.dataset.materialGrade), expectedGrade: Number(btn.dataset.bottleGrade) });
+      if (result && !result.error && result.ok !== false) { tab = 'dungeon'; dungeonView = 'sites'; render(); }
       break;
     }
     case 'cave-garden-clear':
@@ -2567,6 +2578,10 @@ document.addEventListener('click', async e => {
     case 'clear-build-filter':
       artBuildFilter = 'all'; spellDaoFilter = 'all';
       render();
+      break;
+    case 'art-build-tier':
+      if (!['initial', 'advanced'].includes(id)) break;
+      artBuildTier = id; spellDaoFilter = 'all'; render();
       break;
     case 'story':
       // 先打开阅读器让玩家读正文、自己选；
@@ -2615,7 +2630,7 @@ document.addEventListener('click', async e => {
     case 'removal-confirm': {
       const card = S?.battle?.hand?.find(c => c.uid === removalSelection?.uid);
       const target = removalSelection?.target;
-      if (!card || card.playable === false || !removalOptions(card).some(sp => sp.id === target)) { closeRemoval(); break; }
+      if (!card || card.playable === false || !removalOptions(card).some(sp => (sp.uid || sp.id) === target)) { closeRemoval(); break; }
       const uid = card.uid;
       closeRemoval();
       await call('battle/turn', { id: uid, target });
@@ -2966,7 +2981,7 @@ document.addEventListener('change', async e => {
     friendFilters = normalizeFriendFilters({ ...friendFilters, [e.target.dataset.friendFilter]: e.target.value });
     saveFriendFilters(friendFilters); render(); return;
   }
-  if (e.target.matches('[data-cave-plant-herb], [data-cave-plant-count], [data-cave-reserve-amount]')) {
+  if (e.target.matches('[data-cave-plant-herb], [data-cave-plant-count]')) {
     const plotId = e.target.dataset.plotId;
     const choices = gardenSelections[plotId] ||= {};
     if (e.target.matches('[data-cave-plant-herb]')) {
@@ -2977,7 +2992,6 @@ document.addEventListener('change', async e => {
       choices.count = cavePlantCount(choices.count, maximum);
       render();
     }
-    if (e.target.matches('[data-cave-reserve-amount]')) choices.reserveAmount = Number(e.target.value);
     return; // 数量失焦不能重建正在被点击的按钮，否则第一次点击会丢失。
   }
   if (e.target.matches('[data-tide-market-grade]')) { tideMarketGrade = e.target.value; try { localStorage.setItem('nz-desktop-tide-market-grade', tideMarketGrade); } catch {} render(); return; }
