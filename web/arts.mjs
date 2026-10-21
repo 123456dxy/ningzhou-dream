@@ -130,7 +130,8 @@ export function spellKindLabel(sp) {
   if (k === 'attack') return '攻击';
   if (k === 'sword') return '剑击';
   if (k === 'fire') return '火法';
-  if (k === 'heal') return '治疗';
+  if (k === 'heal' || k === 'poisonSiphon') return '治疗';
+  if (k === 'drawTo') return '补牌';
   if (k === 'shield') return '护盾';
   if (k === 'guard') return '守阵';
   if (k === 'mana') return '回灵';
@@ -225,6 +226,19 @@ export function renderArtsAside(state) {
 // 流程：按流派筛选，核实已学、境界、槽位和权威条件，显示真实预览。
 // 调用方式：构筑页传入目录、state和筛选选项。
 // 返回值：可操作或禁用神通卡片HTML。
+export function renderLifeboundSlot(state, { mobile = false } = {}) {
+  const slot = state?.arts?.lifebound || {};
+  const arts = state?.arts || {};
+  const kind = slot.kind === 'innate' ? '固有' : slot.kind === 'retain' ? '保留' : '筑基后解锁';
+  const blocked = !!(state?.ended || state?.battle || state?.pending || state?.job || state?.dungeons?.run);
+  const button = (id, name) => `<button type="button" ${mobile
+    ? `data-command="arts/lifebound" data-body="${esc(JSON.stringify({ spellId: id }))}"`
+    : `data-action="lifebound" data-id="${esc(id)}"`}${!slot.unlocked || blocked || slot.spellId === id ? ' disabled' : ''}>${esc(name)}设为本命</button>`;
+  return `<section class="lifebound-slot" aria-label="唯一本命槽位"><div class="card-top"><strong>本命神通 · ${esc(kind)}</strong><span>${slot.spellId ? esc(slot.name) : '空槽'}</span></div>`
+    + `<p>${slot.unlocked ? `战斗外可更换，只强化第一张副本。${slot.spellId && !slot.carried ? '当前未携带，特性不生效。' : slot.kind === 'innate' ? '首张进入起手，占正常起手位置。' : '首张回合末不弃置，主动弃牌仍可弃掉。'}` : '完成筑基后，在此选择已领悟的任意普通神通。'}</p>`
+    + `<p class="meta">本命槽不增加携带上限；在下方神通卡上选择“设为本命”。</p><div class="arts-actions">${button('strike', '普通攻击')}${button('defend', '普通防御')}</div></section>`;
+}
+
 export function renderSpellPicker(data, state, options = {}) {
   const max = state.arts.spellSlots ?? data?.max ?? 4;
   const mandatoryIds = (state.arts.mandatorySpells || []).map(s => typeof s === 'string' ? s : s.id);
@@ -239,7 +253,7 @@ export function renderSpellPicker(data, state, options = {}) {
     return `<div class="empty">神通表为空。</div>`;
   }
 
-  return `<p class="intro">额外神通 ${carried} / ${max} 槽。`
+  return renderLifeboundSlot(state) + `<p class="intro">额外神通 ${carried} / ${max} 槽。`
     + `普通攻击与防御固定常备，各五张，不占额外槽。每种额外神通入牌组两张。`
     + `${state.arts.manaRegen != null ? `当前每回合基础灵力 ${state.arts.manaRegen} 点。` : ''}</p>`
     + `<div class="arts-grid spell-picker" style="margin:0">`
@@ -267,7 +281,8 @@ export function renderSpellPicker(data, state, options = {}) {
             + renderNumericPreview(sp.preview) + `<p>${sp.cooldown ? `冷却 ${sp.cooldown} 回合` : '无冷却'}${why ? ` · ${esc(why)}` : ''}</p>`)
           + `<button data-spell-id="${esc(sp.id)}" ${!mandatory && (isCarried || canEquip)
               ? `data-action="spell" data-id="${esc(sp.id)}"` : 'disabled'}>`
-          + `${mandatory ? '固定常备' : isCarried ? '卸下神通' : learned ? '携带神通' : '尚未学会'}</button></article>`;
+          + `${mandatory ? '固定常备' : isCarried ? '卸下神通' : learned ? '携带神通' : '尚未学会'}</button>`
+          + `<button type="button" data-action="lifebound" data-id="${esc(sp.id)}"${sp.canSetLifebound === true && !sp.isLifebound ? '' : ' disabled'} title="${esc(sp.lifeboundReason || '')}">${sp.isLifebound ? '当前本命' : '设为本命'}</button></article>`;
       }).join('')
     + `</div>`;
 }

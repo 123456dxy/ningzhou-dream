@@ -22,6 +22,7 @@ void runFriendshipTests() {
     o.seed = 4242;
     o.traits = {"bright"};
     Game g = createGame(o);
+    g.pending.reset();
     friendship::ensureAllNpcData(g);
 
     Npc& n = g.npcs[0];

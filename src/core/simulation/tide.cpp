@@ -3,6 +3,7 @@
 #include "core/simulation/tide_rules.h"
 #include "core/content/game_ids.h"
 #include "core/content/npc_combat_profiles.h"
+#include "core/exploration/beast_loot.h"
 #include "core/battle.h"
 #include "core/economy.h"
 #include "core/sim.h"
@@ -215,7 +216,8 @@ FightResult fight(Game& game, int battlefieldId) {
     BeastTide& tide = game.tide;
     if (!tide.playerJoined) { tide.playerJoined = true; tide.playerEntryStage = clampInt(game.player.stage, 0, 12); }
     EnemySpec enemy;
-    enemy.name = field->name + string("妖兽"); enemy.kind = "tide"; enemy.style = "体";
+    enemy.name = field->name + string("妖兽"); enemy.kind = "tide";
+    enemy.style = exploration::mfRollBeastMaterialElement(game);
     enemy.beast = true; enemy.lethal = true;
     enemy.stage = field->minStage + randIntOf(game, 0, 2); enemy.health = 100;
     enemy.tideEventId = tide.eventId; enemy.tideBattlefield = selected;

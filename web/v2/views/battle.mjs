@@ -1,5 +1,8 @@
+import { renderArtifactIllustration } from '../../artifact-illustrations.mjs';
 import {esc,fmt,card,action,meter,tag,empty,uiButton} from '../ui.mjs';
 import {battleStatusRows,cardKind,cardRule} from '../../cards.mjs';
+import {isArtifactRedraw} from '../../artifact-redraw.mjs';
+import {isArtifactStatus} from '../../artifact-status.mjs';
 
 const list = value => Array.isArray(value) ? value : [];
 
@@ -17,9 +20,9 @@ export function liveStatuses(b, rows = battleStatusRows(b)) {
   add(b.soul, '震荡', `震荡 ${fmt(b.soul)}`);
   add(b.manaPenalty, '夺灵代价', `回灵 −${fmt(b.manaPenalty)}`, true);
   add(b.lock, '锁灵', `锁灵 ${fmt(b.lock)} 回`, true);
-  add(b.playerPoison, '受毒', `受毒 ${fmt(b.playerPoison)}/回`, true);
+  add(b.playerPoison, '受毒', `受毒 ${fmt(b.playerPoison)}/回 · 本场持续`, true);
   add(b.weakened ?? b.enemyWeaken, '扰灵', `扰灵 ${fmt(b.weakened ?? b.enemyWeaken)} 层`, true);
-  add(b.poison, '敌方中毒', `敌毒 ${fmt(b.poison)} 层`);
+  add(b.poison, '敌方中毒', `敌毒 ${fmt(b.poison)} 层 · 本场持续`);
   add(b.burn, '敌方灼烧', `敌灼烧 ${fmt(b.burn)}/回`);
   return chips.length ? `<div class="status-inline" aria-label="当前关键战况">${chips.join('')}</div>` : '';
 }
@@ -28,7 +31,8 @@ export function battleNumbers(item) {
   const fields = [['damage', '伤'], ['shield', '盾'], ['heal', '疗'], ['qi', '势'], ['energy', '灵力净变']];
   const values = fields.filter(([key]) => Number.isFinite(Number(item[key])) && Number(item[key]) !== 0).map(([key, label]) => `${label} ${fmt(item[key])}`);
   if (item.damage === 0 && ['attack','sword','human','wave','heavy','poisonBurst','soulBurst','bodyBurst','drain','steal','fireBurst'].includes(item.kind)) values.unshift('伤 0');
-  if (item.heal === 0 && item.kind === 'heal') values.push('疗 0');
+  if (item.heal === 0 && ['heal','poisonSiphon'].includes(item.kind)) values.push('疗 0');
+  if (item.kind === 'drawTo' && Number.isFinite(item.draw) && item.draw >= 0) values.push(`抽 ${fmt(item.draw)} 张`);
   return values.join(' · ') || item.text || '按招式说明结算';
 }
 
@@ -37,7 +41,7 @@ export function combatActor(name, hp, max, shield, enemy = false) {
 }
 
 export function combatCard(item, play, detailUI = 'combat-detail') {
-  return `<article class="spell${item.playable === false ? ' unavailable' : ''}" data-card-uid="${esc(item.uid)}"><div class="combat-card-heading"><span class="energy" aria-label="灵力消耗 ${esc(item.cost)}">${fmt(item.cost)}</span><strong>${esc(item.name)}</strong></div><p class="spell-result">${esc(battleNumbers(item))}</p><p class="combat-card-meta">${esc(item.playable === false ? item.reason || '当前不可施展' : cardKind(item))}</p><p class="combat-card-summary">${esc(cardRule(item) || item.text || '')}</p><div class="combat-card-actions">${play}${uiButton('详情',detailUI,`card:${item.uid}`,'combat-card-detail')}</div></article>`;
+  return `<article class="spell${item.playable === false ? ' unavailable' : ''}" data-card-uid="${esc(item.uid)}"><div class="combat-card-heading"><span class="energy" aria-label="灵力消耗 ${esc(item.cost)}">${fmt(item.cost)}</span><strong>${esc(item.name)}</strong>${item.innate||item.retain?tag(`本命 · ${item.innate?'固有':'保留'}`):''}</div><p class="spell-result">${esc(battleNumbers(item))}</p><p class="combat-card-meta">${esc(item.playable === false ? item.reason || '当前不可施展' : cardKind(item))}</p><p class="combat-card-summary">${esc(cardRule(item) || item.text || '')}</p><div class="combat-card-actions">${play}${uiButton('详情',detailUI,`card:${item.uid}`,'combat-card-detail')}</div></article>`;
 }
 
 // The phone screen is a bounded action loop. Only its hand scrolls horizontally;
@@ -50,7 +54,7 @@ export function combatScreen(b, options) {
 
 export function battleStatusDetail(b) {
   const rows = battleStatusRows(b);
-  return `<div class="stack">${rows.map(x => `<p><strong>${esc(x.label)} · ${esc(x.value)}</strong><br><span class="meta">${esc(x.scope)}</span></p>`).join('') || empty('我方暂无持续增益。')}<p>敌方中毒 ${fmt(b.poison || 0)} 层 · 剩 ${fmt(b.poisonTurns || 0)} 回合<br>敌方灼烧 ${fmt(b.burn || 0)}/回 · 剩 ${fmt(b.burnTurns || 0)} 回合<br>震荡 ${fmt(b.soul || 0)} 层</p></div>`;
+  return `<div class="stack">${rows.map(x => `<p><strong>${esc(x.label)} · ${esc(x.value)}</strong><br><span class="meta">${esc(x.scope)}</span></p>`).join('') || empty('我方暂无持续增益。')}<p>敌方中毒 ${fmt(b.poison || 0)} 层${b.poison > 0 ? ' · 本场持续' : ''}<br>敌方灼烧 ${fmt(b.burn || 0)}/回 · 剩 ${fmt(b.burnTurns || 0)} 回合<br>震荡 ${fmt(b.soul || 0)} 层</p></div>`;
 }
 
 export function battleIntentDetail(b) {
@@ -75,7 +79,7 @@ export function renderBattleDetail(s, key) {
   if (key === 'intent') return {title:'对手下回合意图',content:battleIntentDetail(b)};
   if (key === 'status') return {title:'双方状态',content:battleStatusDetail(b)};
   if (key === 'log') return {title:'完整战报',content:`<div class="combat-log">${list(b.log).map(t=>`<p>${esc(t)}</p>`).join('') || empty('暂无出牌记录。')}</div>`};
-  if (key === 'artifacts') return {title:'法宝神通',content:`<div class="stack">${list(b.artifacts).map(a=>`<article class="spell"><div class="row"><strong>${esc(a.name)}</strong>${tag(`灵力 ${fmt(a.cost)}`)}</div><strong class="spell-result">${esc(battleNumbers(a))}</strong><p>${esc(a.description || a.text || '')}</p><p class="meta">冷却 ${fmt(a.cooldown)} 回合 · ${Number(a.cooldownRemaining)>0 ? `剩余 ${fmt(a.cooldownRemaining)} 回合` : '已就绪'}</p>${a.playable === false ? `<p class="meta">${esc(a.reason || '当前不可用')}</p>` : ''}${action('施展法宝','battle/turn',{id:a.id},{disabled:a.playable === false,className:'primary wide'})}</article>`).join('') || empty('本场没有法宝神通。')}</div>`};
+  if (key === 'artifacts') return {title:'法宝神通',content:`<div class="stack">${list(b.artifacts).map(a=>`<article class="spell">${renderArtifactIllustration(a,{compact:true})}<div class="row"><strong>${esc(a.name)}</strong>${tag(`灵力 ${fmt(a.cost)}${Number(a.healthCost)>0 ? ` · 气血 ${fmt(a.healthCost)}` : ''}`)}</div><strong class="spell-result">${esc(battleNumbers(a))}</strong><p>${esc(a.description || a.text || '')}</p>${a.breakdown?.text ? `<p class="notice">${esc(a.breakdown.text)}</p>` : ''}<p class="meta">冷却 ${fmt(a.cooldown)} 回合 · ${Number(a.cooldownRemaining)>0 ? `剩余 ${fmt(a.cooldownRemaining)} 回合${a.nextAvailableTurn != null ? ` · 第 ${fmt(Number(a.nextAvailableTurn)+1)} 个自身回合可用` : ''}` : '已就绪'}</p>${a.playable === false ? `<p class="meta">${esc(a.reason || '当前不可用')}</p>` : ''}${isArtifactStatus(a) ? `<button type="button" class="btn primary wide" data-ui="artifact-status-open" data-value="${esc(a.id)}"${a.playable === false ? ' disabled' : ''}>选择削除状态</button>` : isArtifactRedraw(a) ? `<button type="button" class="btn primary wide" data-ui="artifact-redraw-open" data-value="${esc(a.id)}"${a.playable === false ? ' disabled' : ''}>选择换牌</button>` : action('施展法宝','battle/turn',{id:a.id},{disabled:a.playable === false,className:'primary wide'})}</article>`).join('') || empty('本场没有法宝神通。')}</div>`};
   if (key === 'more') return {title:'战局与退路',content:`<div class="stack">${b.lethal ? '<p class="notice danger">战败可能结束这一世。请留意对手意图与气血。</p>' : '<p>切磋期间月历暂停，退出后回到日常修行。</p>'}${s.dungeons?.run ? `<p>${esc(s.dungeons.run.siteName)} · 秘境中的斗法</p>` : ''}<div class="grid-2">${uiButton('双方状态','combat-detail','status')}${uiButton('完整战报','combat-detail','log')}</div><p>抽牌堆 ${fmt(b.draw)} · 弃牌堆 ${fmt(b.discard)} · 已移除 ${fmt(b.exhausted)}<br>本回合已施术 ${fmt(b.played)} 次</p>${battleStatusDetail(b)}<div class="divider"></div>${action(b.lethal ? `尝试逃离 · ${fmt((b.escapeChance || 0) * 100)}%` : '退出切磋','battle/turn',{id:'escape'},{className:'subtle wide'})}</div>`};
   return null;
 }
@@ -93,7 +97,7 @@ export function renderBattle(s) {
 }
 export function renderDungeon(s){const r=s.dungeons?.run;if(!r)return '';if(s.battle)return renderBattle(s);
   const reward=['reward','camp','event','merchant','chest','choice'].includes(r.phase);
-  return `<div class="page-heading"><div><p class="eyebrow">${esc(r.realmName)} · 秘境历练</p><h1>${esc(r.siteName)}</h1></div>${tag(`气血 ${fmt(r.health)}%`)}</div><p class="notice">提前离开后入口消失，主动退出可带回已得物资。</p>
+  return `<div class="page-heading"><div><p class="eyebrow">${esc(r.realmName)} · 秘境历练</p><h1>${esc(r.siteName)}</h1></div>${tag(`气血 ${fmt(r.healthCurrent)} / ${fmt(r.healthMax)}`)}</div><p class="notice">提前离开后入口消失，主动退出可带回已得物资。</p>
     ${reward?card(r.cleared&&!r.bossRewardClaimed?'通关传承 · 选择主奖励':'眼前的抉择',`<p>${esc(r.text||'选择一项，继续向前。')}</p><div class="stack">${(r.rewards||[]).map(x=>`<article class="list-item"><div><h3>${esc(x.name)}</h3><p>${esc(x.desc)}</p><p class="meta">${esc(x.reason||'')}${x.cost?' · '+fmt(x.cost)+' 灵石':''}</p></div>${action('选择','dungeon/claim',{id:x.id},{disabled:x.enabled===false,className:'primary'})}</article>`).join('')}${r.canSkip!==false&&!(r.cleared&&!r.bossRewardClaimed)?action('略过并继续','dungeon/claim',{id:'skip'}):''}</div>`):''}
     ${r.phase==='route'?card('下一段路',`<div class="grid-2">${(r.nodes||[]).filter(n=>n.available).map(n=>`<div class="route-node"><span class="eyebrow">第 ${fmt(n.row+1)} 层</span><h3>${esc(n.name)}</h3><p>${esc(n.text)}</p>${action('前往','dungeon/choose',{id:n.id},{className:'primary wide'})}</div>`).join('')||empty('暂无可选路线。')}</div>`):''}
     ${r.phase==='complete'?card('秘境已通关',`<p>已取得${esc(r.bossRewardTaken?.name||'通关奖励')}，离开时结算战利品。</p>${action('结算并离开','dungeon/leave',{}, {className:'primary'})}`):''}

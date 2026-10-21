@@ -15,6 +15,9 @@
 | `cave_garden.cpp` / `garden_rules.h` | 12苗独立批次、后台永久成长、旧资产待返与纯报价；阈值/日增唯一配置 | `crafting/cave_garden.h` |
 | `green_bottle.cpp` | 永久0至6阶报价、原子升级、洞府专属秘境入口；不处理存档或HTTP | `crafting/green_bottle.h` |
 | `herb_acquisition.cpp` | 以真实丹方最早用途推导药材取得阶段，草药分类与采集池 | `crafting/herb_acquisition.h` |
+| `forge_rules.cpp` | 自由十份投料的纯报价、原子开工、冻结成品合同与完成发放；旧三料路径继续兼容 | `crafting/forge_rules.h` |
+| `material_sources.cpp` | 炼器材料显式渠道与普通坊市购买资格；列表与成交共用 | `crafting/material_sources.h` |
+| `tianji_steward.cpp` | 独立固定无限货架、纯报价与候选状态原子支付；不使用NPC个人背包 | `crafting/tianji_steward.h` |
 
 公共头仍位于 core 根。任务路径主要为 `ecoActionInfo` / `ecoActionError` → `ecoBegin` → `ecoComplete`；即时路径主要为 `shop::saleQuote` / `gearActionQuote` → `sell` / `salvage` / `inscribe`。`ordinaryHerbGradeLimit` 与 `ordinaryMaterialGradeLimit` 为跨模块来源限制提供统一计算。
 
@@ -34,6 +37,14 @@
 
 ## 已有测试
 
+新版自由炼器由 `ForgeRequest` 明确十个逐份选择（允许空格与重复ID）、已投主材、器型、主效果及灵纹。`mfQuoteForge` 共用内容白名单计算五维、利用率、器能、缺料、品阶和费用；`mfBeginForge` 再核验并一次扣料，将完整 `Gear` 冻结进 `Job::ForgeProduct`。完成由 `ecoComplete` 优先转发 `mfCompleteForge`，不按完成时角色属性重新计算。没有此字段的旧在途合同继续原三料规则。
+
+新材料目录位于 `content/forge_content.*`，包括旧十五种与八属性、阴阳、五阶、五部位和两类矿物的新ID。一二阶新矿物64种接入普通坊市，三至五阶新矿物96种由五城天机阁执事固定价供应；五部位妖兽材料由真实猎妖、驱妖、奇遇、兽潮与秘境妖兽胜利结算取得，不进入商店或情报随机池。品阶和属性取所杀妖兽，五部位各1份，详见[妖兽部位掉落](../../../docs/BEAST_MATERIAL_DROPS.md)。新版成品通过 `SourceMaterials` 回收原始材料，按每个ID的一半向下取整；不再用名称猜配方。新版成器前选灵纹，旧铭刻入口拒绝再次叠加通用强度。
+
+器能是实际成器预算：各份品阶能量合计乘利用率向下取整，主效果需同阶单份能量的七倍，灵纹再需三倍。十份同阶满利用率可同时承载主效果与灵纹；单材类十份可无纹成器。器能不再次作为战斗倍率叠加。新版伤害、护盾及新增持续伤害基础点数按品阶固定，详见[炼器数值表](../../../docs/FORGING_V2.md)；材料效力仍用于资源增层和守势。成品预览和实际回收共用 `mfQuoteGearPrice`，新版按 `SourceMaterials` 的完整市值计价（含较高阶混料），不因尚无装备ID而退回标准估价；报价不开放新材料购买资格。
+
+`tests/test_forge_redesign.cpp` 覆盖纯报价无随机/时间副作用、十格多ID、空格与重复份数、原子拒绝、六阶专属材料门槛、冻结合同、旧合同兼容和拆解边界。
+
 `potion_sales.cpp` 提供 `mfQuoteMaxPotionSale` / `mfSellPotions`：每种丹药一键出售的数量由真实拥有量、需求余量、收购资金和灵石余额容量共同限制。报价使用本次只读响应的 `MarketSaleContext`，实际动作重新核算，不接收前端伪造的上下文。成功仅产生一条批量纪事，拒绝不部分扣丹或增加需求计数；旧 `sell` 单件接口保留。定向验收见 `tests/test_potion_bulk_sales.cpp` 和 `test_trade_quick_actions_api.cpp`。
 
 `tests/test_craft.cpp`、`test_equipment_task.cpp`、`test_material_sources.cpp`、`test_passive_life_travel.cpp`、`test_numeric_previews.cpp`；API 与收益另见 `test_api.cpp`、`test_renown_artifact_api.cpp`、`test_event_rewards.cpp`。测试统一编入 `ningzhou_tests`；此处仅列出已有覆盖入口。
@@ -42,3 +53,5 @@
 丹方用途、稳定生境与丹炉资格闭环见 [药材取得说明](../../../docs/HERB_ACQUISITION.md)，全目录及真实动作回归为 `tests/test_herb_acquisition.cpp`。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。
+
+2026-10-18：`alchemy_rules.*::mfQuoteAlchemy`统一整批开炉资格、材料需有缺、费用、时长、耐久与期望产量；`ecoBegin`与前端`brewOptions[].batchQuotes`消费同一结果。报价支持1/3/5/10炉，领域入口同时拒绝斗法、秘境、工作与事件中的开炉。`forging_product.*::mfEvaluateForgeRecipe`只计算配方本身，玩家开炉再叠加库存、技艺和费用校验；事件及出生遗宝通过`mfCreateGearFromTemplate`使用同一完整配方工厂，不冒充人物亲炼。定向测试见`test_alchemy_quote.cpp`、`test_gameplay_templates.cpp`。

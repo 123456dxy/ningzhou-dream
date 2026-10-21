@@ -13,6 +13,7 @@
 | `npc_combat_profiles.*` | 六宗完整传承模板、稳定流派关联和常态世界传承者初始化 |
 | `advanced_builds.*` | 八种进阶构筑目录；六宗数据直接派生自 NPC 模板，剑/神识保留玩家建议 |
 | `beast_portraits.*` | 六类妖兽主题与五大境界立绘白名单；纯外观映射，不从显示名或外部路径猜图 |
+| `forge_content.*` | 自由炼器的材料、材类五维、器型、32项主效果及灵纹白名单；矿材显式区分普通坊市/执事，妖兽五部位标记实际击杀掉落来源 |
 
 公共头相对 core 根为 `content/game_ids.h`、`content/text_table.h`。入口为 `parseDaoId` / `parseSectId` / `parseSpellKind` / `parseBattleKind`、`stableId`、`legacyDaoKey` / `legacyValue`、`displayName`、`text` 和 `formatText`。
 
@@ -25,6 +26,8 @@ combat、progression、social 和 interface 按需使用本模块。`legacyDaoKe
 ## 维护注意
 
 - 新增枚举值应同时检查枚举目录、解析、稳定 ID、旧值转换、显示名及调用处的未知值处理。
+- `SpellKind::PoisonBloom` 的稳定与协议值均为 `poisonBloom`，显示名“滋毒诀”；筑基木系经营牌进入普通建议与完整竹山模板前列，避免槽位裁剪后不可达。施放与状态数字由combat集中报价，目录仅登记内容。
+- `SpellKind::PoisonSiphon` 的稳定与协议值均为 `poisonSiphon`，显示名“借毒回春”；普通 `poisonBurst` 从权威神通与获取目录退场，不改生成参考表。`PoisonBurst` 结算枚举仅保留旧版阳木法印依赖；新版法器毒袭使用自己的规则，不随普通神通替换而变化。
 - `parse...` 返回 `optional`；未知输入不能悄悄成为合法默认类别。
 - `formatText` / `formatTextTemplate` 对缺失、重复、未使用、畸形参数抛出 `invalid_argument`；模板和参数应成对修改。
 - 显示文字可调整，稳定 ID 和兼容值变更需要明确迁移。
@@ -37,3 +40,4 @@ combat、progression、social 和 interface 按需使用本模块。`legacyDaoKe
 `tests/test_content_registry.cpp` 覆盖 ID/解析与文案规则；实际使用另见 `test_combat_design.cpp`、`test_artifact.cpp`、`test_arts.cpp`、`test_api_refactor.cpp`。测试统一编入 `ningzhou_tests`；此处是现有测试导航。
 
 完整函数声明见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。
+`gear_templates.*`登记六种事件制成品模板；`artifact_appearances.*`登记十一种器型立绘的白名单ID与PNG路径。物品存档保存配方、形状和来源，视图按合法形状解析外观，不信任请求或存档中的任意文件路径。

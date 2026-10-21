@@ -1,7 +1,9 @@
+#include "core/interface/alchemy_api.h"
 #include "core/interface/routes.h"
 #include "core/roster.h"
 #include "core/interface/views.h"
 #include "core/content/green_bottle_content.h"
+#include "core/content/forge_content.h"
 #include "core/interface/view_helpers.h"
 #include "core/arts.h"
 #include "core/economy.h"
@@ -21,7 +23,7 @@ int marketGrade(const play::MarketItem& item) {
         std::map<std::pair<string, string>, int> result;
         for (const auto& recipe : data::RecipeDef_TABLE()) result[{"potion", recipe.id}] = recipe.grade;
         for (const auto& herb : data::HerbDef_TABLE()) result[{"herb", herb.id}] = herb.grade;
-        for (const auto& material : data::MaterialDef_TABLE()) result[{"material", material.id}] = material.grade;
+        for (const auto& Definition : content::mfForgeMaterials()) result[{"material", Definition.Material.id}] = Definition.Material.grade;
         for (const auto& shape : data::ShapeDef_TABLE())
             for (int grade = 1; grade <= 6; ++grade) result[{"gear", shape.id + "-" + std::to_string(grade)}] = grade;
         return result;
@@ -73,7 +75,7 @@ void mfAppendEconomyState(const Game& GameState, Value& State, const shop::Marke
             item.set("usage", str(info.usage)); item.set("used", num(info.used));
             item.set("toleranceLimit", num(info.toleranceLimit)); item.set("toleranceRemaining", num(info.toleranceRemaining));
             item.set("toleranceUnlimited", Value(info.toleranceUnlimited)); item.set("overTier", Value(info.overTier));
-            item.set("basePoison", num(recipe.poison)); item.set("poison", num(info.poison));
+            item.set("basePoison", num(info.poison)); item.set("poison", num(info.poison));
             item.set("poisonAfter", num(info.poisonAfter)); item.set("poisonDelta", num(info.poisonDelta));
             item.set("requiredStage", num(info.requiredStage));
             item.set("requiredRealm", str(info.requiredStage >= 0 ? realmName(info.requiredStage) : ""));
@@ -110,6 +112,19 @@ void mfAppendEconomyState(const Game& GameState, Value& State, const shop::Marke
             Value Item(json::Object{}); Item.set("id", Material.id); Item.set("name", Material.name); Item.set("grade", Material.grade);
             Item.set("desc", std::to_string(Material.grade) + "阶专属秘境灵材 · 可恢复绿瓶灵性或作炼器配料");
             materials.push_back(std::move(Item));
+        }
+        for (const auto& Definition : content::mfForgeMaterials()) {
+            if (Definition.PartId == "legacy") continue;
+            const auto Owned = GameState.player.arts.materials.find(Definition.Material.id);
+            if (Definition.AcquisitionPending && (Owned == GameState.player.arts.materials.end() || Owned->second <= 0)) continue;
+            const auto& Material = Definition.Material;
+            Value Item(json::Object{}); Item.set("id", Material.id); Item.set("name", Material.name); Item.set("grade", Material.grade);
+            Item.set("element", Material.element); Item.set("polarity", Material.polarity);
+            Item.set("family", Definition.FamilyId); Item.set("part", Definition.PartId);
+            Item.set("desc", std::to_string(Material.grade) + "阶" + Definition.FamilyName + " · " +
+                Material.element + " · " + Material.polarity + "；" + Definition.SourceNote);
+            Item.set("sourceNote", Definition.SourceNote);
+            Item.set("acquisitionPending", Definition.AcquisitionPending); materials.push_back(std::move(Item));
         }
         State.set("herbCatalog",Value(std::move(herbs))); State.set("materialCatalog",Value(std::move(materials)));
     }
@@ -189,6 +204,10 @@ void mfAppendEconomyState(const Game& GameState, Value& State, const shop::Marke
                     ingredients.push_back(std::move(material));
                 }
                 entry.set("ingredients", Value(std::move(ingredients)));
+                Value BatchQuotes(json::Object{});
+                for (const int BatchCount : {1, 3, 5, 10})
+                    BatchQuotes.set(std::to_string(BatchCount), mfAlchemyQuoteView(crafting::mfQuoteAlchemy(GameState, c.id, BatchCount)));
+                entry.set("batchQuotes", std::move(BatchQuotes));
             }
             arr.push_back(std::move(entry));
         }

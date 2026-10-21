@@ -1,5 +1,6 @@
 // 宁州一梦 · C++ 版 — 野外冲突（实现）
 #include "core/conflict.h"
+#include "core/combat/battle_scaling.h"
 
 #include <algorithm>
 
@@ -168,7 +169,7 @@ string conflictError(const Game& g, const string& npcId,
     if (!n || !n->alive) return "此地未遇到该修士。";
     if (n->location != p.location) return "对方不在此地。";
     if (isBonded(g, npcId)) return "须先解除师徒或道侣关系。";
-    if (p.health < 35) return "伤势过重，先休养。";
+    if (p.health < HealthGateMinimum) return "伤势过重，请先休养至30气血。";
     return "";
 }
 

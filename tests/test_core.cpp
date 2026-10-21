@@ -14,8 +14,8 @@ using namespace nz::data;
 
 void runDataTests() {
     std::printf("\n-- 静态数据表 --\n");
-    checkEq(static_cast<long long>(HerbDef_TABLE().size()), 157, "药材 157 种");
-    checkEq(static_cast<long long>(RecipeDef_TABLE().size()), 126, "丹方 126 张");
+    checkEq(static_cast<long long>(HerbDef_TABLE().size()), 155, "有效药材155种");
+    checkEq(static_cast<long long>(RecipeDef_TABLE().size()), 123, "有效丹方123张");
     checkEq(static_cast<long long>(FurnaceDef_TABLE().size()), 7, "丹炉 7 座");
     checkEq(static_cast<long long>(ManualDef_TABLE().size()), 26, "拓展功法 26 部");
     checkEq(static_cast<long long>(SpellDef_TABLE().size()), 28, "拓展神通 28 种");
@@ -35,7 +35,7 @@ void runDataTests() {
     checkEq(static_cast<long long>(SECTS().size()), 6, "宗门 6 家");
     checkEq(static_cast<long long>(LOCATIONS().size()), 28, "宁州地点28处");
     checkEq(static_cast<long long>(PLANS().size()), 5, "月度计划 5 种");
-    checkEq(static_cast<long long>(TALENTS().size()), 44, "天赋 44 项");
+    checkEq(static_cast<long long>(TALENTS().size()), 45, "天赋 45 项");
     checkEq(static_cast<long long>(BUILD_STATS().size()), 5, "可分配属性 5 项");
 
     checkStr(realmName(0), "炼气初期", "境界 0 为炼气初期");
@@ -83,9 +83,9 @@ void runRuleTests() {
         // 基准资质 90 / 悟性 37（初始掷出的中值；seed=0 时固定用这个）
         const std::vector<Case> cases = {
             {{"sword"}, {{"apt", 6}}, 10, 114, 45, 37, 18, 5, 0, 0, 100, 3, 10},
-            {{"root", "steady"}, {}, 10, 112, 45, 37, 2, 5, 0, 0, 70, 3, 10},
-            {{"herb", "merchant"}, {{"wealth", 3}}, 10, 90, 45, 37, 2, 25, 0, 0, 160, 7, 10},
-            {{"luck", "body"}, {{"luck", 1}}, 10, 90, 71, 37, 2, 5, 2, 0, 100, 3, 9},
+            {{"root", "steady"}, {}, 10, 112, 45, 37, 2, 5, 0, 0, 70, 3, 9},
+            {{"herb", "merchant"}, {{"wealth", 3}}, 10, 90, 45, 37, 2, 25, 0, 0, 160, 7, 9},
+            {{"luck", "body"}, {{"luck", 1}}, 10, 90, 71, 37, 2, 5, 2, 0, 100, 3, 8},
         };
         const char* labels[4] = {
             "剑心通明 + 资质6",
@@ -120,8 +120,8 @@ void runRuleTests() {
 
         bool threw = false;
         try { buildCharacter({"sword", "herb", "root", "luck"}, none, 10); }
-        catch (const std::invalid_argument&) { threw = true; }
-        check(threw, "超过三项天赋会被拒绝");
+        catch (const std::invalid_argument& Error) { threw = string(Error.what()).find("点数超支") != string::npos; }
+        check(threw, "四项天赋总费18点超过10点预算时明确拒绝超支");
 
         threw = false;
         try { buildCharacter({"sword", "sword"}, none, 10); }

@@ -188,8 +188,14 @@ void runApiTests() {
     g.job.reset();
 
     g.player.apt = APT_MAX;
-    g.player.arts.potions["5208"] = 1;
-    unchangedReject("use-pill", input("id", "5208"), "资质已满不会白扣资质丹");
+    g.player.arts.poison = 0;
+    g.player.arts.used["5208"] = 0;
+    g.player.arts.potions["5208"] = 2;
+    check(request("use-pill", input("id", "5208")).status == 200 &&
+          g.player.apt > APT_MAX && g.player.arts.potions["5208"] == 1,
+          "资质超过旧软上限仍可服资质丹且真实消耗一枚");
+    g.player.arts.used["5208"] = artPillUseInfo(g.player, *findRecipe("5208")).toleranceLimit;
+    unchangedReject("use-pill", input("id", "5208"), "达到本丹耐药上限不会白扣资质丹");
 
     finish(g, "回归结局");
     unchangedReject("travel", input("to", "fanghu"), "结束人生后不能继续赶路");
@@ -279,7 +285,14 @@ void runApiTests() {
     removal.set("target", "strike");
     check(request("battle/turn", removal).status == 200, "接口可以选择另一神通本场移除");
     battleState = json::Value::parse(request("state").body)["state"]["battle"];
-    checkEq(battleState["exhausted"].asInt(), 5, "界面显示移除全部五张普攻");
+    checkEq(battleState["exhausted"].asInt(), 1, "界面显示移除一张普攻副本");
+    int RemainingStrikes = 0;
+    for (const auto* Pile : {&buffBattle.hand, &buffBattle.draw, &buffBattle.discard})
+        for (const auto& Uid : *Pile)
+            if (std::any_of(buffBattle.deck.begin(), buffBattle.deck.end(), [&](const Card& Entry) {
+                return Entry.uid == Uid && Entry.spell == "strike";
+            })) ++RemainingStrikes;
+    checkEq(RemainingStrikes, 4, "移除单张后其余四张普攻仍在本场牌堆");
     check(battleState["exhaustedSpells"].asArray().size() == 1 &&
           battleState["exhaustedSpells"][size_t(0)]["id"].asString() == "strike", "界面显示本场已移除神通名称");
     const auto withBuilds = json::Value::parse(request("state").body)["state"];
@@ -455,6 +468,7 @@ void runApiTests() {
         check(saveToJson(firstWorld) == saveToJson(secondWorld),
               "独立人生编号不改变同种子的世界、角色和随机序列");
         legacy::Archive lifetimes = legacy::create();
+        firstLife.pending.reset(); secondLife.pending.reset();
         firstLife.ended = true; firstLife.player.highestStage = 3;
         secondLife.ended = true; secondLife.player.highestStage = 6;
         check(legacy::settle(firstLife, lifetimes).eligible, "第一世可以结算真实筑基成就");

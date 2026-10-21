@@ -1,0 +1,13 @@
+.artifact-illustration{display:inline-flex;width:144px;height:160px;flex:0 0 auto;align-items:center;justify-content:center;vertical-align:middle;isolation:isolate}
+.artifact-illustration img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 5px 12px #234d4020)}
+.artifact-illustration.compact{width:68px;height:76px;float:right;margin:0 0 6px 10px}
+.artifact-illustration-fallback{font-size:2rem;color:#839871}
+.artifact-illustration-fallback[hidden],.artifact-illustration img[hidden]{display:none}
+.forge-vessel-art .artifact-illustration{width:100%;height:100%;max-height:390px}
+.forge-vessel-art .artifact-illustration img{object-fit:contain;padding:6px;box-sizing:border-box}
+.lifebound-slot{padding:14px 16px;border:1px solid #c2cb9c;border-radius:12px;background:linear-gradient(135deg,#fffdf2,#edf1dd);margin-bottom:16px;color:#28483e}
+.lifebound-slot p{font-size:.9rem;line-height:1.6;margin:9px 0}.lifebound-slot .arts-actions{display:flex;gap:8px;flex-wrap:wrap}
+.spell-config-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,300px);gap:18px;align-items:start}
+.spell-equipped-scroll article{padding:12px 0;border-bottom:1px solid #d5ddcb}.spell-equipped-scroll article p{font-size:.9rem;line-height:1.5}
+@media(max-width:940px){.spell-config-layout{grid-template-columns:minmax(0,1fr)}.spell-config-layout .spell-equipped-sidebar{grid-row:1;position:static}.spell-config-layout .spell-equipped-scroll{max-height:26vh}.artifact-illustration{width:110px;height:128px}.artifact-illustration.compact{width:58px;height:64px}}
+@media(max-width:650px){.forge-workshop .forge-vessel-art{display:grid;position:relative;inset:auto;height:142px;margin:0 0 10px}.forge-workshop .forge-vessel-art:before{width:90px;height:90px}.forge-workshop .forge-vessel-art:after{width:115px;height:115px}.forge-workshop .forge-vessel-art .artifact-illustration{width:142px;height:142px}.forge-workshop .forge-vessel-art svg{height:130px;width:115px}}

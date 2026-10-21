@@ -1,14 +1,19 @@
 #include "harness.h"
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/calendar.h"
+#include "core/combat/battle_scaling.h"
 #include "core/json.h"
+#include "core/interface/views.h"
 #include "core/save.h"
 #include "core/sim.h"
 #include "core/social/npc_consumables.h"
 #include "data/reference_tables.h"
 
 #include <algorithm>
+#include <map>
 #include <set>
+#include <tuple>
 
 namespace nztest {
 namespace {
@@ -87,12 +92,157 @@ void mfCheckCombatPill(const nz::string& RecipeId, const nz::string& Key) {
     checkNear(mfPreparationValue(*State.player.arts.battle, Key), mfPreparationValue(Baseline, Key),
         "下一场不能再次免费取得旧准备：" + Key);
 }
+
+// 用途：独立表达验收需求中的用途毒值；流程：全丹方报价与真实服丹核对；用法：传稳定kind；返回：该用途固定丹毒，未知种类失败而不默认为零。
+int mfExpectedPurposePoison(const nz::string& Kind) {
+    static const std::map<nz::string, int> Expected = {
+        {"heal",1},{"xp",1},
+        {"dao",2},{"points",2},{"apt",2},{"insight",2},{"body",2},{"heart",2},{"mind",2},{"speed",2},
+        {"combat",4},{"breakthrough",4},{"life",4},{"detox",0}
+    };
+    const auto Found = Expected.find(Kind);
+    check(Found != Expected.end(), "真实丹方用途纳入固定丹毒目录：" + Kind);
+    return Found == Expected.end() ? -1 : Found->second;
+}
+
+// 用途：验证全目录各品阶的同用途毒值和只读纯度；流程：报价回归；用法：在规则测试入口调用；返回：无，不写文件或活动账号。
+void mfCheckPurposePoisonCatalog() {
+    using namespace nz;
+    auto State = mfPillTestGame();
+    std::set<int> Grades;
+    std::map<string, std::set<int>> PoisonByKind;
+    checkEq(data::RecipeDef_TABLE().size(), 123, "本轮覆盖全部123张有效丹方");
+    for (const auto& Recipe : data::RecipeDef_TABLE()) {
+        Grades.insert(Recipe.grade);
+        const int Expected = mfExpectedPurposePoison(Recipe.kind);
+        for (int Stage : {0,12}) {
+            auto& Player = State.player;
+            Player.stage = Player.highestStage = Stage; Player.lifespan = realmOf(Stage).life;
+            Player.arts.potions = {{Recipe.id,1}};
+            const auto Before = saveToJson(State);
+            const auto Quote = artPillUseInfo(Player, Recipe);
+            const string Label = Recipe.id + "·" + realmName(Stage);
+            checkEq(Quote.poison, Expected, "同用途不因品阶或人物境界改变毒值：" + Label);
+            const int After = Recipe.kind == "detox" ? std::max(0, 30 - Recipe.value) : 30 + Expected;
+            checkEq(Quote.poisonAfter, After, "丹毒报价按用途增量与化毒实值计算：" + Label);
+            checkEq(Quote.poisonDelta, After - 30, "丹毒报价增减差值一致：" + Label);
+            check(Quote.usage.find("越阶服用额外增加2丹毒") == string::npos,
+                "越阶不再承诺旧额外丹毒：" + Label);
+            checkStr(saveToJson(State), Before, "全丹方报价不改时钟、RNG、库存或属性：" + Label);
+            PoisonByKind[Recipe.kind].insert(Quote.poison);
+        }
+    }
+    checkEq(Grades.size(), 6, "真实目录覆盖一至六品");
+    checkEq(PoisonByKind.size(), 14, "真实目录覆盖全部十四用途");
+    for (const auto& [Kind, Values] : PoisonByKind)
+        check(Values.size() == 1 && *Values.begin() == mfExpectedPurposePoison(Kind),
+            "同用途全部品阶只有一个固定毒值：" + Kind);
+    for (int Stage : {0,12}) {
+        State.player.stage = State.player.highestStage = Stage; State.player.lifespan = realmOf(Stage).life;
+        const auto Before = saveToJson(State);
+        json::Value View(json::Object{}); api::view::appendEconomyState(State, View);
+        for (const auto& Row : View["pillCatalog"].asArray()) {
+            const auto* Recipe = findRecipe(Row["id"].asString());
+            check(Recipe && Row["basePoison"].asInt() == mfExpectedPurposePoison(Recipe->kind),
+                "公开丹药目录显示同用途基础丹毒：" + Row["id"].asString());
+        }
+        checkStr(saveToJson(State), Before, "公开全目录丹毒查询不改变状态");
+    }
+    auto Unknown = *findRecipe("5001"); Unknown.kind = "unregistered-pill-purpose";
+    State.player.arts.potions[Unknown.id] = 1;
+    const auto Before = saveToJson(State);
+    check(!artPillUseInfo(State.player, Unknown).reason.empty(), "未知丹药用途明确拒绝报价");
+    checkStr(saveToJson(State), Before, "未知用途报价拒绝不改变状态");
+}
+
+// 用途：核对新毒值的真实应用、边界、NPC共享及历史事实；流程：真实服丹/日历/载入定向回归；用法：独立局部Game；返回：无。
+void mfCheckPurposePoisonExecution() {
+    using namespace nz;
+    for (const auto& [RecipeId, Poison] : vector<std::pair<string,int>>{{"5001",1},{"5004",2},{"5006",4},{"5316",0}}) {
+        auto State = mfPillTestGame(); State.player.arts.potions[RecipeId] = 1;
+        const auto* Recipe = findRecipe(RecipeId);
+        const auto Quote = artPillUseInfo(State.player, *Recipe);
+        const int Expected = Recipe->kind == "detox" ? std::max(0, 30 - Recipe->value) : 30 + Poison;
+        check(artUsePill(State, RecipeId).empty(), "代表用途真实服丹成功：" + RecipeId);
+        checkEq(State.player.arts.poison, Expected, "代表用途按1/2/4/0毒值真实结算：" + RecipeId);
+        checkEq(State.player.arts.poison, Quote.poisonAfter, "真实结算与服丹报价一致：" + RecipeId);
+    }
+    {
+        auto State = mfPillTestGame(); State.player.arts.poison = 79; State.player.arts.potions["5006"] = 2;
+        check(artUsePill(State, "5006").empty(), "79丹毒仍可服丹");
+        checkEq(State.player.arts.poison, 83, "战斗丹使79丹毒增加到83，不提前截断为80");
+        check(artUsePill(State, "5006").empty(), "达到80后允许战斗丹超载且继续付丹毒");
+        State.player.arts.potions["5001"] = 1;
+        const auto Before = saveToJson(State);
+        check(!artUsePill(State, "5001").empty(), "达到80后仍阻止普通疗伤丹");
+        checkStr(saveToJson(State), Before, "高丹毒普通服药拒绝保持全状态");
+        State.player.arts.poison = 99;
+        State.player.arts.potions["5006"] = 1;
+        const auto Saturated = artPillUseInfo(State.player, *findRecipe("5006"));
+        checkEq(Saturated.poisonAfter, 100, "上界报价饱和于100");
+        check(Saturated.reason.empty(), "99丹毒仍允许有库存的战斗准备");
+        State.player.arts.potions["5316"] = 1;
+        check(artUsePill(State, "5316").empty(), "超过80时仍可服化毒丹");
+        checkEq(State.player.arts.poison, 59, "高丹毒化毒按40点药效结算，不添加自身丹毒");
+        State.player.arts.poison = 1; State.player.arts.potions["5316"] = 1;
+        check(artUsePill(State, "5316").empty(), "低丹毒可服化毒丹");
+        checkEq(State.player.arts.poison, 0, "化毒下界饱和于0");
+    }
+    for (const auto& [RecipeId, BeforeBattle, Poison] : vector<std::tuple<string,bool,int>>{
+            {"5001",false,1},{"5002",false,1},{"5004",false,2},{"5006",true,4},{"5316",false,0}}) {
+        Npc Person; Person.id = "purpose-poison-npc"; Person.name = "丹毒定向同道";
+        Person.stage = 9; Person.health = 30; Person.lifespan = realmOf(9).life;
+        const auto* Recipe = findRecipe(RecipeId);
+        const int StartingPoison = Recipe->kind == "detox" ? 40 : 30;
+        Person.pillState.poison = StartingPoison; Person.bag["potion:" + RecipeId] = 1;
+        if (Recipe->kind == "detox") {
+            for (int BelowThreshold : {30,39}) {
+                auto State = mfPillTestGame(); State.npcs = {Person};
+                State.npcs.front().pillState.poison = BelowThreshold;
+                const auto Before = saveToJson(State);
+                check(!npcUsePill(State.npcs.front(), RecipeId, false), "NPC丹毒未达40时不提前化毒");
+                checkStr(saveToJson(State), Before, "NPC未到化毒时机不改库存、耐药或状态");
+            }
+        }
+        const int Expected = Recipe->kind == "detox" ? std::max(0, StartingPoison - Recipe->value) : StartingPoison + Poison;
+        check(npcUsePill(Person, RecipeId, BeforeBattle), "NPC平时或战前实际服丹：" + RecipeId);
+        checkEq(Person.pillState.poison, Expected, "NPC共享玩家用途毒值：" + RecipeId);
+        checkEq(Person.bag.at("potion:" + RecipeId), 0, "NPC服丹确实消耗一枚：" + RecipeId);
+    }
+    {
+        auto State = mfPillTestGame(); State.player.arts.poison = 73;
+        State.player.arts.used = {{"5006",7},{"5502",9}};
+        Npc Person; Person.id = "historic-poison-npc"; Person.name = "历史服丹同道";
+        Person.location = State.player.location; Person.pillState.poison = 61; Person.pillState.used["5006"] = 5;
+        State.npcs = {Person};
+        Game Loaded; string Error;
+        check(loadDetachedFromJson(saveToJson(State), Loaded, &Error), "既有丹毒和服药历史可读回：" + Error);
+        checkEq(Loaded.player.arts.poison, 73, "新规则不按历史服用次数重算已有玩家丹毒");
+        check(!Loaded.npcs.empty() && Loaded.npcs.front().pillState.poison == 61,
+            "新规则不按历史服用次数重算已有NPC丹毒");
+        checkEq(Loaded.player.arts.used.at("5006"), 7, "保存读取不重置既有服药次数");
+        checkEq(Loaded.rng, State.rng, "读取丹毒记录不消费RNG");
+        checkEq(Loaded.clock.days, State.clock.days, "读取丹毒记录不推进时钟");
+    }
+    {
+        auto State = mfPillTestGame();
+        checkNear(artPoisonCultivationMultiplier(20), 1, "20丹毒仍不减速");
+        checkNear(artPoisonCultivationMultiplier(21), 1.0 - 1.0 / 160.0, "超过20后保持原减速公式");
+        checkNear(artPoisonCultivationMultiplier(100), 0.5, "100丹毒减速仍封顶一半");
+        checkNear(calendarDetoxPerYear(State.player), 5, "自然年消毒统一5点");
+        State.player.arts.poison = 30;
+        for (int Day = 0; Day < 360; ++Day) calendarBattleDay(State);
+        checkEq(State.player.arts.poison, 25, "真实推进360天自动消散5点丹毒");
+    }
+}
 } // namespace
 
 // 用途：覆盖全部丹方实服、失败原子性、六类真实斗法收益和存档；流程：核心回归；用法：由测试主入口调用；返回：无。
 void mfRunPillEffectsTests() {
     using namespace nz;
     std::printf("\n--- 全部丹药服用与实际斗法收益 ---\n");
+    mfCheckPurposePoisonCatalog();
+    mfCheckPurposePoisonExecution();
     std::set<string> CoveredKinds;
     for (const auto& Recipe : data::RecipeDef_TABLE()) {
         auto State = mfPillTestGame();
@@ -116,7 +266,7 @@ void mfRunPillEffectsTests() {
         else if (Kind == "apt") ActualChange = Player.apt - Before.apt;
         else if (Kind == "insight") ActualChange = Player.insight - Before.insight;
         else if (Kind == "life") ActualChange = Player.lifespan - Before.lifespan;
-        else if (Kind == "body") ActualChange = Arts.hpBonus - Before.arts.hpBonus;
+        else if (Kind == "body") ActualChange = mfPlayerHealthMaximum(Player) - mfPlayerHealthMaximum(Before);
         else if (Kind == "heart") ActualChange = Arts.heart - Before.arts.heart;
         else if (Kind == "mind") ActualChange = Arts.mind - Before.arts.mind;
         else if (Kind == "speed") ActualChange = Arts.speed - Before.arts.speed;
@@ -128,14 +278,6 @@ void mfRunPillEffectsTests() {
         } else if (Kind == "breakthrough") {
             check(Arts.breakBuff == "stage", "突破丹实际生成可消费准备：" + Recipe.name);
             continue;
-        } else if (Kind == "repel") {
-            checkEq(Arts.repel, 2, "驱妖液实际生成年度避险状态");
-            continue;
-        } else if (Kind == "lure") {
-            int MaterialCount = 0;
-            for (const auto& [Id, Count] : Arts.materials) MaterialCount += Count;
-            checkEq(MaterialCount, 2, "诱妖液实际取得两份材料");
-            continue;
         } else if (Kind == "combat") {
             const auto Preparation = artCombatPill(Recipe);
             checkNear(Arts.combatPrep.at(Preparation.key), Preparation.value, "战斗丹写入真实准备：" + Recipe.name);
@@ -145,7 +287,7 @@ void mfRunPillEffectsTests() {
         } else check(false, "新丹药种类须增加实际效果测试：" + Kind);
         check(ActualChange > 0 && ActualChange == Quote.effectValue, "属性/修为/悟道真实增加且预览一致：" + Recipe.name);
     }
-    checkEq(CoveredKinds.size(), 16, "所有现有丹药种类均被遍历");
+    checkEq(CoveredKinds.size(), 14, "所有有效丹药种类均被遍历");
 
     mfCheckCombatPill("5006", "attack"); mfCheckCombatPill("5008", "shield");
     mfCheckCombatPill("5009", "reduction"); mfCheckCombatPill("5113", "qi");
@@ -173,7 +315,8 @@ void mfRunPillEffectsTests() {
             "服丹后同牌真正造成更多伤害：" + RecipeId);
     }
     for (const auto* RecipeId : {"5008", "5009", "5121", "5225"}) {
-        auto Baseline = mfPillTestGame(); Baseline.player.health = 100; Baseline.player.arts.poison = 0;
+        auto Baseline = mfPillTestGame(); Baseline.player.arts.poison = 0;
+        Baseline.player.health = mfPlayerHealthMaximum(Baseline.player);
         Baseline.player.arts.potions[RecipeId] = 1; auto Prepared = Baseline;
         check(artUsePill(Prepared, RecipeId).empty(), "实际来伤对照先服丹：" + string(RecipeId));
         if (string(RecipeId) != "5008") checkNear(Prepared.player.arts.combatBuff, 0,
@@ -231,7 +374,7 @@ void mfRunPillEffectsTests() {
             "服丹日志显示当前实际收益而非虚报完整能力");
         State.player.arts.poison = 30; State.player.arts.potions["5316"] = 1;
         check(artUsePill(State, "5316").empty(), "真实化毒丹执行成功");
-        check(State.logs.back().delta.find("丹毒 -20") != string::npos, "化毒日志记录真实负丹毒变化");
+        check(State.logs.back().delta.find("丹毒 -30") != string::npos, "化毒日志记录受当前丹毒截断的真实变化");
     }
     {
         auto State = mfPillTestGame(); State.player.arts.potions["5001"] = 1;

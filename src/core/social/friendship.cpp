@@ -9,6 +9,7 @@
 #include "core/arts.h"
 #include "core/base.h"
 #include "core/battle.h"
+#include "core/crafting/craft_prices.h"
 #include "core/play.h"
 #include "core/renown.h"
 #include "core/sim.h"
@@ -75,6 +76,16 @@ int tradeCost(int value) {
     const int giftCredit = creditFromValue(value);
     // 取用人情有少量额外代价，不能将同一件礼物取回后无限循环刷好感。
     return giftCredit + std::max(1, (giftCredit + 9) / 10);
+}
+
+// 丹药社交价值只读稳定材料基础售值；药效点数与回满哨兵不参与礼物/兑换报价。
+int mfPotionSocialValue(const string& RecipeId) {
+    Game Pricing;
+    Pricing.world.market = 1.0;
+    // 仅作未保存的估值上下文：不属于任何生境，不取得本地20%折扣。
+    Pricing.player.location = "social-value-reference";
+    const auto Quote = crafting::mfQuotePotionPrice(Pricing, RecipeId);
+    return Quote.Valid ? Quote.BaseSellPrice : 0;
 }
 
 } // namespace
@@ -186,6 +197,7 @@ GreetResult greet(Game& g, const string& npcId) {
     if (!n) { r.error = "找不到这个人。"; return r; }
     if (!n->alive) { r.error = "斯人已逝。"; return r; }
 
+    ensureNpcBag(g, *n);
     NpcBond& b = bondOf(g, npcId);
     const Player& p = g.player;
 
@@ -355,7 +367,8 @@ GiftResult giftItem(Game& g, const string& npcId, const string& kind,
         const data::RecipeDef* rec = findRecipe(id);
         if (!rec) { r.error = "没有这种丹药。"; return r; }
         name = rec->name;
-        value = rec->value;
+        value = mfPotionSocialValue(id);
+        if (value <= 0) { r.error = "丹药材料报价无效，未送出。"; return r; }
     } else if (kind == "herb") {
         // 药材按名字存
         auto it = p.arts.herbs.find(id);
@@ -394,6 +407,7 @@ GiftResult giftItem(Game& g, const string& npcId, const string& kind,
             return r;
         }
     }
+    ensureNpcBag(g, *n);
     const GiftOutcome o = giftOutcome(g, *n, value, kind, id);
     addRelation(g, npcId, o.affinity);
     addCredit(g, npcId, o.credit);
@@ -522,13 +536,24 @@ void rollBag(Game& g, Npc& n) {
     n.bag.clear();
     const int stage = clampInt(n.stage, 0, 12);
     const int gradeCap = clampInt(1 + stage / 3, 1, 4);   // 品阶上限
+    Player TierReference;
+    TierReference.stage = stage;
+    const int PillGradeCap = artTier(TierReference);
 
     // 丹药：按丹方品阶筛
     int pillCount = 1 + static_cast<int>(randomOf(g) * 3) + stage / 4;
+    const auto Urgency = mfNpcLifePillUrgency(n);
+    const int LifeWeight = Urgency == NpcLifePillUrgency::Critical ? 32 :
+        Urgency == NpcLifePillUrgency::Urgent ? 20 : Urgency == NpcLifePillUrgency::Priority ? 12 :
+        Urgency == NpcLifePillUrgency::Regular ? 6 : 1;
     for (int i = 0; i < pillCount; ++i) {
         vector<const data::RecipeDef*> pool;
-        for (const auto& r : data::RecipeDef_TABLE())
-            if (r.grade <= gradeCap) pool.push_back(&r);
+        for (const auto& r : data::RecipeDef_TABLE()) {
+            if (r.grade > PillGradeCap) continue;
+            const int Weight = r.kind == "life" ? LifeWeight :
+                r.kind == "detox" && n.pillState.poison >= 40 ? 20 : 1;
+            for (int CopyIndex = 0; CopyIndex < Weight; ++CopyIndex) pool.push_back(&r);
+        }
         if (pool.empty()) break;
         const data::RecipeDef* r = pickOf(g, pool);
         n.bag["potion:" + string(r->id)] += 1;
@@ -585,21 +610,14 @@ void ensureNpcBag(Game& g, Npc& npc) {
 
 // 用途：列出目标行囊物品和交情兑换条件。
 // 参与流程：NPC 背包页面及兑换报价。
-// 使用方式：传游戏与 NPC ID；空行囊会惰性初始化，即使参数为 const。
-// 返回值：按成本排序的报价；惰性补全时会修改 NPC 和 RNG。
+// 使用方式：传游戏与NPC ID，只展示现有行囊；初始化由建角、年度、见礼或有效赠礼动作负责。
+// 返回值：按成本排序的报价，不改NPC、库存、服丹状态、RNG或时钟。
 std::vector<BagItem> npcBag(const Game& g, const string& npcId) {
     vector<BagItem> out;
     const Npc* n = nullptr;
     for (const auto& x : g.npcs)
         if (x.id == npcId) n = &x;
     if (!n) return out;
-    // 惰性补背包：720 个 NPC 不必开局全部 roll，
-    // 玩家真正翻谁的口袋时再生成（也保证「一定翻得到东西」）。
-    if (n->bag.empty() && n->gear.empty()) {
-        Npc& mut = const_cast<Npc&>(*n);
-        ensureNpcBag(const_cast<Game&>(g), mut);
-    }
-
     const int credit = creditOf(g, npcId);
 
     for (const auto& [key, cnt] : n->bag) {
@@ -616,10 +634,11 @@ std::vector<BagItem> npcBag(const Game& g, const string& npcId) {
 
         if (kind == "potion") {
             const data::RecipeDef* r = findRecipe(id);
-            it.name = r ? r->name : id;
-            it.value = r ? r->value : 40;
-            it.desc = r ? string("丹药 · ") + std::to_string(r->grade) + " 品"
-                        : "丹药";
+            if (!r) continue;
+            it.name = r->name;
+            it.value = mfPotionSocialValue(id);
+            if (it.value <= 0) continue;
+            it.desc = string("丹药 · ") + std::to_string(r->grade) + " 品";
         } else if (kind == "herb") {
             const data::HerbDef* h = findHerbByName(id);
             it.name = id;
@@ -730,8 +749,10 @@ TradeResult takeFromNpc(Game& g, const string& npcId, const string& kind,
         }
         if (kind == "potion") {
             const data::RecipeDef* rec = findRecipe(id);
-            name = rec ? rec->name : id;
-            value = rec ? rec->value : 40;
+            if (!rec) { r.error = "没有这种有效丹药。"; return r; }
+            name = rec->name;
+            value = mfPotionSocialValue(id);
+            if (value <= 0) { r.error = "丹药材料报价无效，未兑换。"; return r; }
         } else if (kind == "herb") {
             name = id;
             const data::HerbDef* h = findHerbByName(id);
@@ -875,17 +896,17 @@ void ensureNpcCultivation(Game& g, Npc& npc) {
     npc.dao = dao;
 
     // 神通：按境界给 1~3 门本系神通，境界越高越多、越强
-    vector<const data::SpellDef*> pool;
-    for (const auto& sp : data::SpellDef_TABLE())
-        if (string(sp.dao) == dao) pool.push_back(&sp);
+    vector<const SpellDef*> pool;
+    for (const auto& sp : allSpells())
+        if (sp.id != "strike" && sp.id != "defend" && sp.dao == dao && sp.stage <= npc.stage) pool.push_back(&sp);
     // 本系没有就退回通用
     if (pool.empty()) {
-        for (const auto& sp : data::SpellDef_TABLE())
-            if (string(sp.dao) == "气") pool.push_back(&sp);
+        for (const auto& sp : allSpells())
+            if (sp.id != "strike" && sp.id != "defend" && sp.dao == "气" && sp.stage <= npc.stage) pool.push_back(&sp);
     }
     const int want = clampInt(1 + npc.stage / 4, 1, 3);
     for (int i = 0; i < want && !pool.empty(); ++i) {
-        const data::SpellDef* sp = pickOf(g, pool);
+        const SpellDef* sp = pickOf(g, pool);
         if (std::find(npc.spells.begin(), npc.spells.end(), sp->id) ==
             npc.spells.end())
             npc.spells.push_back(sp->id);
@@ -899,7 +920,7 @@ void ensureNpcCultivation(Game& g, Npc& npc) {
 void ensureAllNpcData(Game& g) {
     for (auto& n : g.npcs) {
         ensureNpcCultivation(g, n);
-        // 背包只给「活着且有过往来可能」的补，避免开局就给 720 人 roll
+        // 显式初始化命令可补旧空行囊；只读npcBag不调用此命令。
         if (n.alive && n.bag.empty()) ensureNpcBag(g, n);
     }
 }

@@ -1,6 +1,7 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
 #include "core/persistence/json_helpers.h"
+#include "core/exploration/dungeon_card_preferences.h"
 
 namespace nz::persistence {
 
@@ -52,6 +53,13 @@ Value dungeonWorldToJson(const DungeonWorld& world) {
         item.set("siteId", str(run.siteId)); item.set("siteName", str(run.siteName)); item.set("type", str(run.type)); item.set("location", str(run.location));
         item.set("phase", str(run.phase)); item.set("current", str(run.current)); item.set("stage", num(run.stage)); item.set("health", num(run.health));
         item.set("layoutVersion", num(run.LayoutVersion));
+        item.set("cardRewardRulesVersion", num(run.CardRewardRulesVersion));
+        Value CardPreference(json::Object{});
+        CardPreference.set("mode", str(string(mfDungeonCardRewardModeKey(run.CardRewardPreference.Mode))));
+        json::Array CardDaos;
+        for (const auto Dao : run.CardRewardPreference.Daos) CardDaos.emplace_back(string(content::stableId(Dao)));
+        CardPreference.set("daos", Value(std::move(CardDaos)));
+        item.set("cardRewardPreference", std::move(CardPreference));
         item.set("row", num(run.row)); item.set("seq", num(run.seq)); item.set("elapsedDays", num(run.elapsedDays));
         item.set("relics", stringVectorToJson(run.relics));
         item.set("herbs", mapToJson(run.herbs)); item.set("materials", mapToJson(run.materials)); item.set("potions", mapToJson(run.potions));
@@ -94,6 +102,15 @@ void dungeonWorldFromJson(const Value& value, DungeonWorld& world) {
     run.siteId = item["siteId"].asString(); run.siteName = item["siteName"].asString(); run.type = item["type"].asString(); run.location = item["location"].asString();
     run.phase = item["phase"].asString("route"); run.current = item["current"].asString(); run.stage = item["stage"].asInt(); run.health = item["health"].asInt(100);
     run.LayoutVersion = item["layoutVersion"].asInt(1);
+    run.CardRewardRulesVersion = item["cardRewardRulesVersion"].asInt(0);
+    // 旧在途档缺字段保留全部候选；现代字段先经shape校验，未知值仍留非法枚举供领域拒绝。
+    if (item["cardRewardPreference"].isObject()) {
+        const auto& Preference = item["cardRewardPreference"];
+        run.CardRewardPreference.Mode = mfParseDungeonCardRewardMode(Preference["mode"].asString())
+            .value_or(static_cast<DungeonCardRewardMode>(-1));
+        for (const auto& Dao : Preference["daos"].asArray())
+            run.CardRewardPreference.Daos.push_back(content::parseDaoId(Dao.asString()).value_or(static_cast<content::DaoId>(-1)));
+    }
     run.row = item["row"].asInt(-1); run.seq = item["seq"].asInt(); run.elapsedDays = item["elapsedDays"].asInt(); run.relics = jsonToStringVec(item["relics"]);
     run.herbs = jsonToMap<int>(item["herbs"]); run.materials = jsonToMap<int>(item["materials"]); run.potions = jsonToMap<int>(item["potions"]);
     run.stones = item["stones"].asInt(); run.cores = item["cores"].asInt(); run.insight = item["insight"].asInt(); run.cleared = item["cleared"].asBool();

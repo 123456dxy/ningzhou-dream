@@ -10,6 +10,7 @@
 #include "core/play.h"
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/dungeon.h"
 #include "core/json.h"
 #include "core/save.h"
@@ -62,6 +63,8 @@ nz::json::Value mfLegacyBottleSave(const nz::Game& State) {
         LegacyRun.stage = Site.stage;
         LegacyState.player.stage = LegacyState.player.highestStage = Site.stage;
         LegacyState.player.lifespan = nz::realmOf(Site.stage).life;
+        // 通关夹具已按高境界战斗回满；还原旧境界时同步收回超出该境界上限的绝对气血。
+        LegacyState.player.health = std::min(LegacyState.player.health, nz::mfPlayerHealthMaximum(LegacyState.player));
     }
     // 旧普通战比入口低一个小境界；新入口普通怪与首领同境，旧存档预告也必须保持旧规则。
     for (auto& Node : LegacyRun.nodes) {

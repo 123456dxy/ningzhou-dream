@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "suite": "宁州一梦·五景天气配乐",
+  "generated_on": "2026-10-17",
+  "encoding": "44.1 kHz stereo MP3, libmp3lame 192 kbps; no additional fade",
+  "soundfont": {
+    "name": "GeneralUser GS",
+    "version": "2.0.3",
+    "license_file": "GeneralUser-LICENSE.txt",
+    "sha256": "9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe"
+  },
+  "tools": {
+    "fluidsynth_version": "2.6.1",
+    "ffmpeg_version": "7.1"
+  },
+  "verification_scope": "本轮完整解码、帧数/声道/采样率/削波/响度/接缝数值检查；浏览器播放及切换由游戏集成检查另行验证。",
+  "tracks": [
+    {
+      "id": "sunny",
+      "title": "晴山·松间初照",
+      "weather": [
+        "春和景明",
+        "秋高气爽"
+      ],
+      "version": "20261017-weather-suite-loop-v1",
+      "file": "sunny.mp3",
+      "bytes": 2881523,
+      "sha256": "7e158ce4104f43a89f5859d9f54c83fa9953b01d8acc98320e13e4a27c2b7019",
+      "source": {
+        "path": "artifacts/music/20261017-weather-suite/audio/sunny-循环.wav",
+        "bytes": 21168070,
+        "sha256": "040df8e44cbda312915c01bb7467c2bbb34240f91fc30a6b456e8a92854c64b4"
+      },
+      "duration_seconds": 119.99995464852607,
+      "sample_rate": 44100,
+      "channels": 2,
+      "decoded_frames": 5291998,
+      "bit_rate": 192000,
+      "full_decode": "passed",
+      "decoded_clipped_samples": 0,
+      "integrated_lufs": -20.77,
+      "true_peak_dbtp": -6.93,
+      "loudness_range_lu": 14.4,
+      "decoded_boundary_sample_step": 0.00067138671875,
+      "decoded_boundary_local_p999_step": 0.031880004882813395,
+      "gapless_decode_matches_source_frame_count": true,
+      "added_fade": false
+    },
+    {
+      "id": "rain",
+      "title": "听雨·檐下观心·柔雨版",
+      "weather": [
+        "烟雨绵延",
+        "灵雨润山"
+      ],
+      "version": "20261017-rain-soft-revision-loop-v2",
+      "file": "rain.mp3",
+      "bytes": 2881534,
+      "sha256": "b8c3fb483475fb3c5981df295297a9e6c5a16499f004b4431b120e9d36389698",
+      "source": {
+        "path": "artifacts/music/20261017-rain-revision/听雨·檐下观心-柔雨版-循环.wav",
+        "bytes": 21168036,
+        "sha256": "aa538520f11f8e546565a4fa031ca3694cc8e59e0509558730cab06793d37ab3"
+      },
+      "duration_seconds": 119.99995464852607,
+      "sample_rate": 44100,
+      "channels": 2,
+      "decoded_frames": 5291998,
+      "bit_rate": 192000,
+      "full_decode": "passed",
+      "decoded_clipped_samples": 0,
+      "integrated_lufs": -24.92,
+      "true_peak_dbtp": -3.26,
+      "loudness_range_lu": 8.9,
+      "decoded_boundary_sample_step": 0.007476806640625,
+      "decoded_boundary_local_p999_step": 0.08256158447265793,
+      "gapless_decode_matches_source_frame_count": true,
+      "added_fade": false,
+      "revision": "用户反馈后的柔雨修订版；中段重写，非最初天气套曲中的旧听雨。"
+    },
+    {
+      "id": "wind",
+      "title": "长风·山中问道",
+      "weather": [
+        "长风过境",
+        "朔风凛冽"
+      ],
+      "version": "20261017-wind-game-loop-v1",
+      "file": "wind.mp3",
+      "bytes": 2034529,
+      "sha256": "1c633763186b7da997bb12c4c1f96c57addf015fd6e72b675e1c92a4311e7ae6",
+      "source": {
+        "path": "build/music-render/wind-game/wind-loop.wav",
+        "bytes": 14942198,
+        "sha256": "2b92a89d3caed6fb551482923e93a8a96738299fbee1bef7a1d4395cf10e91d5"
+      },
+      "duration_seconds": 84.70589569160998,
+      "sample_rate": 44100,
+      "channels": 2,
+      "decoded_frames": 3735530,
+      "bit_rate": 192000,
+      "full_decode": "passed",
+      "decoded_clipped_samples": 0,
+      "integrated_lufs": -22.27,
+      "true_peak_dbtp": -5.62,
+      "loudness_range_lu": 9.9,
+      "decoded_boundary_sample_step": 0.00103759765625,
+      "decoded_boundary_local_p999_step": 0.000885009765625,
+      "gapless_decode_matches_source_frame_count": true,
+      "added_fade": false,
+      "composition_source": {
+        "path": "artifacts/music/20261017-shanzhong-wendao-v2/score.json",
+        "sha256": "4030b7dcbfd73527be1552aa23730dffea5dec5020b1f73aa0c5395124390e49"
+      },
+      "derivation": "复用空山版原四轨共66个音符及原配器；两圈渲染裁第二圈、循环混响、单一固定增益；未增加旋律，不使用原试听首尾淡出文件。",
+      "render_script": {
+        "path": "build/music-render/wind-game/render_wind.py",
+        "sha256": "cf73ffaf453ab6d1de4305a19e21a15a318c752cd88fd067af0de0f6c0dc6957"
+      },
+      "engine": {
+        "path": "artifacts/music/20261017-weather-suite/audio_engine.py",
+        "sha256": "4a5ee09efa1619b60efbb30f632a22f3bb2e5de77456d0fdf22223a134bb6da5"
+      }
+    },
+    {
+      "id": "mist",
+      "title": "江雾·隔岸闻笛",
+      "weather": [
+        "薄雾锁江"
+      ],
+      "version": "20261017-weather-suite-loop-v1",
+      "file": "mist.mp3",
+      "bytes": 3073366,
+      "sha256": "048f05b23417488ac7c35f09ff563cbd5c6ac631836a7ef55c24c5a9b440ae80",
+      "source": {
+        "path": "artifacts/music/20261017-weather-suite/audio/mist-循环.wav",
+        "bytes": 22579278,
+        "sha256": "cbd545a6b818f518e8832c4a98dca2fb8100eff244bcfce13c14f41f5210f42b"
+      },
+      "duration_seconds": 128.0,
+      "sample_rate": 44100,
+      "channels": 2,
+      "decoded_frames": 5644800,
+      "bit_rate": 192000,
+      "full_decode": "passed",
+      "decoded_clipped_samples": 0,
+      "integrated_lufs": -20.75,
+      "true_peak_dbtp": -7.54,
+      "loudness_range_lu": 9.4,
+      "decoded_boundary_sample_step": 3.0517578125e-05,
+      "decoded_boundary_local_p999_step": 0.00042724609375,
+      "gapless_decode_matches_source_frame_count": true,
+      "added_fade": false
+    },
+    {
+      "id": "clouds",
+      "title": "云霞·天光入岫",
+      "weather": [
+        "云蒸霞蔚",
+        "丹霞映天"
+      ],
+      "version": "20261017-weather-suite-loop-v1",
+      "file": "clouds.mp3",
+      "bytes": 3143584,
+      "sha256": "5147ca07cb55ef9db59d8132767a75d17bcad244ce8d2f5845146b9cb46fb391",
+      "source": {
+        "path": "artifacts/music/20261017-weather-suite/audio/clouds-循环.wav",
+        "bytes": 23092442,
+        "sha256": "32241a4e3ce3c62b6b07e5642e25fd7bc5c90d05dc3c5132fbd51b396c03fc7e"
+      },
+      "duration_seconds": 130.90909297052156,
+      "sample_rate": 44100,
+      "channels": 2,
+      "decoded_frames": 5773091,
+      "bit_rate": 192000,
+      "full_decode": "passed",
+      "decoded_clipped_samples": 0,
+      "integrated_lufs": -20.77,
+      "true_peak_dbtp": -6.71,
+      "loudness_range_lu": 11.2,
+      "decoded_boundary_sample_step": 9.1552734375e-05,
+      "decoded_boundary_local_p999_step": 0.000244140625,
+      "gapless_decode_matches_source_frame_count": true,
+      "added_fade": false
+    }
+  ]
+}

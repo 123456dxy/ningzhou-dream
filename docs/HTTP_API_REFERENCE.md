@@ -1,8 +1,10 @@
 # HTTP API 参考与统计
 
-核对日期：2026-10-15。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
+核对日期：2026-10-18。来源为 `src/core/interface/routes.cpp`、`src/core/api.cpp`、`src/web_main.cpp` 与 `src/core/tianji.cpp` 的实际分派。统计对象为精确 `/api/...` JSON 端点；相同路径的 GET/POST 计一个端点。`/api/tianji/` 前缀不是端点，静态页面/资源文件不计 API。
 
 2026-10-15 补充核对：新增小绿瓶升阶、专属秘境及低阶秘境扫荡三个写端点，旧灵田储备端点保留为明确拒绝的兼容入口。下方按当前 RouteInfo 重新统计。独立斗法实验服务的四个本机端点不计入正式游戏。
+
+2026-10-16秘境协议补充（无新增端点）：普通`dungeon/enter`和洞府`cave/green-bottle/dungeon`均接受可选`cardRewardPreference:{mode,daos}`。`mode`为`all/none/selected`，`daos`是`dungeons.cardRewardOptions.daos`提供的稳定ID数组；all/none必须空数组，selected恰好一个有效道系；新入场多系请求明确拒绝，既有多系在途快照保留原奖励，缺字段默认all。新入场冻结偏好，事件/商人/战后临时卡共用筛选，永久终奖不变。未触发战斗节点返回通用name/text与`detailsRevealed:false`，不返回具体encounterName/Hint；触发或已访问后才揭晓，事件主题预告保留。
 
 责任边界：我们维护核心规则与桌面 UI；账号、联机传输、天机大比由另一位成员维护。服务层增加可选本地启动模式与只读模式探测；默认公网模式和 Tianji Store 业务实现保持原样。
 
@@ -10,19 +12,19 @@
 
 | 分派归属 | 精确端点 | 查询 | 写操作 | ReplaceGame | Persistence |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 核心 RouteInfo 表 | 94 | 20 ReadOnly | 68 Mutation | 3 | 3 |
+| 核心 RouteInfo 表 | 104 | 26 ReadOnly | 72 Mutation | 3 | 3 |
 | 服务层模式/账号/社区（排除转发Tianji） | 8 | 4 | 4 | 0 | 0 |
 | Tianji Store | 5 | 2 | 3 | 0 | 0 |
-| 总计（路径去重） | **107** | **26** | **75** | **3** | **3** |
+| 总计（路径去重） | **117** | **32** | **79** | **3** | **3** |
 
 核心四类取自真实 `RouteEffect`。服务层/Tianji 的查询与写操作按用途列示，它们没有使用该 enum；查询可维护会话、缓存或天机窗口记录，不能据此推断服务器完全没有 I/O。`/api/tianji/board` 在 web_main 与 Store 均出现，但最终归 Tianji，仅计一次。web_main 的精确分派共9条，其中8条为服务专属。
 
 ## 请求、登录与通用返回
 
-- 多人 Web 服务中，全部94个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
+- 多人 Web 服务中，全部104个核心端点均需有效 `nz_sid` Cookie。mode、nickinfo、login、logout、leaderboard与tianji/board可不登录；whoami/password/feedback以及其余Tianji端点要求登录。直接调用C++ `api::handle` 的单机/测试会话不处理登录Cookie。
 - 显式 `--local` 启动时强制监听 `127.0.0.1`，使用内置本地会话，空档按默认配置开局。账号、反馈、排行榜、导出及全部 `/api/tianji/` 返回404；不初始化或读取 Tianji Store。默认不加此参数，继续使用上述公网鉴权。
 - 核心输入从 JSON **请求正文**读取，不从URL查询串读取；需要参数的查询建议使用POST JSON。表中未列默认值的字符串参数缺省为`""`，随后由对应规则校验；“无”表示没有业务输入。非空正文必须是JSON对象。
-- 所有20条核心 ReadOnly 端点均支持 **GET和POST**；其余核心端点只支持POST。成功的核心动作通常返回 `{ok:true,state:{...}}`，某些动作附加text/report；可能出现checkpointWarning。state包括玩家、功法、世界、经济、社交、秘境与恢复点视图。
+- 所有26条核心 ReadOnly 端点均支持 **GET和POST**；其余核心端点只支持POST。成功的核心动作通常返回 `{ok:true,state:{...}}`，某些动作附加text/report；可能出现checkpointWarning。state包括玩家、功法、世界、经济、社交、秘境与恢复点视图。
 - `/api/state` 的核心处理在GET与POST下都纯只读：不推进时钟或RNG，不更新自动快照，也不写第4槽；未开局返回`{ok:true,hasGame:false}`。多人服务仍有玩家加载/续玩持久化、会话维护与Tianji.observe等外层维护，并在完整state上补充`state.tianji`及可能的tianjiWarning。
 - 常见错误为 `{ok:false,error:"中文说明"}`。服务层未登录另带`needLogin:true`；Tianji错误另带字符串`code`。HTTP200仍需检查ok：例如conflict/preview资格失败返回200且ok:false，build-check返回200并以valid表示方案合法性。
 
@@ -132,7 +134,8 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 | `/api/plan` | POST | 动作 | 是 | `plan=当前计划` | 切换日常计划；状态 |
 | `/api/choose` | POST | 动作 | 是 | id（当前抉择提供且未禁用的选项） | 处理抉择分支；状态 |
 | `/api/cancel-job` | POST | 动作 | 是 | 无；需有安排 | 中止安排；状态、text；按规则处理取消与退款 |
-| `/api/breakthrough` | POST | 动作 | 是 | 无；需修为圆满、灵石足、健康≥35 | 消耗突破资源，安排并推进30/90天闭关；状态 |
+| `/api/breakthrough` | POST | 动作 | 是 | 无；需修为圆满、灵石足、气血≥30，stage2改走zhuji | 消耗突破资源，安排并推进30/90天闭关；状态 |
+| `/api/zhuji` | GET/POST | 混合 | 是 | GET查询；POST kind=start/quote/action/bind，含revision；写动作含requestId | 两路筑基准备、报价、运行及本命设置适配（可更换）；只适用于玩家筑基 |
 | `/api/supply` | POST | 动作 | 是 | `kind`，`level=0` | 调整灵石/灵气配给；状态 |
 | `/api/cave/move` | POST | 动作 | 是 | 无 | 将洞府迁到当前所在地、扣除费用；状态 |
 | `/api/cave/upgrade` | POST | 动作 | 是 | 无 | 升级洞府、扣资源；状态 |
@@ -158,7 +161,7 @@ requestId为1–64位字母/数字/下划线/短横线/点；POST仅接受表中
 
 | 路径 | 方法 | 类别 | 登录 | 主要输入/默认值 | 返回概要/副作用 |
 | --- | --- | --- | --- | --- | --- |
-| `/api/dungeon/enter` | POST | 动作 | 是 | `id` 秘境标识 | 进入秘境；状态、targetTab=dungeon |
+| `/api/dungeon/enter` | POST | 动作 | 是 | `id`，可选`cardRewardPreference:{mode,daos}` | 进入秘境并冻结临时卡奖励偏好；状态、targetTab=dungeon |
 | `/api/dungeon/sweep` | POST | 动作 | 是 | 仅非空字符串`id` | 至少高于入口一个大境界，复用所在地/有效期/空闲资格；直接进入冻结终奖选择，不自动替选、不发沿途奖励，离境结算1天 |
 | `/api/dungeon/choose` | POST | 动作 | 是 | `id` 选项/节点标识 | 选择当前秘境行动；状态、targetTab=dungeon |
 | `/api/dungeon/claim` | POST | 动作 | 是 | `id` 奖励选项标识 | 领取秘境奖励；状态、targetTab=dungeon |
@@ -296,3 +299,31 @@ state新增herbCatalog/materialCatalog供野外行囊识别名称与品阶；每
 `state.cave.greenBottle` 无天赋仅有 `hasTalent:false`；持有者含当前/下阶品阶与附加日增、自然/总日增、`upgrade`统一灵石及材料缺量报价、两组固定6项`{grade,days}`成熟周期对比，以及已解锁`dungeons`入口（品阶、专属材料名、保底10份、最低瓶阶、资格/原因）。`garden.plots`提供`naturalUnitsPerDay/bottleBonusUnitsPerDay/effectiveUnitsPerDay`和各批`estimatedDays`，不再暴露储备、日费或灵气催生计划。
 
 `state.cave.access/training/garden`为纯只读快照；`state.workshopAvailable`仅表示所在城市或自己的洞府有工坊条件，不改变野外坊市资格。`state.*.pricing`给出完整材料价值、1.5/3倍基价和法器逐项额外出售乘数；操作时重新按权威价格检查。`/api/mode.features.resourcePoints`给出requested/available/mutationsAllowed/status。骨架即使请求开启也不可变更游戏。
+
+### 2026-10-16 三项规则接入
+
+- 玩家`health`改为绝对点数，`healthMax`为权威上限，`healthUnit`为“点”；NPC和副本内部仍为百分比。秘境视图保留兼容`health`，新增`healthCurrent/healthMax`供显示。
+- `state.zhuji`仅为公开局面，不含随机种子、随机流或未揭示穴位参数。准备期通过advance推进，active期间禁止其他人生写动作，仍可保存/读档。成功后的本命选择面板不替换后续境界突破入口。
+- `/api/zhuji`为支持GET的混合路由；表中ReadOnly元数据只表示GET分派资格，POST的start/action/bind仍由独立严格输入校验、revision、requestId和真实领域状态保护并保存。quote不写状态。
+- 存档顶层`healthRulesVersion=2`，缺失或1按旧百分比迁移；新永久基础气血、丹药寿元、指定突破境界和战斗丹枚数均单独持久化。既有战斗hp/max/intent不在加载时重算。
+
+
+## 2026-10-18 玩法与操作改进
+
+以下九个端点按 RouteInfo 统一执行方法和活动守卫。查询可GET/POST；需要参数时使用POST JSON。报价不推进日历、RNG或库存。
+
+| 路径 | 类型 | 输入与返回 |
+| --- | --- | --- |
+| `/api/pills/use-quote` | ReadOnly | `{id,count}`，count为1—1000整数；返回扁平报价：enabled/reason、ownedCount、maxUsableCount、effect及单位、poisonAfter、usedAfter等 |
+| `/api/pills/use` | Mutation | 同上；重验整批，拒绝不部分服用，成功返回新state |
+| `/api/alchemy/quote` | ReadOnly | `{id,count}`，count为1/3/5/10炉；返回总费用/天数/耐久/材料需有缺/每炉成功率与产出/整批期望，不代替实际成丹 |
+| `/api/tianji-shop` | ReadOnly | 无；返回`tianjiSteward`固定货架、所在分号执事与资格 |
+| `/api/tianji-shop/quote` | ReadOnly | `{npc,offer,count}`；返回`{ok:true,quote}`，含fixedUnitPrice/totalCost/enabled/reason |
+| `/api/tianji-shop/buy` | Mutation | `{npc,offer,count,expectedCost}`；在当前分号重验固定价及容量，成功返回新state |
+| `/api/arts/lifebound` | Mutation | `{spellId}`；筑基后非活动中更换本命，固定攻防亦可；类型由筑基路线决定，不增加携带槽 |
+| `/api/ascension-tournament` | ReadOnly | 无；返回`ascensionTournament`届次资格、四战进度、奖励及规则 |
+| `/api/ascension-tournament/enter` | Mutation | 空对象；邀请或整备后入口报名，冻结三宗对手并立即进入首战 |
+
+升仙邀请使用原`/api/choose`，id为accept/decline；战斗仍用`/api/battle/turn`。四战之间自动衔接，大会活动中拒绝换装、服丹与其他人生动作。每届参赛一次，前三胜后进入下一战前恢复20%最大气血，末胜只发500灵石与一枚筑基丹。
+
+完整state新增`tianjiSteward`、`ascensionTournament`及`arts.lifebound`；`arts/spells`每项新增本命设置资格。`brewOptions[].batchQuotes`按1/3/5/10返回同一后端炼丹报价。法器视图仅由白名单形状生成appearanceId/illustration，不读取用户资源路径。

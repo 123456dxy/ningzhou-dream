@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eef0e6">
+  <meta name="description" content="宁州一梦筑基玩法沙盘：比较五行凝练与周天导流，亲手决定根基。">
+  <title>筑基沙盘 · 宁州一梦</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="masthead">
+      <div class="brand-mark" aria-hidden="true">宁</div>
+      <div><div class="eyebrow">宁州一梦 · 修行试境</div><h1>筑基沙盘</h1><p class="subtitle">一朝凝基，此生不改。亲手试试两种突破。</p></div>
+      <span class="prototype-badge">独立玩法原型 · 不影响存档</span>
+    </header>
+    <nav class="mode-switch" role="tablist" aria-label="筑基方案">
+      <button id="tab-elements" role="tab" aria-selected="true" data-mode="elements"><span>新版</span><strong>五行凝练</strong><small>择术 · 点系 · 凝液筑基</small></button>
+      <button id="tab-meridians" role="tab" aria-selected="false" data-mode="meridians"><span>方案二</span><strong>三脉筑基</strong><small>逐段揭晓 · 温养 · 深炼</small></button>
+    </nav>
+    <div class="compare-strip" id="mode-note">正在唤醒洞府灵脉……</div>
+    <div class="workspace">
+      <details class="prep-panel" open id="preparation">
+        <summary class="panel-heading"><span class="section-kicker">入关之前</span><strong>修行准备</strong><span aria-hidden="true">⌄</span></summary>
+        <div class="prep-content">
+          <label class="field">天赋<select id="talent"><option value="none">凡身 · 无特殊天赋</option><option value="daoBody">先天道体</option><option value="steady">道心坚毅</option><option value="wood">木灵根</option><option value="fire">火灵根</option><option value="water">水灵根</option><option value="gold">金灵根</option><option value="earth">土灵根</option></select></label>
+          <label class="field">筑基丹 <span class="stepper"><button type="button" data-step="-1" aria-label="减少筑基丹">−</button><output id="pill-count">0</output><button type="button" data-step="1" aria-label="增加筑基丹">＋</button></span></label>
+          <p class="form-note" id="pill-note"></p>
+          <p class="pill-draw-summary" id="pill-draw-summary" aria-live="polite">本局筑基丹抽气：未用丹。</p>
+          <label class="toggle"><input type="checkbox" id="core"><span>灵核供能<small id="core-note"></small></span></label>
+          <label class="field" id="tide-field">灵潮<select id="tide"><option value="tidal">自然灵潮（数量起伏）</option><option value="tidalSmooth">稳灵阵（数量平滑）</option></select></label>
+          <p class="form-note" id="element-probabilities">灵潮只影响数量，五行等概率；进入每轮时重新抽气。</p>
+          <div class="preset-row"><button class="small-button" data-preset="plain">清修起步</button><button class="small-button" data-preset="prepared">备齐资粮</button></div>
+          <button class="primary-button start-button" id="restart">按此准备 · 重新入关</button>
+          <p class="form-note" id="draft-note">调整后重新入关生效，两套方案独立保留进度。</p>
+          <details class="rule-details"><summary>这次在比较什么？</summary><div id="rules"></div></details>
+        </div>
+      </details>
+      <section class="stage-panel" aria-labelledby="stage-title">
+        <header class="stage-header"><div><p class="stage-kicker" id="stage-kicker">引天地灵气，筑自身道基</p><h2 class="stage-title" id="stage-title">灵台初定</h2></div><span class="stat-chip" id="round-label">第 1 / 8 轮</span></header>
+        <div class="round-track" id="round-track" aria-label="轮次"></div>
+        <div class="status-strip" id="status-strip"></div>
+        <p class="draw-note" id="next-draw-note">进入下一轮时随机抽气。</p>
+        <div class="ritual-scene" id="ritual-scene">
+          <svg class="ritual-svg" viewBox="0 0 480 360" aria-hidden="true">
+            <defs><radialGradient id="glow"><stop stop-color="#dce6d0" stop-opacity=".85"/><stop offset="1" stop-color="#dce6d0" stop-opacity="0"/></radialGradient><linearGradient id="jade"><stop stop-color="#97bba4"/><stop offset="1" stop-color="#335e51"/></linearGradient></defs>
+            <ellipse cx="240" cy="205" rx="210" ry="145" fill="url(#glow)"/>
+            <g class="aura" fill="none" stroke="#83977a"><ellipse cx="240" cy="230" rx="172" ry="77" opacity=".3"/><ellipse cx="240" cy="230" rx="150" ry="66" stroke-dasharray="3 9" opacity=".5"/><ellipse cx="240" cy="230" rx="126" ry="53" opacity=".35"/></g>
+            <path d="M66 227 155 173 327 173 414 227 327 284 155 284Z" fill="none" stroke="#bda97b" opacity=".3"/>
+            <g stroke="#a3b19a" stroke-width="1" opacity=".5"><path d="M240 121V144M89 230H113M367 230H391M240 310V332M123 173 140 186M357 173 340 186M123 287 140 274M357 287 340 274"/></g>
+            <g fill="none" stroke="url(#jade)" stroke-width="3"><path d="M240 104c-18 13-19 32-3 46 18 16 13 31 3 42"/><path d="M216 133c-12 15-11 29 1 41" opacity=".5"/><path d="M263 128c12 15 10 29-3 43" opacity=".5"/></g>
+            <ellipse cx="240" cy="235" rx="57" ry="19" fill="#72967b" opacity=".12"/>
+            <path d="M201 200Q240 220 279 200L268 234Q240 250 212 234Z" fill="url(#jade)" opacity=".95"/>
+            <ellipse cx="240" cy="200" rx="39" ry="12" fill="#d6dfca" stroke="#779580" stroke-width="2"/>
+            <path d="M213 239 207 252M267 239 273 252" stroke="#4c6b57" stroke-width="4" stroke-linecap="round"/>
+            <text x="240" y="292" text-anchor="middle" fill="#76816d" font-size="13" letter-spacing="7">聚气成液</text>
+          </svg>
+          <div class="five-compass" id="five-compass" aria-label="五行罗盘"></div>
+          <div class="meridian-field is-hidden" id="meridian-field"></div>
+        </div>
+        <div class="compass-instruction" id="compass-instruction"><span id="compass-help">先择术式，再点五行；悬停或聚焦查看实际变化。</span><button class="small-button is-hidden" id="cancel-conversion">取消换气</button></div>
+        <section class="carry-panel is-hidden" id="carry-panel" aria-label="下轮保留灵气"><div><strong>余气保留</strong><span id="carry-note"></span></div><div class="carry-inputs" id="carry-inputs"></div></section>
+        <div class="metric-row"><strong id="score-label">道基凝练</strong><span id="score-value">0 分</span></div>
+        <div class="meter-track"><div class="meter-fill" id="score-fill"></div></div>
+        <div class="grade-stops" id="grade-stops"></div>
+        <p class="guide-note" id="guide-note"></p>
+        <details class="history"><summary>修行手记 <span id="history-count">0</span></summary><ol class="history-list" id="history-list"></ol></details>
+      </section>
+      <section class="action-panel" aria-labelledby="action-heading">
+        <div class="panel-heading"><span class="section-kicker">凝神调控</span><h2 id="action-heading">施展秘术</h2></div>
+        <p class="action-instruction" id="action-instruction">先选术式，再点罗盘五行直接施展。</p>
+        <div class="action-grid" id="actions"></div>
+        <div class="quote-panel" id="quote-panel" aria-live="polite"><div class="quote-title">预见此招</div><p>点一种术式，查看本次实际变化。</p></div>
+        <button class="primary-button" id="commit" disabled>选择术式</button>
+        <div class="utility-row" id="round-controls"><button class="secondary-button" id="next">结束本轮 →</button><button class="secondary-button" id="seal">凝基定型</button></div>
+        <button class="danger-button" id="withdraw">收功离关</button>
+        <p class="form-note" id="settlement-note">达标即成功，无最终概率判定。凝基后品质永久确定，本沙盘可随时重开体验。</p>
+      </section>
+    </div>
+    <footer class="site-footer">当前为两套玩法的交互草案，数值尚待讨论。运行于独立内存会话，不读取玩家角色。</footer>
+    <nav class="mobile-tabs" aria-label="试玩快捷导航"><button data-jump="stage-title">灵台与灵气 ↑</button><button data-jump="action-heading">施术与预览 ↓</button></nav>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="modal-backdrop is-hidden" id="result-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="result-ornament">◇</div><p class="eyebrow" id="result-kicker">凝基定型</p><h2 id="result-title">筑基已成</h2><div class="result-grade" id="result-grade"></div><p id="result-description"></p><div class="result-stats" id="result-stats"></div><div class="utility-row"><button class="secondary-button" id="result-close">查看此局</button><button class="primary-button" id="result-restart">再试一次</button></div><button class="small-button" id="result-other">体验另一方案 →</button></section></div>
+</body>
+</html>

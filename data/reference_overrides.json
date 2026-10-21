@@ -1,0 +1,295 @@
+{
+  "schemaVersion": 1,
+  "changes": [
+    {
+      "table": "quests",
+      "id": "cave",
+      "set": {
+        "reward": "体道、水道经验各 +60，蛮牛护体功抄本（需修习）"
+      }
+    },
+    {
+      "table": "quests",
+      "id": "dan",
+      "set": {
+        "reward": "丹道经验 +80，丹术 +10"
+      }
+    },
+    {
+      "table": "quests",
+      "id": "temple",
+      "set": {
+        "reward": "养魂诀抄本（需修习），神道经验 +50"
+      }
+    },
+    {
+      "table": "quests",
+      "id": "swordwall",
+      "set": {
+        "desc": "连续参悟四次剑壁，完成后取得剑诀抄本。",
+        "reward": "剑道经验 +100，剑典·人道篇抄本（需修习）"
+      }
+    },
+    {
+      "table": "quests",
+      "id": "again",
+      "set": {
+        "reward": "两仪阵经抄本（需修习），阵道经验 +100"
+      }
+    },
+    {
+      "table": "quests",
+      "id": "traitor",
+      "set": {
+        "reward": "焚心诀抄本（需修习），火道经验 +100"
+      }
+    },
+    {
+      "table": "quests",
+      "id": "demon",
+      "set": {
+        "reward": "大周天吐纳抄本（需修习），气道经验 +150"
+      }
+    },
+    {
+      "table": "wildTasks",
+      "id": "bandit",
+      "set": {
+        "desc": "捕缉斗法有陨落风险，胜后领取悬赏。"
+      }
+    },
+    {
+      "table": "wildTasks",
+      "id": "beast",
+      "set": {
+        "desc": "驱妖斗法有陨落风险，胜后得同阶矿材。"
+      }
+    },
+    {
+      "table": "wildTasks",
+      "id": "supply",
+      "set": {
+        "desc": "正面斗法有陨落风险，胜后增加声望。"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5001",
+      "set": {
+        "value": 40,
+        "sourceEffect": "气血+40/丹毒+1"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5003",
+      "set": {
+        "value": 40,
+        "sourceEffect": "气血+40/丹毒+1"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5101",
+      "set": {
+        "value": 200,
+        "sourceEffect": "气血+200/丹毒+1"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5104",
+      "set": {
+        "value": 200,
+        "sourceEffect": "气血+200/丹毒+1"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5201",
+      "set": {
+        "value": 800,
+        "sourceEffect": "气血+800/丹毒+1"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5301",
+      "set": {
+        "value": 2000,
+        "sourceEffect": "气血+2000/丹毒+1"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5401",
+      "set": {
+        "value": 2000,
+        "sourceEffect": "气血+2000/丹毒+1"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5501",
+      "set": {
+        "value": 0,
+        "sourceEffect": "恢复全部气血/丹毒+1"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5111",
+      "set": {
+        "value": 10,
+        "sourceEffect": "丹毒-10"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5212",
+      "set": {
+        "value": 20,
+        "sourceEffect": "丹毒-20"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5316",
+      "set": {
+        "value": 40,
+        "sourceEffect": "丹毒-40"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5420",
+      "set": {
+        "value": 80,
+        "sourceEffect": "丹毒-80"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5119",
+      "set": {
+        "value": 10,
+        "sourceEffect": "寿元+10/丹毒+4"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5211",
+      "set": {
+        "value": 20,
+        "sourceEffect": "寿元+20/丹毒+4"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5308",
+      "set": {
+        "value": 40,
+        "sourceEffect": "寿元+40/丹毒+4"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5404",
+      "set": {
+        "value": 70,
+        "sourceEffect": "寿元+70/丹毒+4"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5517",
+      "set": {
+        "value": 120,
+        "sourceEffect": "寿元+120/丹毒+4"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5209",
+      "set": {
+        "sourceEffect": "气血基数+3/丹毒+2"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5306",
+      "set": {
+        "sourceEffect": "气血基数+7/丹毒+2"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5417",
+      "set": {
+        "sourceEffect": "气血基数+20/丹毒+2"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5515",
+      "set": {
+        "sourceEffect": "气血基数+40/丹毒+2"
+      }
+    },
+    {
+      "table": "recipes",
+      "id": "5519",
+      "remove": true
+    },
+    {
+      "table": "recipes",
+      "id": "5318",
+      "remove": true
+    },
+    {
+      "table": "recipes",
+      "id": "5319",
+      "remove": true
+    },
+    {
+      "table": "herbs",
+      "id": "6323",
+      "remove": true
+    },
+    {
+      "table": "herbs",
+      "id": "6324",
+      "remove": true
+    },
+    {
+      "table": "talents",
+      "id": "body",
+      "set": {
+        "desc": "体魄 +2"
+      }
+    },
+    {
+      "table": "birthTalents",
+      "id": "artifactward",
+      "set": {
+        "desc": "开局一品护身法衣，装备后每回合获得相当于气血上限6%的护盾"
+      }
+    },
+    {
+      "table": "stories",
+      "id": "rootpool",
+      "set": {
+        "options": [
+          {
+            "name": "以身引泉",
+            "effect": "资质+3，损失气血上限12%"
+          },
+          {
+            "name": "只取一缕灵息",
+            "effect": "土道经验+40"
+          }
+        ]
+      }
+    }
+  ]
+}

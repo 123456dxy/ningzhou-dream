@@ -28,6 +28,7 @@ void runPlayTests() {
     // ---- 城池才有坊市 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";       // 武陵城
         check(ecoIsCity(g.player.location), "武陵城是城池");
         const auto list = play::marketList(g);
@@ -48,6 +49,7 @@ void runPlayTests() {
     // ---- 买药材要扣灵石、加数量 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.stones = 1000;
         const int before = g.player.stones;
@@ -66,6 +68,7 @@ void runPlayTests() {
     // ---- 灵石不够要说清差多少 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.stones = 0;
         const auto list = play::marketList(g);
@@ -80,6 +83,7 @@ void runPlayTests() {
     // ---- 野外买东西要给出去城池的建议 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "fanghu";
         const std::string err = play::marketBuy(g, "herb", "6001", 1);
         check(err.find("城池") != std::string::npos, "野外提示去城池");
@@ -88,6 +92,7 @@ void runPlayTests() {
     // ---- NPC 往来 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         // 造一个同地点的人
         for (auto& n : g.npcs) {
@@ -106,6 +111,7 @@ void runPlayTests() {
     // ---- 送礼要扣药材 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.herbs = 3;
         g.player.arts.herbs = {{"恒心草", 3}};
@@ -121,6 +127,7 @@ void runPlayTests() {
     // ---- 没药材时送礼要给出具体原因 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.herbs = 0;
         g.player.arts.herbs.clear();
@@ -140,6 +147,7 @@ void runPlayTests() {
     // ---- 好感不够时道侣未解锁，拜师入口保留并写清缺少条件 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         for (auto& n : g.npcs) {
             if (!n.alive || n.location != "wuling") continue;
@@ -168,6 +176,7 @@ void runPlayTests() {
     // ---- 好感够了，「彻夜论道」会出现 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         for (auto& n : g.npcs) {
             if (!n.alive || n.location != "wuling") continue;
@@ -184,6 +193,7 @@ void runPlayTests() {
     // ---- 切磋使用真实NPC神通，经验在结束后结算 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.health = 100;
         g.player.arts.focus = "剑";
@@ -213,6 +223,7 @@ void runPlayTests() {
     // ---- 气血太低不能切磋 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.health = 10;
         for (auto& n : g.npcs) {
@@ -231,6 +242,7 @@ void runPlayTests() {
     // ---- 结为道侣 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.age = 20;
         for (auto& n : g.npcs) {
@@ -253,6 +265,7 @@ void runPlayTests() {
     // ---- 已经结为道侣后不能再结 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.bonds.partner = "someone";
         for (auto& n : g.npcs) {
@@ -269,6 +282,7 @@ void runPlayTests() {
     // ---- 附近的人按好感排序 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         int i = 0;
         for (auto& n : g.npcs) {
@@ -287,6 +301,7 @@ void runPlayTests() {
     // ---- 炼丹：缺料要说清缺什么 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.stones = 1000;
         g.player.arts.herbs.clear();
         g.player.herbs = 0;
@@ -308,6 +323,7 @@ void runPlayTests() {
     // ---- 炼丹成功要有产出 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.stones = 5000;
         g.player.alchemy = 500;          // 拉满丹术，尽量必成
         // 把第一张丹方需要的药材补足
@@ -327,6 +343,7 @@ void runPlayTests() {
     // ---- 炼丹会扣灵石与丹炉耐久 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.stones = 5000;
         for (const auto& h : data::HerbDef_TABLE())
             if (h.grade <= 3) g.player.arts.herbs[h.name] = 20;
@@ -425,6 +442,7 @@ void runPlayTests() {
     // ---- 通讯录 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         // 默认不含陌生人：新档一个都不认识
         const auto none = play::roster(g, false, "relation");
@@ -437,6 +455,7 @@ void runPlayTests() {
     {
         // 聊过之后应该进通讯录
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         for (auto& n : g.npcs) {
             if (!n.alive || n.location != "wuling") continue;
@@ -450,6 +469,7 @@ void runPlayTests() {
     {
         // 排序：按交情降序
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         int i = 0;
         for (auto& n : g.npcs) {
@@ -466,6 +486,7 @@ void runPlayTests() {
     {
         // 传讯加好感
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         std::string id;
         for (auto& n : g.npcs) {
@@ -479,6 +500,7 @@ void runPlayTests() {
     {
         // 好感很高时传讯不再涨（避免刷）
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         std::string id;
         for (auto& n : g.npcs) {
@@ -493,6 +515,7 @@ void runPlayTests() {
     {
         // 邀请：交情不足要拦住
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         std::string id;
         for (auto& n : g.npcs) {
@@ -505,6 +528,7 @@ void runPlayTests() {
     {
         // 邀请成功：对方会换地点
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.stones = 500;
         std::string id;
@@ -522,6 +546,7 @@ void runPlayTests() {
     // ---- 丹毒 ----
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.arts.poison = 0;
         const auto p = play::poisonInfo(g);
         checkEq(p.current, 0, "无丹毒");
@@ -531,6 +556,7 @@ void runPlayTests() {
     {
         // 不超过 20 不影响
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.arts.poison = 20;
         const auto p = play::poisonInfo(g);
         check(!p.affecting, "正好 20 还不影响");
@@ -539,6 +565,7 @@ void runPlayTests() {
     {
         // 超过 20 开始拖慢
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.arts.poison = 60;
         const auto p = play::poisonInfo(g);
         check(p.affecting, "60 丹毒影响修炼");
@@ -549,6 +576,7 @@ void runPlayTests() {
     {
         // 上限：再高也压到 0.5
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.arts.poison = 10000;
         const auto p = play::poisonInfo(g);
         checkNear(p.cultPenalty, 0.5, "丹毒极高时效率压到 0.5 下限");

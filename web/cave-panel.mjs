@@ -1,6 +1,7 @@
 // 洞府独立页面：只展示后端快照，动作和报价由应用入口提交、后端再次校验。
 import { esc, heading, panel } from './shell.mjs';
 import { renderQuantitySlider } from './quantity-controls.mjs';
+import { dungeonCardRewardSummary, loadDungeonCardRewardPreference } from './dungeon-card-preferences.mjs';
 
 // 用途：安全展示后端数值，不把缺失报价默认为免费。
 // 流程：灵田、品阶、成熟时间及训练报价展示。
@@ -252,6 +253,8 @@ function renderGreenBottle(state) {
     + actionButton('green-bottle-upgrade', '投入大量灵石，为小绿瓶恢复些许灵性', upgrade, gradeAttribute, 'primary')
     + (upgrade.reason ? `<p class="cave-access-note">${esc(upgrade.reason)}</p>` : '')
     + `<details class="cave-batch-details" data-green-bottle-dungeons><summary>寻找升阶灵材</summary>`
+    + `<p>临时神通奖励：${esc(dungeonCardRewardSummary(loadDungeonCardRewardPreference(), state.dungeons?.cardRewardOptions))}</p>`
+    + `<button class="subtle" data-action="goto-tab" data-tab="dungeon">调整临时神通奖励偏好</button>`
     + (bottle.dungeons || []).map(dungeon => `<div class="cave-bottle-dungeon"><div><strong>${esc(dungeon.name)}</strong>`
       + (dungeon.realmName ? `<p>固定难度：${esc(dungeon.realmName)}</p>` : '')
       + `<p>通关获得 ${esc(dungeon.materialName)} ×${numberText(dungeon.rewardCount)}</p>`

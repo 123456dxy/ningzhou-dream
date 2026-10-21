@@ -1,4 +1,5 @@
 #include "core/crafting/green_bottle.h"
+#include "core/exploration/dungeon_card_preferences.h"
 #include "core/crafting/garden_rules.h"
 #include "core/crafting/cave_garden.h"
 #include "core/content/green_bottle_content.h"
@@ -119,8 +120,13 @@ std::vector<GreenBottleDungeonQuote> mfGreenBottleDungeonOptions(const Game& Sta
 }
 // 用途：依同一报价进入新一轮真实秘境；流程：洞府入口命令；返回：错误或空，忙碌和过期阶位不建site。
 std::string mfEnterGreenBottleDungeon(Game& State, int Grade, int ExpectedGrade) {
+    return mfEnterGreenBottleDungeon(State, Grade, ExpectedGrade, DungeonCardRewardPreference{});
+}
+// 用途：冻结合法临时奖励偏好后进入专属秘境；流程：洞府动作；用法：传报价时瓶阶和已解析偏好；返回：错误或空，失败不改入口/序号/资源。
+std::string mfEnterGreenBottleDungeon(Game& State, int Grade, int ExpectedGrade, const DungeonCardRewardPreference& Preference) {
+    if (const auto Error = mfValidateDungeonCardRewardEntryPreference(Preference); !Error.empty()) return Error;
     if (ExpectedGrade != State.player.arts.GreenBottleGrade) return "小绿瓶阶位已变化，请刷新入口。";
     const auto Quote = mfQuoteGreenBottleDungeon(State, Grade); if (!Quote.Enabled) return Quote.Reason;
-    return mfOpenBottleMaterialDungeon(State, Grade);
+    return mfOpenBottleMaterialDungeon(State, Grade, Preference);
 }
 }

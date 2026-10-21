@@ -12,7 +12,10 @@
 
 #include "core/base.h"
 #include "core/combat/beast_actions.h"
+#include "core/exploration/dungeon_card_preferences.h"
+#include "core/exploration/ascension_state.h"
 #include "core/progression/cultivation_units.h"
+#include "core/progression/zhuji_state.h"
 
 namespace nz {
 
@@ -149,57 +152,7 @@ struct TalentDef {
     int value;
 };
 
-inline const std::vector<TalentDef>& TALENTS() {
-    static const std::vector<TalentDef> data = {
-        // 基础九项
-        {"sword", "剑心通明", "剑道", 4, "资质 +6 · 初始剑道经验 +32", "", 0},
-        {"herb", "丹道初识", "丹道", 4, "丹术 +20 · 灵药 +4", "", 0},
-        {"root", "天灵根", "修炼", 7, "资质 +22 · 初始灵石 −30", "", 0},
-        {"luck", "福缘深厚", "机缘", 5, "福缘 +22 · 交往好感额外 +2", "", 0},
-        {"longlife", "长生根骨", "寿元", 4, "各境界寿元上限 +15 年", "", 0},
-        {"merchant", "商贾世家", "资粮", 3, "营生收入 +18% · 购入价格 −10%", "", 0},
-        {"body", "淬体根骨", "体魄", 3, "体魄 +2 · 休养额外恢复 8 气血", "", 0},
-        {"steady", "道心坚毅", "突破", 3, "成功率 +4% · 失败损失 15%（化神 25%）", "", 0},
-        {"solitary", "山野悟道", "散修", 2, "散修闭关效率 +8%", "", 0},
-        // 拓展项
-        {"savvy", "过目不忘", "气运", 3, "悟性 +12 · 研习时间 −20%", "insight", 12},
-        {"rich", "家财万贯", "气运", 4, "初始灵石 +100", "stones", 100},
-        {"poor", "家境清寒", "磨砺", -2, "初始灵石 −70", "stones", -70},
-        {"weak", "体弱多病", "磨砺", -2, "资质 −8", "apt", -8},
-        {"unlucky", "时运不济", "磨砺", -2, "福缘 −15", "luck", -15},
-        {"short", "早年暗伤", "磨砺", -2, "寿元 −12 年", "lifeBonus", -12},
-        {"bright", "聪慧早成", "气运", 2, "悟性 +7", "insight", 7},
-        {"craft", "锻铁学徒", "气运", 2, "体魄 +1，灵石 +15", "body", 1},
-        {"silver", "药圃出身", "气运", 2, "灵药 +6", "herbs", 6},
-        {"blade", "剑术师承", "气运", 3, "初始剑道经验 +24", "sword", 12},
-        {"calm", "心静如水", "气运", 2, "悟性 +6", "insight", 6},
-        {"wild", "山林之子", "气运", 2, "福缘 +10", "luck", 10},
-        {"sturdy", "筋骨强健", "气运", 3, "体魄 +3", "body", 3},
-        {"water", "水灵根", "水道", 4, "资质 +12 · 每消耗一层水势返还1灵力", "apt", 12},
-        {"fire", "火灵根", "火道", 4, "资质 +12 · 丹术 +5 · 引爆灼烧伤害 +10%", "apt", 12},
-        {"wood", "木灵根", "木道", 4, "资质 +12 · 灵药 +2 · 每施加一层毒恢复0.5%气血", "apt", 12},
-        {"gold", "金灵根", "金道", 4, "资质 +12 · 初始金道经验 +6 · 每弃一张牌获得1%气血护盾", "apt", 12},
-        {"earth", "土灵根", "土道", 4, "资质 +12 · 体魄 +1 · 重击追加当前护盾15%的伤害", "apt", 12},
-        {"genius", "悟性超群", "气运", 7, "悟性 +25", "insight", 25},
-        {"fortune", "命带贵人", "气运", 3, "福缘 +14", "luck", 14},
-        {"frugal", "勤俭持家", "气运", 2, "初始灵石 +45", "stones", 45},
-        {"alchemy", "丹火童子", "丹道", 3, "丹术 +14 · 每炉成功产出 +1，最高4枚", "alchemy", 14},
-        {"wanderer", "远游见闻", "气运", 2, "悟性 +5，福缘 +3", "insight", 5},
-        {"hard", "百折不挠", "气运", 3, "体魄 +2，悟性 +4", "body", 2},
-        {"mortal", "凡骨求道", "磨砺", -3, "资质 −12", "apt", -12},
-        {"daoBody", "先天道体", "修炼", 4, "修炼效率 +10% · 筑基后灵气容量 +2", "", 0},
-        {"immortal", "转世仙人", "悟道", 6, "悟性 +10 · 开局悟道点 +1 · 每次大境界突破额外悟道点 +1", "insight", 10},
-        {"blessing", "天道福泽", "悟道", 4, "获得的大道经验 +20%", "", 0},
-        {"dragonBlood", "龙族血脉", "体魄", 5, "体魄 +1 · 每回合结束恢复3%气血", "body", 1},
-        {"oddMeridian", "先天异脉", "磨砺", -3, "丹药与妖丹无法提升修为", "", 0},
-        {"greenBottle", "神秘绿瓶", "丹道", 3, "可在洞府投入灵石永久恢复0至6阶灵性，持续增加灵田成长；高阶需要专属秘境灵材，无日费，外出照常生效，不催生妖丹", "", 0},
-        {"lightStep", "轻功高手", "遁速", 2, "遁速 +6 · 影响先手、步行御器耗时与逃遁", "", 0},
-        {"artisan", "百炼匠心", "器道", 3, "炼器时间 −15% · 自炼法器售值 +15%，遵守生活加成上限", "", 0},
-        {"family", "修真家族", "传承", 3, "开局修得一层蛮牛护体功并领悟聚气", "", 0},
-        {"spiritEyes", "魂穿异世", "神识", 2, "起始神识 +3", "", 0},
-    };
-    return data;
-}
+const std::vector<TalentDef>& TALENTS();
 
 // 属性分配项
 struct BuildStatDef {
@@ -276,12 +229,24 @@ struct Build {
 struct Card {
     string uid;      // "card-0" 形式，牌组内唯一
     string spell;    // 神通 id；'strike' / 'defend' 为通用卡
+    bool Innate = false;
+    bool Retain = false;
 };
 
 struct Player;
 
+// 战斗模块拥有的入战冻结法器收益；无外部资源，可复制和持久化。
+struct ArtifactCombatSnapshot {
+    int Version = 0;
+    int WaterCap = 6, SwordQiCap = 8, SoulCap = 6, ChargeCap = 4;
+    double SharpnessCap = 0.30;
+    int RoundMana = 0, RoundWater = 0, RoundSwordQi = 0, RoundSoul = 0, RoundPoison = 0;
+    int RoundShield = 0, RoundBurn = 0, RoundPoisonDamagePerLayer = 0;
+};
+
 // 人类对手使用同一套神通效果、灵力和牌堆规则。
 struct EnemyCombat {
+    ArtifactCombatSnapshot ArtifactState;
     bool enabled = false;
     int stage = 0, speed = 0, body = 0, mind = 0;
     string sect, dao, main;
@@ -294,8 +259,9 @@ struct EnemyCombat {
     bool attacked = false;
     int swordQi = 0, water = 0, soul = 0, charge = 0, lock = 0;
     int carryMana = 0, manaBonus = 0, manaPenalty = 0, drawNext = 0;
-    int carryCap = 0, hpCostPct = 0, poison = 0, poisonTurns = 0;
+    int carryCap = 0, hpCostPct = 0, poison = 0, poisonTurns = 0; // 毒持续字段为0/1活跃标记
     int burn = 0, burnTurns = 0, swordSequence = 0, comboDraws = 0;
+    int WaterFlowDraws = 0; // 本回合原生水攻击补牌已用预算，0..2。
     int ElementalSwordManaReturns = 0; // 本回合五行剑诀返灵触发次数，0..3
     int ElementalSwordSequence = 0; // 五行剑独立三剑进度0..3；跨回合/中性牌保留，不混用普通连剑。
     int ElementalSwordEnhancementLayers = 0; // 五行剑诀本场相生强化，0..5；功法层数决定每层倍率。
@@ -309,6 +275,7 @@ struct EnemyCombat {
 // Demo 07 起改为卡牌斗法：每回合抽 5 张，出牌不触发反击，
 // 「结束回合」才结算持续伤害、敌方行动与护盾。
 struct Battle {
+    ArtifactCombatSnapshot ArtifactState;
     // Detached immutable human loadout; never refers to an account or NPC world.
     // The pointed-to Player has no battle, preventing recursive snapshot graphs.
     std::shared_ptr<const Player> shadowPlayer;
@@ -376,10 +343,10 @@ struct Battle {
     // ---- 状态 ----
     map<string, int> cooldowns;    // 神通 id -> 剩余回合数
     int poison = 0;
-    int poisonTurns = 0;
+    int poisonTurns = 0;          // 0/1：毒是否活跃；本场持续，不是剩余回合
     int poisonDamage = -1;         // 精确每跳毒伤（含平减清毒余量）；-1仅为旧档默认值
     int playerPoison = 0;          // 敌方施加给玩家的每回合毒伤
-    int playerPoisonTurns = 0;
+    int playerPoisonTurns = 0;    // 0/1：自身中毒活跃标记
     int burnTurns = 0;
     int water = 0;
     int soul = 0;
@@ -400,6 +367,7 @@ struct Battle {
     double discardPower = 0;       // 弃牌积攒的下一次直接攻击增伤，最高30%
     int swordSequence = 0;         // 本回合连续剑系出牌数
     int comboDraws = 0;            // 本回合相生额外抽牌触发数，最高2
+    int WaterFlowDraws = 0; // 本回合原生水攻击补牌已用预算，0..2；独立抽牌不占用。
     int ElementalSwordManaReturns = 0; // 本回合五行剑诀返灵触发次数，0..3
     int ElementalSwordSequence = 0; // 五行剑独立三剑进度0..3；跨回合/中性牌保留，不混用普通连剑。
     int ElementalSwordEnhancementLayers = 0; // 五行剑诀本场相生强化，0..5；功法层数决定每层倍率。
@@ -413,6 +381,8 @@ struct Battle {
     string advChoice;
     int advFee = 0;
     int advGrade = 1;
+    string AdvGearTemplateId;
+    int AdvRewardVersion = 0;
     string advBook;
     string advNpcId;
     string advStyle;
@@ -443,9 +413,16 @@ struct Gear {
     bool inscribed = false;   // 是否铭刻
     int price = 0;
     int craftCost = 0;        // 铸造成本，转售时用于定价
-    bool crafted = false;    // 玩家亲自炼制；购买与NPC装备不享制造专属溢价
+    bool crafted = false;    // 合法制成品；亲炼溢价另由Origin区分
+    string Origin;           // player / event / talent；空值保留既有装备来源语义
     vector<int> dimensions;   // 五维
     string shape;            // sword / seal / armor / bell / pearl
+    // 制作模块冻结的新法器合同；Version0 保留旧装备结算。
+    int ForgeVersion = 0;
+    string EffectId, InscriptionId;
+    double EffectPower = 0;
+    int ForgeEnergy = 0;
+    map<string, int> SourceMaterials;
 };
 
 // 洞府数据（对应 JS 的 p.arts）。
@@ -474,8 +451,13 @@ struct Arts {
     int mind = 0;                              // 神识
     int speed = 0;
     int hpBonus = 0;
-    int aptPills = 0;                          // 本世资质丹已提升点数（上限 10）
+    int BaseHealthBonus = 0;                  // 体魄丹永久基础气血，进入生命公式的2.4倍率。
+    int FoundationHealthBonus = 0;            // 筑基定基所得基础气血，不可补修。
+    string LifeboundSpell;                    // 筑基后选定一次的本命神通，仅首张副本附加效果。
+    string LifeboundKind;                     // 空 / innate固有 / retain保留。
+    int aptPills = 0;                          // 本世资质丹已提升点数（统计，无总量封顶）
     string breakBuff;                          // 突破增益（空/step/stage）
+    int BreakthroughPillStage = -1;           // 突破丹仅对指定境界有效；-1表示无准备。
     double combatBuff = 0;
     int repel = 0;                             // 驱邪符效力
     struct Progress {
@@ -491,6 +473,7 @@ struct Arts {
     optional<Battle> battle;
     // 斗法起手准备（对应 JS 的 combatPrep / combatBuff）
     map<string, double> combatPrep;
+    int CombatPillDoseCount = 0;               // 本次战前准备实际服用枚数，最多3枚。
     // 已获得的功法抄本（对应 economy 的 books）
     vector<string> bookList;
 
@@ -535,6 +518,7 @@ struct Person {
     int cores = 0;
     int body = 0;            // 体魄：降低游历伤害、减少斗法受伤
     int lifeBonus = 0;       // 寿元额外加成（天赋/丹药）
+    int PillLifeBonus = 0;   // 其中由续命丹提供的寿元，独立于天赋，最多500年。
     string location = "wuling";
     map<string, int> relations;
 };
@@ -544,9 +528,12 @@ struct NpcPillState {
     map<string, int> used, daoExp;
     vector<string> nodes;
     int poison = 0, aptPills = 0, hpBonus = 0;
+    int BaseHealthBonus = 0;
     int heart = 0, mind = 0, speed = 0, points = 0, repel = 0;
     string breakBuff;
+    int BreakthroughPillStage = -1;
     map<string, double> combatPrep;
+    int CombatPillDoseCount = 0;
     double combatBuff = 0;
 };
 
@@ -583,6 +570,7 @@ struct Npc : Person {
 
 // 玩家
 struct Player : Person {
+    AscensionTournamentState AscensionTournament;
     string portraitId; // Empty in older saves: resolve the gender-specific default portrait.
     string talent = "sword";
     vector<string> traits;
@@ -592,6 +580,7 @@ struct Player : Person {
     int highestStage = 0;
     vector<std::pair<string, int>> achievements;  // 名称 -> 年份
     Arts arts;
+    optional<ZhujiRun> Zhuji;
 
     // ---- 道友往来 ----
     // relations 是好感度（-100~100，可负，代表「对方对你的态度」）。
@@ -639,6 +628,7 @@ struct Clock {
 
 // 在途工作（对应 JS 的 clock.job）
 struct Job {
+    optional<Gear> ForgeProduct; // 新炼器在开工时冻结，完成时不重算配方。
     int craftOutput = 1;
     int travelChecks = 0;
     int travelAmbushes = 0;
@@ -740,6 +730,8 @@ struct AdvContext {
     int stage = 0;      // 对手境界
     int fee = 0;        // 胜后赏金
     int grade = 1;      // 法器品阶
+    string GearTemplateId;
+    int RewardVersion = 0;
     string book;        // 可获得的功法 id，空表示无
     string npcId;
     string style;       // 对手战斗风格
@@ -827,6 +819,8 @@ struct DungeonNode {
 struct DungeonRun {
     string siteId, siteName, type, location, phase = "route", current;
     int LayoutVersion = 1; // 旧路线固定为1；新入场使用2，避免更新重绘在途存档。
+    int CardRewardRulesVersion = 0; // 旧在途保持原临时卡池；新入场版本1才启用偏好。
+    DungeonCardRewardPreference CardRewardPreference;
     int stage = 0, health = 100, row = -1, seq = 0, elapsedDays = 0;
     vector<DungeonNode> nodes;
     vector<Card> deck;

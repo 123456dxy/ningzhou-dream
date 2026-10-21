@@ -313,7 +313,7 @@ void runSocietyTests() {
         checkEq(g.player.insight, insightBefore + 2, "收入旧卷给悟性 +2");
     }
     {
-        // 以身引泉给资质+3、气血−12
+        // 以身引泉给资质+3，扣除气血上限12%；此夹具上限148，四舍五入扣18。
         Game g = makeSocietyGame("", 0, 0);
         g.player.apt = 60;
         g.player.health = 80;
@@ -322,7 +322,7 @@ void runSocietyTests() {
             if (x.id == "rootpool") s = &x;
         storyComplete(g, *s, 0);
         checkEq(g.player.apt, 63, "以身引泉给资质 +3");
-        checkEq(g.player.health, 68, "以身引泉气血 −12");
+        checkEq(g.player.health, 62, "以身引泉扣上限12%即18点气血");
     }
     {
         // 引灯火入道给悟道点+2、心境+5

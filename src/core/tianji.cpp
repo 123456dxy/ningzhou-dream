@@ -3,6 +3,7 @@
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/calendar.h"
+#include "core/combat/battle_scaling.h"
 #include "core/save.h"
 #include <algorithm>
 #include <cmath>
@@ -98,7 +99,7 @@ bool freezePlayer(const Player& s, Player& p, std::string& error) {
         s.traits.size() > 64 || s.arts.nodes.size() > 60 || s.arts.manuals.size() > 128 ||
         s.arts.aux.size() > 4 || s.arts.exp.size() > 12 || s.arts.equipped.size() > 3)
         return bad("构筑大小或境界无效，无法生成留影。");
-    for (int n : {s.body, s.arts.mind, s.arts.hpBonus, s.arts.speed})
+    for (int n : {s.body, s.arts.mind, s.arts.hpBonus, s.arts.speed, s.arts.BaseHealthBonus, s.arts.FoundationHealthBonus})
         if (n < 0 || n > 100000) return bad("永久战斗属性超出留影支持范围。");
     std::set<std::string> unique;
     for (const auto& id : s.traits) if (!findTalent(id) || !unique.insert(id).second) return bad("天赋无效或重复。");
@@ -124,11 +125,18 @@ bool freezePlayer(const Player& s, Player& p, std::string& error) {
     p.name = s.name; p.gender = s.gender; p.age = s.age; p.lifespan = s.lifespan;
     p.stage = s.stage; p.xp = s.xp; p.apt = s.apt; p.luck = s.luck; p.insight = s.insight;
     p.sword = s.sword; p.alchemy = s.alchemy; p.body = s.body; p.lifeBonus = s.lifeBonus;
-    p.health = 100; p.talent = s.talent; p.traits = s.traits; p.build = s.build; p.sect = s.sect;
+    p.PillLifeBonus = s.PillLifeBonus;
+    p.talent = s.talent; p.traits = s.traits; p.build = s.build; p.sect = s.sect;
     p.arts.focus = s.arts.focus; p.arts.exp = s.arts.exp; p.arts.nodes = s.arts.nodes;
     p.arts.manuals = s.arts.manuals; p.arts.main = s.arts.main; p.arts.aux = s.arts.aux;
     p.arts.spells = s.arts.spells; p.arts.knownSpells = s.arts.spells;
     p.arts.mind = s.arts.mind; p.arts.speed = s.arts.speed; p.arts.hpBonus = s.arts.hpBonus; p.arts.heart = s.arts.heart;
+    p.arts.BaseHealthBonus = s.arts.BaseHealthBonus;
+    p.arts.FoundationHealthBonus = s.arts.FoundationHealthBonus;
+    p.arts.LifeboundKind = s.arts.LifeboundKind;
+    p.arts.LifeboundSpell = s.arts.LifeboundSpell;
+    if (!p.arts.LifeboundSpell.empty() && std::find(p.arts.knownSpells.begin(), p.arts.knownSpells.end(), p.arts.LifeboundSpell) == p.arts.knownSpells.end())
+        p.arts.knownSpells.push_back(p.arts.LifeboundSpell);
     for (const auto& [slot, id] : s.arts.equipped) {
         if (id.empty()) continue;
         if (slot != "weapon" && slot != "armor" && slot != "accessory") return bad("法宝槽位无效。");
@@ -139,6 +147,7 @@ bool freezePlayer(const Player& s, Player& p, std::string& error) {
         for (int dimension : it->dimensions) if (dimension < 0 || dimension > 100000) return bad("法宝属性无效。");
         p.arts.gear.push_back(*it); p.arts.equipped[slot] = id;
     }
+    p.health = mfPlayerHealthMaximum(p);
     const auto text = saveToJson(snapshotGame(p));
     if (text.size() > MAX_SNAPSHOT_BYTES) return bad("留影内容过大。");
     Game check; std::string validation;

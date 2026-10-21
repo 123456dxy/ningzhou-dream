@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f1e5">
+  <title>行气冲穴 · 宁州一梦</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="masthead"><span class="brand-seal" aria-hidden="true">宁</span><div><p class="eyebrow">宁州一梦 · 筑基试境</p><h1>行气冲穴</h1><p class="subtitle">看准气势，点发光穴前进；气势会带到下一穴。</p></div><nav class="comparison-links" aria-label="其他独立沙盘"><a href="http://127.0.0.1:53238/" target="_blank" rel="noopener">五行凝练 ↗</a><a href="http://127.0.0.1:53239/" target="_blank" rel="noopener">回路搭建 ↗</a></nav></header>
+    <div class="workspace">
+      <section class="map-panel" aria-label="当前经脉路线">
+        <div class="map-heading"><h2 id="stage-title">一缕真气，循脉而行</h2><span class="phase-badge" id="phase-badge">连接洞府中</span></div>
+        <div class="status-strip" id="status-strip" aria-live="polite"></div>
+        <ol class="stage-track" id="stage-track" aria-label="三段经脉"></ol>
+        <div class="graph" id="graph"><svg class="edge-layer" id="edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="node-layer"></div><div class="qi-orb" id="qi-orb" aria-hidden="true"></div><div class="graph-loading" id="graph-loading">正在接引真气……</div></div>
+        <p class="flow-note" id="flow-note" role="status">① 查看相邻穴条件　② 蓄气或泄气　③ 点发光穴前进</p>
+      </section>
+      <aside class="side-panel" aria-label="调气与穴位预览">
+        <details class="preparation" id="preparation"><summary>入关准备 <span id="preparation-summary">独立沙盘</span></summary><div class="preparation-content"><label>筑基丹<span class="stepper"><button data-pill-step="-1" aria-label="减少筑基丹">−</button><output id="pill-count">0</output><button data-pill-step="1" aria-label="增加筑基丹">＋</button></span></label><label class="check-field"><input type="checkbox" id="core">灵核供能</label><label>天赋<select id="talent"><option value="none">凡身</option><option value="daoBody">先天道体</option><option value="steady">道心坚毅</option></select></label><p class="form-note" id="preparation-hint">调整后重新入关生效。</p><button id="restart" class="secondary-button">按此准备 · 重新入关</button></div></details>
+        <section class="node-detail"><span class="eyebrow">看穴 · 识气</span><h2 id="detail-title">点发光穴，真气便前行</h2><p id="detail-body">金色光点是你的真气；只有与当前位置相连的穴位可以前往。点其余穴位可查看条件。</p></section>
+        <section class="quote-panel" id="quote-panel" aria-live="polite"><span class="eyebrow">选择预览 · 未结算</span><p>悬停、聚焦或查看穴位，读清本次实际变化。</p></section>
+        <div class="action-area"><div class="adjust-heading"><h2>调息蓄势</h2><span>报价保留后续最短余程</span></div><div class="adjust-grid"><button class="charge-button" id="charge">蓄气 ＋2</button><button class="release-button" id="release">泄气 −2</button></div><p class="adjust-note" id="adjust-note">调气代价以本局报价为准。</p><button class="primary-button is-hidden" id="advance">进入下一脉</button><button class="secondary-button is-hidden" id="reconnect">重新连接 · 恢复此局</button><button class="danger-button" id="withdraw">收功离关</button></div>
+        <details class="history" id="history"><summary>修行手记 <span id="history-count">0</span> · 规则</summary><div class="history-content"><ol id="history-list"></ol><div id="rules-hint"></div></div></details>
+      </aside>
+    </div>
+    <footer class="site-footer">当前一脉完整可见，后段到达时才揭晓。穴位不吻合仍可通过；最终凝基后，根基永久定型。</footer>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="modal-backdrop is-hidden" id="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><p class="eyebrow" id="modal-kicker">道基将定</p><h2 id="modal-title">确认本次选择</h2><div id="modal-body"></div><div class="modal-actions"><button class="secondary-button" id="modal-close">返回查看</button><button class="primary-button" id="modal-confirm">确认</button></div></section></div>
+</body>
+</html>

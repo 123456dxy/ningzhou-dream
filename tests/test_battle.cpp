@@ -3,6 +3,7 @@
 
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/sim.h"
 #include "core/sword.h"
 
@@ -30,7 +31,6 @@ Game makeCardGame(uint32_t seed) {
     p.sword = 20;
     p.alchemy = 10;
     p.body = 2;
-    p.health = 100;
     p.stones = 500;
     p.herbs = 20;
     p.location = "wuling";
@@ -40,6 +40,7 @@ Game makeCardGame(uint32_t seed) {
     ensureArts(g);
     // 与 JS 测试脚本一致：携带灵击/御剑诀/水灵盾/回春术
     p.arts.spells = {"strike", "sword", "water", "wood"};
+    p.health = mfPlayerHealthMaximum(p);
     return g;
 }
 
@@ -65,9 +66,9 @@ void runCardTests() {
     Game g = makeCardGame(20261004);
     battleStart(g, testEnemy());
     const Battle start = *g.player.arts.battle;
-    checkEq(start.hp, 161, "开局气血含体魄加成");
-    checkEq(start.max, 161, "气血上限含体魄加成");
-    checkEq(start.enemyMax, 208, "对手气血含斗法修正");
+    checkEq(start.hp, 166, "开局气血含体魄加成");
+    checkEq(start.max, 166, "气血上限含体魄加成");
+    checkEq(start.enemyMax, 215, "对手气血含斗法修正");
     checkEq(start.mana, 3, "炼气开局灵力3");
     checkEq(start.maxMana, 3, "炼气每回合自然回复3");
     checkEq(start.deck.size(), 16, "三个额外神通加十张固定普通招式");
@@ -86,15 +87,16 @@ void runCardTests() {
               start.draw == same.player.arts.battle->draw &&
               start.intentRaw == same.player.arts.battle->intentRaw,
           "相同种子产生相同起手、牌堆与已展示意图");
-    checkStr(start.intentKind, "attack", "开局意图为普通攻击");
+    checkStr(start.intentKind, "beast-actions", "妖兽开局展示真实行动计划");
+    checkEq(start.BeastActions.size(), 1, "炼气妖兽开局使用单段行动");
 
     struct Case { const char* id; int cost, dmg, shield, heal, energy, qi; };
-    // 炼气基底14×0.3+18=22.2；普攻round(22.2×0.48)=11，御剑round(22.2×0.85)=19。
+    // 炼气基底16×0.3+18=22.8；普攻round(22.8×0.48)=11，御剑round(22.8×0.85)=19。
     // 本夹具未解锁剑道入门增伤；费用、护盾、治疗和剑气仍锁定各自原规则。
     const Case cases[] = {
-        {"water", 1, 0, 29, 0, -1, 0}, {"wood", 2, 0, 0, 0, -2, 0},
+        {"water", 1, 0, 30, 0, -1, 0}, {"wood", 2, 0, 0, 0, -2, 0},
         {"strike", 1, 11, 0, 0, -1, 0}, {"sword", 2, 19, 0, 0, -2, 1},
-        {"defend", 1, 0, 19, 0, -1, 0},
+        {"defend", 1, 0, 20, 0, -1, 0},
     };
     for (const auto& c : cases) {
         const Preview pv = battlePreview(g.player, start, c.id);
@@ -172,6 +174,7 @@ void runCardTests() {
     }
     {
         Game t = makeCardGame(1); t.player.stage = 12;
+        t.player.health = mfPlayerHealthMaximum(t.player);
         EnemySpec tank = testEnemy(); tank.stage = 12; tank.style = "体";
         battleStart(t, tank);
         int turns = 0;

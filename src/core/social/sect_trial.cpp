@@ -1,4 +1,5 @@
 #include "core/sect_trial.h"
+#include "core/combat/battle_scaling.h"
 #include "core/content/game_ids.h"
 
 #include <algorithm>
@@ -94,7 +95,7 @@ string sectTrialError(const Game& g, const string& sect) {
     if (content::parseSectId(sect) == content::SectId::Xinghe && g.player.gender != "女") return "星河剑派仅招收女修。";
     const int requiredRenown = renown::sectRequirement(sect);
     if (g.player.renown < requiredRenown) return "这处山门需要声望达到 " + std::to_string(requiredRenown) + "。";
-    if (g.player.health < 30) return "气血不足30%，请先休养再参加入门考核。";
+    if (g.player.health < HealthGateMinimum) return "气血不足30，请先休养再参加入门考核。";
     if (g.player.stones < def->fee) return "每次入门考核需 " + std::to_string(def->fee) + " 灵石。";
     if (flagValue(g, "sect-trial-serial") >= 1000000) return "入门考核次数已达到上限。";
     for (const auto& other : sectTrialDefs())

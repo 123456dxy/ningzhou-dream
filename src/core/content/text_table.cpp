@@ -71,11 +71,14 @@ std::string_view text(TextId id) {
     case TextId::ChargeDescription: return "攻击并积攒1层重势，最多4层；重势强化重击。";
     case TextId::WaterDescription: return "攻击并积攒2层水势，最多6层，可立即衔接浪击。";
     case TextId::WaveDescription: return "消耗水势，每层至少增伤15%；水系功法可保留水势、返还灵力。";
-    case TextId::PoisonDescription: return "攻击并施加{count}层毒，天然叠加，最多{cap}层；再次施毒刷新3回合，木系功法可触发毒疗。";
+    case TextId::PoisonDescription: return "攻击并施加{count}层毒，天然叠加，最多{cap}层；本场持续直至净化或战斗结束，木系功法可触发毒疗。";
+    case TextId::PoisonBloomDescription: return "使对方现有毒层增加50%（新增层向上取整，最多99层），每跳毒伤按实际增层比例复制；无直接伤害，不触发施毒回春、相生返灵或补牌，无毒或满层时不可施放。";
+    case TextId::PoisonSiphonDescription: return "借助对方活跃毒层治疗自身：每层回复本境界伤害基数的4%（合计四舍五入），本术最多回复自身气血上限的12%（向下取整），实际不超过缺血。不消耗毒层、不改每跳毒伤，无直伤；不受攻击、治疗或相生倍率影响，不触发施毒回春。无毒、满血或本术治疗为0时不可施放；独立第三牌回春等通用节点另算。冷却两个完整自身回合。";
     case TextId::PoisonBurstDescription: return "消耗全部毒层，每层追加统一伤害基底（战力×0.3+18）的18%伤害；爆发受护盾和减伤影响。";
     case TextId::FireDescription: return "攻击并施加灼烧，天然叠加并刷新3回合；火系功法增加每次施加量，相生提高灼烧伤害。";
     case TextId::FireBurstDescription: return "攻击并引爆现有灼烧，追加剩余全部回合的灼烧伤害，然后清除燃烧。";
     case TextId::FireSiphonDescription: return "消耗敌方全部灼烧，将原本引爆的灼烧伤害等量转为自身气血，不造成伤害；受引爆成长影响，不受治疗加成影响，回复不超过缺失气血。";
+    case TextId::DrawToDescription: return "将自己的手牌补至{count}张，按本牌离手后的数量计算。手牌已达目标时不抽牌、不弃牌；可抽牌不足时尽量补入，额外抽牌加成不提高目标。";
     case TextId::SoulDescription: return "攻击并积攒2层震荡，最多6层。";
     case TextId::SoulBurstDescription: return "消耗全部震荡，每层增伤{bonus_percent}%；每层使该次伤害的{pierce_percent}%穿盾，最多{max_pierce_percent}%。穿盾部分仍受目标减伤。";
     case TextId::BodyBurstDescription: return "体魄强化爆发，消耗重势，每层增伤10%；施放前灵力至少3再增伤15%。";

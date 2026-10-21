@@ -1,8 +1,13 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/persistence/forge_codec.h"
 #include "core/foundation/state_limits.h"
 #include "core/combat/elemental_sword.h"
 #include "core/combat/fire_growth.h"
+#include "core/combat/water_flow.h"
+#include "core/exploration/dungeon_card_preferences.h"
+#include "core/persistence/zhuji_codec.h"
+#include "core/persistence/ascension_codec.h"
 #include <cmath>
 #include <set>
 
@@ -17,7 +22,7 @@ bool saveInteger(const Value& value, double low, double high) {
 bool validSaveNumbers(const Value& value, const std::string& field) {
     static const std::set<std::string> floating = {
         "market", "bonus", "combatBuff", "buff", "reduction", "guard",
-        "intentScale", "chance", "breakthroughChance", "breakthroughFailureLoss", "discardPower"
+        "effectPower", "sharpnessCap", "intentScale", "chance", "breakthroughChance", "breakthroughFailureLoss", "discardPower"
     };
     if (value.isNumber()) {
         if (field == "rng" || field == "seed") return saveInteger(value, 0, 4294967295.0);
@@ -62,6 +67,32 @@ bool dungeonRewardArrayValid(const Value& value, bool modern) {
     for (const auto& part : value.asArray()) if (!dungeonRewardShapeValid(part, modern)) return false;
     return true;
 }
+// 用途：严格核对冻结奖励偏好的版本和机器字段；流程：读档/导入形状检查；用法：传run对象；返回：是否合法，不修改在途候选或历史牌组。
+bool mfDungeonCardPreferenceShapeValid(const Value& Run) {
+    const bool HasVersion = Run.asObject().contains("cardRewardRulesVersion");
+    const bool HasPreference = Run.asObject().contains("cardRewardPreference");
+    if (HasVersion && !saveInteger(Run["cardRewardRulesVersion"], 0, 1)) return false;
+    const int Version = HasVersion ? Run["cardRewardRulesVersion"].asInt() : 0;
+    if (!HasPreference) return Version == 0;
+    const auto& PreferenceValue = Run["cardRewardPreference"];
+    if (!PreferenceValue.isObject() || !PreferenceValue["mode"].isString() || !PreferenceValue["daos"].isArray() || PreferenceValue["daos"].asArray().size() > content::allDaoIds().size()) return false;
+    for (const auto& [Key, Field] : PreferenceValue.asObject()) {
+        static_cast<void>(Field);
+        if (Key != "mode" && Key != "daos") return false;
+    }
+    const auto Mode = mfParseDungeonCardRewardMode(PreferenceValue["mode"].asString());
+    if (!Mode) return false;
+    DungeonCardRewardPreference Preference; Preference.Mode = *Mode;
+    for (const auto& Entry : PreferenceValue["daos"].asArray()) {
+        if (!Entry.isString()) return false;
+        const auto Dao = content::parseDaoId(Entry.asString());
+        if (!Dao || content::stableId(*Dao) != Entry.asString()) return false;
+        Preference.Daos.push_back(*Dao);
+    }
+    if (!mfValidateDungeonCardRewardPreference(Preference).empty()) return false;
+    return Version != 0 || (Preference.Mode == DungeonCardRewardMode::All && Preference.Daos.empty());
+}
+
 bool dungeonShapesValid(const Value& world, bool modern) {
     using json::Type;
     if (!world.isObject()) return false;
@@ -77,6 +108,7 @@ bool dungeonShapesValid(const Value& world, bool modern) {
     }
     const auto& run = world["run"];
     if (!run.isObject()) return true;
+    if (!mfDungeonCardPreferenceShapeValid(run)) return false;
     if (run.asObject().count("targetRewardCount") && !saveInteger(run["targetRewardCount"], 1, MaximumDungeonTargetRewardCount)) return false;
     if (run.asObject().count("layoutVersion") && !saveInteger(run["layoutVersion"], 1, 2)) return false;
     for (const char* name : {"siteId", "siteName", "type", "location", "phase", "current", "targetKind", "targetId", "targetName"}) if (!run[name].isString()) return false;
@@ -105,6 +137,15 @@ bool dungeonShapesValid(const Value& world, bool modern) {
 } // namespace
 
 bool saveShapesValid(const Value& root) {
+    if (root.asObject().contains("healthRulesVersion") &&
+        !saveInteger(root["healthRulesVersion"], 1, 2)) return false;
+    const bool AbsoluteHealth = root["healthRulesVersion"].asInt(1) == 2;
+    if (!saveInteger(root["player"]["health"], 0, AbsoluteHealth ? StateLimits::MaxPersistedInteger : 100)) return false;
+    if (!root["player"]["zhuji"].isNull()) {
+        ZhujiRun Run;
+        std::string Error;
+        if (!mfZhujiFromJson(root["player"]["zhuji"], Run, Error)) return false;
+    }
     if (root.asObject().contains("cultivationUnitScale") &&
         (!saveInteger(root["cultivationUnitScale"], CultivationUnits::LegacyScale, CultivationUnits::Scale) ||
          (root["cultivationUnitScale"].asInt() != CultivationUnits::LegacyScale &&
@@ -126,20 +167,41 @@ bool saveShapesValid(const Value& root) {
     if (!root["checkpoint"].isNull() && !saveObjectFieldTypes(root["checkpoint"], {{"enabled", Type::Bool}, {"days", Type::Number},
             {"lastAutoYear", Type::Number}, {"restores", Type::Number}, {"slot", Type::Number}, {"source", Type::String}, {"snapshot", Type::String}, {"lastReason", Type::String}})) return false;
     const Value& playerObject = root["player"];
+    if (root["pending"]["adventure"].isObject()) {
+        const auto& Reward = root["pending"]["adventure"];
+        if (!saveObjectFieldTypes(Reward, {{"gearTemplateId", Type::String}, {"rewardVersion", Type::Number}}) ||
+            (Reward.asObject().contains("rewardVersion") && !saveInteger(Reward["rewardVersion"], 0, 1))) return false;
+    }
+    if (playerObject.asObject().contains("ascensionTournament") &&
+        !mfAscensionTournamentShapeValid(playerObject["ascensionTournament"])) return false;
+    for (const char* Key : {"herbs", "potions", "used"})
+        for (const auto& [Id, Count] : playerObject["arts"][Key].asObject()) {
+            static_cast<void>(Id);
+            if (!saveInteger(Count, 0, StateLimits::MaxPersistedInteger)) return false;
+        }
     for (const char* field : {"age", "lifespan", "stage", "xp", "apt", "health", "stones", "herbs"})
         if (!playerObject[field].isNumber()) return false;
     if (!playerObject["location"].isString()) return false;
     if (!saveObjectFieldTypes(playerObject, {{"portraitId", Type::String}, {"arts", Type::Object}, {"traits", Type::Array},
             {"relations", Type::Object}, {"build", Type::Object}, {"npcBonds", Type::Object},
-            {"caveTier", Type::Number}, {"stoneSupply", Type::Number}, {"qiSupply", Type::Number}})) return false;
+            {"caveTier", Type::Number}, {"stoneSupply", Type::Number}, {"qiSupply", Type::Number},
+            {"pillLifeBonus", Type::Number}})) return false;
     if (!saveObjectFieldTypes(playerObject["arts"], {{"battle", Type::Object}, {"exp", Type::Object},
             {"herbs", Type::Object}, {"potions", Type::Object}, {"materials", Type::Object},
             {"manuals", Type::Object}, {"gear", Type::Array}, {"equipped", Type::Object},
-            {"knownSpells", Type::Array}, {"spells", Type::Array}, {"greenBottleGrade", Type::Number}})) return false;
+            {"knownSpells", Type::Array}, {"spells", Type::Array}, {"greenBottleGrade", Type::Number},
+            {"baseHealthBonus", Type::Number}, {"foundationHealthBonus", Type::Number},
+            {"lifeboundSpell", Type::String}, {"lifeboundKind", Type::String},
+            {"breakthroughPillStage", Type::Number}, {"combatPillDoseCount", Type::Number}})) return false;
     for (const char* key : {"knownSpells", "spells"})
         for (const auto& id : playerObject["arts"][key].asArray()) if (!id.isString()) return false;
     for (const auto& gear : playerObject["arts"]["gear"].asArray())
-        if (!gear.isObject() || !saveObjectFieldTypes(gear, {{"crafted", Type::Bool}, {"shape", Type::String}})) return false;
+        if (!mfForgeGearShapeValid(gear)) return false;
+    if (playerObject["arts"]["battle"].isObject()) {
+        const auto& Reward = playerObject["arts"]["battle"];
+        if (!saveObjectFieldTypes(Reward, {{"advGearTemplateId", Type::String}, {"advRewardVersion", Type::Number}}) ||
+            (Reward.asObject().contains("advRewardVersion") && !saveInteger(Reward["advRewardVersion"], 0, 1))) return false;
+    }
     for (const auto& [id, bond] : playerObject["npcBonds"].asObject()) {
         if (!bond.isObject() || !saveObjectFieldTypes(bond, {{"credit", Type::Number}, {"spent", Type::Number},
             {"greeted", Type::Bool}, {"greetYear", Type::Number}, {"talkMonth", Type::Number},
@@ -149,7 +211,15 @@ bool saveShapesValid(const Value& root) {
     }
     for (const auto& npc : root["npcs"].asArray())
         if (!npc.isObject() || !saveObjectFieldTypes(npc, {{"combatProfileId",Type::String}})) return false;
+    const auto& FrozenProduct = root["job"]["forgeProduct"];
+    if (root["job"].asObject().contains("forgeProduct") && (!FrozenProduct.isObject() ||
+        !mfForgeGearShapeValid(FrozenProduct) || FrozenProduct["forgeVersion"].asInt() != 2)) return false;
     const Value& battle = playerObject["arts"]["battle"];
+    if (!mfArtifactSnapshotShapeValid(battle["artifactState"]) ||
+        !mfArtifactSnapshotShapeValid(battle["enemyCards"]["artifactState"])) return false;
+    for (const Value* Deck : {&battle["deck"], &battle["enemyCards"]["deck"], &root["dungeons"]["run"]["deck"]})
+        for (const auto& CardValue : Deck->asArray())
+            if (!saveObjectFieldTypes(CardValue, {{"innate", Type::Bool}, {"retain", Type::Bool}})) return false;
     if (root["job"].isObject() && !saveObjectFieldTypes(root["job"], {
             {"origin", Type::String}, {"travelMode", Type::String}, {"craftOutput", Type::Number},
             {"travelChecks", Type::Number}, {"travelAmbushes", Type::Number}})) return false;
@@ -204,6 +274,9 @@ bool saveShapesValid(const Value& root) {
         if (!(*CombatState)["elementalSwordManaReturns"].isNull() &&
             !saveInteger((*CombatState)["elementalSwordManaReturns"], 0, ElementalSword::ManaReturnLimitPerTurn)) return false;
     for (const auto* CombatState : {&battle, &enemy}) {
+        const auto WaterDraws = CombatState->asObject().find("waterFlowDraws");
+        if (WaterDraws != CombatState->asObject().end() &&
+            !saveInteger(WaterDraws->second, 0, WaterFlow::DrawLimit)) return false;
         const auto Growth = CombatState->asObject().find("fireGrowthRounds");
         if (Growth != CombatState->asObject().end() &&
             !saveInteger(Growth->second, 0, FireGrowth::MaximumGrowthRounds)) return false;
@@ -219,21 +292,26 @@ bool saveShapesValid(const Value& root) {
     for (const auto& npc : root["npcs"].asArray()) {
         if (!npc.isObject() || !npc["id"].isString() || !npc["name"].isString() ||
             !npc["stage"].isNumber() || !npc["location"].isString()) return false;
-        if (!saveObjectFieldTypes(npc, {{"pillState", Type::Object}})) return false;
+        if (!saveObjectFieldTypes(npc, {{"pillState", Type::Object}, {"pillLifeBonus", Type::Number}})) return false;
+        for (const auto& [Id, Count] : npc["bag"].asObject()) {
+            static_cast<void>(Id);
+            if (!saveInteger(Count, 0, StateLimits::MaxPersistedInteger)) return false;
+        }
         const auto& pills = npc["pillState"];
         if (!pills.isNull()) {
             if (!saveObjectFieldTypes(pills, {{"used", Type::Object}, {"daoExp", Type::Object},
                     {"nodes", Type::Array}, {"poison", Type::Number}, {"aptPills", Type::Number},
-                    {"hpBonus", Type::Number}, {"heart", Type::Number}, {"mind", Type::Number},
+                    {"hpBonus", Type::Number}, {"baseHealthBonus", Type::Number}, {"heart", Type::Number}, {"mind", Type::Number},
                     {"speed", Type::Number}, {"points", Type::Number}, {"repel", Type::Number},
-                    {"breakBuff", Type::String}, {"combatPrep", Type::Object}, {"combatBuff", Type::Number}})) return false;
+                    {"breakBuff", Type::String}, {"combatPrep", Type::Object}, {"combatBuff", Type::Number},
+                    {"breakthroughPillStage", Type::Number}, {"combatPillDoseCount", Type::Number}})) return false;
             for (const char* key : {"used", "daoExp"})
                 for (const auto& [id, value] : pills[key].asObject())
                     if (!saveInteger(value, 0, 10000)) return false;
             for (const auto& node : pills["nodes"].asArray()) if (!node.isString()) return false;
         }
         for (const auto& gear : npc["gear"].asArray())
-            if (!gear.isObject() || !saveObjectFieldTypes(gear, {{"crafted", Type::Bool}, {"shape", Type::String}})) return false;
+            if (!mfForgeGearShapeValid(gear)) return false;
     }
     return true;
 }

@@ -8,6 +8,7 @@
 #include "core/talents.h"
 #include "core/content/text_table.h"
 #include "core/legacy.h"
+#include "core/progression/lifebound_rules.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 #include <stdexcept>
@@ -92,8 +93,26 @@ void appendArtsState(const Game& game, Value& state) {
         entry.set("heart", num(arts.heart));
         entry.set("mind", num(arts.mind)); entry.set("speed", num(arts.speed));
         entry.set("hpBonus", num(arts.hpBonus)); entry.set("combatBuff", num(arts.combatBuff));
-        entry.set("repel", num(arts.repel));
-        entry.set("repelDescription", str("每逢岁末效力递减1；有效时降低游历受伤风险。"));
+        entry.set("baseHealthBonus", num(arts.BaseHealthBonus));
+        entry.set("foundationHealthBonus", num(arts.FoundationHealthBonus));
+        entry.set("lifeboundSpell", str(arts.LifeboundSpell));
+        entry.set("lifeboundKind", str(arts.LifeboundKind));
+        {
+            const auto Quote = mfQuoteLifeboundSpell(game, arts.LifeboundSpell);
+            const auto* Spell = battleSpell(arts.LifeboundSpell);
+            Value Slot(json::Object{});
+            Slot.set("spellId", arts.LifeboundSpell);
+            Slot.set("name", Spell ? Spell->name : "尚未选择");
+            Slot.set("kind", arts.LifeboundKind);
+            Slot.set("unlocked", game.player.stage >= 3 && !arts.LifeboundKind.empty());
+            Slot.set("carried", Quote.IsCarried);
+            Slot.set("active", !arts.LifeboundSpell.empty() && Quote.IsCarried);
+            Slot.set("reason", Quote.Reason);
+            Slot.set("rule", "战斗外可更换；只强化此神通的第一张副本。未携带时不生效，不增加携带槽位。");
+            entry.set("lifebound", std::move(Slot));
+        }
+        entry.set("breakthroughPillStage", num(arts.BreakthroughPillStage));
+        entry.set("combatPillDoseCount", num(arts.CombatPillDoseCount));
         entry.set("furnace", str(arts.furnace));
         entry.set("durability", num(arts.durability));
         {

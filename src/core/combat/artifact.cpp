@@ -1,6 +1,8 @@
 #include "core/artifact.h"
 #include "core/content/game_ids.h"
 #include "core/content/text_table.h"
+#include "core/content/forge_content.h"
+#include "core/combat/artifact_effects.h"
 #include "core/arts.h"
 #include "data/reference_tables.h"
 #include <algorithm>
@@ -9,11 +11,24 @@ namespace nz {
 using content::DaoId;
 using content::SpellKind;
 using content::TextId;
+int mfArtifactRequiredStage(const Gear& GearState) {
+    const bool IsBirthRelic = GearState.ForgeVersion == 2 && GearState.Origin == "talent" &&
+        GearState.grade == 2 && GearState.element == "气" &&
+        ((GearState.shape == "sword" && GearState.EffectId == "damage") ||
+         (GearState.shape == "pearl" && GearState.EffectId == "turn_shield"));
+    if (IsBirthRelic) return 0;
+    return GearState.ForgeVersion == 2 ? (GearState.grade - 1) * 3 :
+        GearState.grade <= 2 ? 0 : (GearState.grade - 2) * 3 - 1;
+}
 // 用途：识别自炼法器器型，兼容仅有器名的旧装备。
 // 参与流程：法宝主动能力生成前置。
 // 使用方式：先检查显式器型，再按旧器名和槽位补齐。
 // 返回值：合法器型 ID；显式器型无效时为空。
 string artifactShape(const Gear& gear) {
+    if (gear.ForgeVersion == 2) {
+        const auto* Shape = content::mfFindForgeShape(gear.shape);
+        return Shape && Shape->Slot == gear.slot ? Shape->Id : "";
+    }
     for (const auto& form : data::ShapeDef_TABLE())
         if (form.id == gear.shape && form.slot == gear.slot) return form.id;
     if (!gear.shape.empty()) return "";
@@ -35,8 +50,27 @@ string artifactShape(const Gear& gear) {
 ArtifactAbility artifactAbility(const Gear& gear) {
     ArtifactAbility ability;
     if (!gear.crafted || gear.id.empty() || gear.grade < 1 || gear.grade > 6) return ability;
+    if (gear.ForgeVersion != 0 && gear.ForgeVersion != 2) return ability;
     ability.shape = artifactShape(gear);
     if (ability.shape.empty()) return ability;
+    if (gear.ForgeVersion == 2) {
+        const auto* Effect = content::mfFindForgeEffect(gear.EffectId);
+        if (gear.grade > 5 || !Effect || Effect->Passive || !content::mfForgeEffectAllowed(gear.EffectId, gear.slot, gear.element)) return ability;
+        ability.valid = true; ability.gearId = gear.id; ability.gear = gear;
+        ability.shapeName = content::mfFindForgeShape(gear.shape)->Name;
+        auto& Spell = ability.spell;
+        Spell.id = "artifact:" + gear.id; Spell.name = gear.name + "·" + Effect->Name;
+        Spell.dao = gear.element;
+        Spell.stage = mfArtifactRequiredStage(gear);
+        Spell.cooldown = 1 + (mfArtifactSelectsStatus(gear) ? 1 : 0) + (gear.InscriptionId == "azure" ? 1 : 0);
+        Spell.kind = gear.EffectId == "draw" ? "draw" : gear.EffectId == "redraw" ? "redraw" :
+            gear.EffectId == "shield" ? "shield" : gear.EffectId == "guard" || gear.EffectId == "cleanse" || gear.EffectId == "dispel" ? "guard" : "attack";
+        Spell.scale = gear.EffectId == "draw" || gear.EffectId == "redraw" ? gear.grade : mfArtifactBaseDamage(gear.grade);
+        Battle Reference; Reference.hp = Reference.max = 100;
+        Spell.cost = 2 * mfArtifactActionCost(Player{}, gear, Reference);
+        ability.desc = mfArtifactEffectDescription(gear);
+        return ability;
+    }
     for (const auto& form : data::ShapeDef_TABLE()) if (form.id == ability.shape) ability.shapeName = form.name;
     ability.valid = true; ability.gearId = gear.id; ability.gear = gear;
     auto& spell = ability.spell;
@@ -115,7 +149,8 @@ vector<ArtifactAbility> equippedArtifactAbilities(const Player& player) {
     vector<ArtifactAbility> result;
     for (const auto& [slot, id] : player.arts.equipped)
         for (const auto& gear : player.arts.gear) {
-            if (gear.id != id || gear.slot != slot || gear.grade > artTier(player)) continue;
+            if (gear.id != id || gear.slot != slot ||
+                (gear.ForgeVersion == 2 ? player.stage < mfArtifactRequiredStage(gear) : gear.grade > artTier(player))) continue;
             auto ability = artifactAbility(gear);
             if (ability.valid) result.push_back(std::move(ability));
             break;

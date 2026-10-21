@@ -1,4 +1,5 @@
 #include "core/interface/view_policy.h"
+#include "core/combat/battle_scaling.h"
 #include "core/interface/routes.h"
 
 namespace nz::api::view {
@@ -10,6 +11,17 @@ namespace nz::api::view {
 // 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
 string actionBlockReason(const Game& game, const string& path) {
     const RouteInfo& route = lookupRoute(path);
+    if (game.player.AscensionTournament.Active && route.effect != RouteEffect::ReadOnly &&
+        route.effect != RouteEffect::Persistence && route.id != RouteId::BattleTurn)
+        return "升仙大会连战中，请先完成本场或认输。";
+    if (game.player.Zhuji && route.effect != RouteEffect::ReadOnly &&
+        route.effect != RouteEffect::Persistence && route.id != RouteId::Zhuji) {
+        const auto Status = game.player.Zhuji->Status;
+        if (Status == ZhujiStatus::Active) return "正在筑基，请先完成运转或散功离关。";
+        if (Status == ZhujiStatus::Preparing && route.id != RouteId::Advance &&
+            route.id != RouteId::Choose && route.id != RouteId::BattleTurn)
+            return "筑基闭关准备中，请继续推进当前安排。";
+    }
     if (game.dungeons.run && !route.duringDungeon)
         return "请先结束当前秘境探索。";
     if (game.ended) return "这一世已经结束，请查看结局或开始新的一世。";
@@ -30,7 +42,7 @@ string breakthroughReason(const Game& game, const BreakthroughInfo& info) {
     if (!blocked.empty()) return blocked;
     if (!info.ready) return "修为尚未圆满。";
     if (game.player.stones < info.cost) return "灵石不足。";
-    if (game.player.health < 35) return "伤势过重，请先休养至 35 气血。";
+    if (game.player.health < HealthGateMinimum) return "伤势过重，请先休养至 30 气血。";
     return "";
 }
 

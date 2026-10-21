@@ -1,5 +1,6 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/persistence/forge_codec.h"
 #include "core/persistence/json_helpers.h"
 #include "core/artifact.h"
 #include "core/battle.h"
@@ -9,6 +10,7 @@ namespace nz::persistence {
 
 static Value enemyCombatToJson(const EnemyCombat& enemy) {
     Value enemyObject(json::Object{});
+    if (enemy.ArtifactState.Version) enemyObject.set("artifactState", mfArtifactSnapshotToJson(enemy.ArtifactState));
     enemyObject.set("stage", num(enemy.stage));
     enemyObject.set("speed", num(enemy.speed));
     enemyObject.set("body", num(enemy.body));
@@ -30,12 +32,14 @@ static Value enemyCombatToJson(const EnemyCombat& enemy) {
     enemyObject.set("carryCap", num(enemy.carryCap));
     enemyObject.set("hpCostPct", num(enemy.hpCostPct));
     enemyObject.set("poison", num(enemy.poison));
+    // 名称沿用保存协议；值为0/1本场活跃标记，不再是倒计时。
     enemyObject.set("poisonTurns", num(enemy.poisonTurns));
     enemyObject.set("poisonDamage", num(enemy.poisonDamage));
     enemyObject.set("burn", num(enemy.burn));
     enemyObject.set("burnTurns", num(enemy.burnTurns));
     enemyObject.set("swordSequence", num(enemy.swordSequence));
     enemyObject.set("comboDraws", num(enemy.comboDraws));
+    enemyObject.set("waterFlowDraws", num(enemy.WaterFlowDraws));
     enemyObject.set("elementalSwordManaReturns", num(enemy.ElementalSwordManaReturns));
     enemyObject.set("elementalSwordSequence", num(enemy.ElementalSwordSequence));
     enemyObject.set("elementalSwordEnhancementLayers", num(enemy.ElementalSwordEnhancementLayers));
@@ -59,11 +63,12 @@ static Value enemyCombatToJson(const EnemyCombat& enemy) {
     enemyObject.set("planned", stringVectorToJson(enemy.planned));
     enemyObject.set("manuals", mapToJson(enemy.manuals));
     enemyObject.set("cooldowns", mapToJson(enemy.cooldowns));
-    { json::Array array; for (const auto& card : enemy.deck) { Value value(json::Object{}); value.set("uid", str(card.uid)); value.set("spell", str(card.spell)); array.push_back(std::move(value)); } enemyObject.set("deck", Value(std::move(array))); }
+    { json::Array array; for (const auto& card : enemy.deck) { Value value(json::Object{}); value.set("uid", str(card.uid)); value.set("spell", str(card.spell)); value.set("innate", Value(card.Innate)); value.set("retain", Value(card.Retain)); array.push_back(std::move(value)); } enemyObject.set("deck", Value(std::move(array))); }
     return enemyObject;
 }
 
 static void enemyCombatFromJson(const Value& enemyObject, EnemyCombat& enemy) {
+    enemy.ArtifactState = mfArtifactSnapshotFromJson(enemyObject["artifactState"]);
     enemy.stage = enemyObject["stage"].asInt(0);
     enemy.speed = enemyObject["speed"].asInt(0);
     enemy.body = enemyObject["body"].asInt(0);
@@ -91,6 +96,7 @@ static void enemyCombatFromJson(const Value& enemyObject, EnemyCombat& enemy) {
     enemy.burnTurns = enemyObject["burnTurns"].asInt(0);
     enemy.swordSequence = enemyObject["swordSequence"].asInt(0);
     enemy.comboDraws = enemyObject["comboDraws"].asInt(0);
+    enemy.WaterFlowDraws = enemyObject["waterFlowDraws"].asInt(0);
     enemy.ElementalSwordManaReturns = enemyObject["elementalSwordManaReturns"].asInt(0);
     enemy.ElementalSwordSequence = enemyObject["elementalSwordSequence"].asInt(0);
     enemy.ElementalSwordEnhancementLayers = enemyObject["elementalSwordEnhancementLayers"].asInt(0);
@@ -114,11 +120,12 @@ static void enemyCombatFromJson(const Value& enemyObject, EnemyCombat& enemy) {
     enemy.planned = jsonToStringVec(enemyObject["planned"]);
     enemy.manuals = jsonToMap<int>(enemyObject["manuals"]);
     enemy.cooldowns = jsonToMap<int>(enemyObject["cooldowns"]);
-    for (const auto& card : enemyObject["deck"].asArray()) enemy.deck.push_back({card["uid"].asString(), card["spell"].asString()});
+    for (const auto& card : enemyObject["deck"].asArray()) enemy.deck.push_back({card["uid"].asString(), card["spell"].asString(), card["innate"].asBool(), card["retain"].asBool()});
 }
 
 Value battleToJson(const Battle& battle) {
     Value battleObject(json::Object{});
+    if (battle.ArtifactState.Version) battleObject.set("artifactState", mfArtifactSnapshotToJson(battle.ArtifactState));
     battleObject.set("enemy", str(battle.enemy));
     if (battle.shadowPlayer) {
         // Never serialize nested battles from a combat snapshot.
@@ -181,6 +188,8 @@ Value battleToJson(const Battle& battle) {
             Value cardObject(json::Object{});
             cardObject.set("uid", str(card.uid));
             cardObject.set("spell", str(card.spell));
+            cardObject.set("innate", Value(card.Innate));
+            cardObject.set("retain", Value(card.Retain));
             deck.push_back(std::move(cardObject));
         }
         battleObject.set("deck", Value(std::move(deck)));
@@ -216,6 +225,7 @@ Value battleToJson(const Battle& battle) {
     battleObject.set("enemyWeaken", num(battle.enemyWeaken));
     battleObject.set("cooldowns", mapToJson(battle.cooldowns));
     battleObject.set("poison", num(battle.poison));
+    // 毒只保存活跃标记和精确跳伤，持久字段没有新增。
     battleObject.set("poisonTurns", num(battle.poisonTurns));
     battleObject.set("poisonDamage", num(battle.poisonDamage));
     battleObject.set("playerPoison", num(battle.playerPoison));
@@ -235,6 +245,7 @@ Value battleToJson(const Battle& battle) {
     battleObject.set("discardPower", num(battle.discardPower));
     battleObject.set("swordSequence", num(battle.swordSequence));
     battleObject.set("comboDraws", num(battle.comboDraws));
+    battleObject.set("waterFlowDraws", num(battle.WaterFlowDraws));
     battleObject.set("elementalSwordManaReturns", num(battle.ElementalSwordManaReturns));
     battleObject.set("elementalSwordSequence", num(battle.ElementalSwordSequence));
     battleObject.set("elementalSwordEnhancementLayers", num(battle.ElementalSwordEnhancementLayers));
@@ -250,6 +261,8 @@ Value battleToJson(const Battle& battle) {
     battleObject.set("advChoice", str(battle.advChoice));
     battleObject.set("advFee", num(battle.advFee));
     battleObject.set("advGrade", num(battle.advGrade));
+    battleObject.set("advGearTemplateId", str(battle.AdvGearTemplateId));
+    battleObject.set("advRewardVersion", num(battle.AdvRewardVersion));
     battleObject.set("advBook", str(battle.advBook));
     battleObject.set("advNpcId", str(battle.advNpcId));
     battleObject.set("advStyle", str(battle.advStyle));
@@ -257,6 +270,7 @@ Value battleToJson(const Battle& battle) {
 }
 
 void battleFromJson(const Value& battleObject, Battle& battle) {
+    battle.ArtifactState = mfArtifactSnapshotFromJson(battleObject["artifactState"]);
     battle.enemy = battleObject["enemy"].asString();
     if (battleObject["shadowPlayer"].isObject()) {
         const Value& shadow = battleObject["shadowPlayer"];
@@ -313,7 +327,8 @@ void battleFromJson(const Value& battleObject, Battle& battle) {
     battle.won = battleObject["won"].asBool();
     battle.deck.clear();
     for (const auto& cardObject : battleObject["deck"].asArray())
-        battle.deck.push_back({cardObject["uid"].asString(), cardObject["spell"].asString()});
+        battle.deck.push_back({cardObject["uid"].asString(), cardObject["spell"].asString(),
+            cardObject["innate"].asBool(), cardObject["retain"].asBool()});
     battle.hand = jsonToStringVec(battleObject["hand"]);
     battle.draw = jsonToStringVec(battleObject["draw"]);
     battle.discard = jsonToStringVec(battleObject["discard"]);
@@ -361,6 +376,7 @@ void battleFromJson(const Value& battleObject, Battle& battle) {
     battle.discardPower = battleObject["discardPower"].asNumber();
     battle.swordSequence = battleObject["swordSequence"].asInt();
     battle.comboDraws = battleObject["comboDraws"].asInt();
+    battle.WaterFlowDraws = battleObject["waterFlowDraws"].asInt(0);
     battle.ElementalSwordManaReturns = battleObject["elementalSwordManaReturns"].asInt(0);
     battle.ElementalSwordSequence = battleObject["elementalSwordSequence"].asInt(0);
     battle.ElementalSwordEnhancementLayers = battleObject["elementalSwordEnhancementLayers"].asInt(0);
@@ -372,6 +388,8 @@ void battleFromJson(const Value& battleObject, Battle& battle) {
     battle.advChoice = battleObject["advChoice"].asString();
     battle.advFee = battleObject["advFee"].asInt();
     battle.advGrade = battleObject["advGrade"].asInt(1);
+    battle.AdvGearTemplateId = battleObject["advGearTemplateId"].asString();
+    battle.AdvRewardVersion = battleObject["advRewardVersion"].asInt();
     battle.advBook = battleObject["advBook"].asString();
     battle.advNpcId = battleObject["advNpcId"].asString();
     battle.advStyle = battleObject["advStyle"].asString();

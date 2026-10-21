@@ -25,6 +25,7 @@ Game mfCleanseEncounter(const vector<string>& Spells = {"wood", "corrode"}) {
     Encounter.player.arts.main.clear();
     Encounter.player.arts.spells = Spells;
     Encounter.player.arts.knownSpells = Encounter.player.arts.spells;
+    Encounter.player.health = mfPlayerHealthMaximum(Encounter.player);
     Npc Opponent;
     Opponent.id = "cleanse-opponent"; Opponent.name = "回春修士";
     Opponent.stage = 12; Opponent.sect = "zhushan"; Opponent.dao = "木";
@@ -78,6 +79,7 @@ Game mfElementalEncounter() {
         PlayerState.arts.nodes.push_back("7-" + std::to_string(Level));
         PlayerState.arts.nodes.push_back("9-" + std::to_string(Level));
     }
+    PlayerState.health = mfPlayerHealthMaximum(PlayerState);
     EnemySpec Enemy;
     Enemy.name = Encounter.npcs.front().name; Enemy.id = Encounter.npcs.front().id;
     Enemy.stage = 12; Enemy.sect = "zhushan"; Enemy.style = "木"; Enemy.speed = 0;
@@ -135,9 +137,9 @@ void mfRunCombatBalanceIterationTests() {
     for (bool LegacyMode : {false, true}) {
         Game Encounter = mfCleanseEncounter();
         auto& State = *Encounter.player.arts.battle;
-        State.poison = 3; State.poisonTurns = 3;
-        const double Coefficient = LegacyMode ? LegacyPoisonTickBasisCoefficient : PoisonTickBasisCoefficient;
-        const int OriginalTick = jsRound(mfBattleDamageBasis(12) * Coefficient * 3);
+        State.poison = 3; State.poisonTurns = 1;
+        // 旧三层在原化神战力1800下冻结为59；新施毒使用曲线A与当前系数。
+        const int OriginalTick = LegacyMode ? 59 : jsRound(mfBattleDamageBasis(12) * PoisonTickBasisCoefficient * 3);
         State.poisonDamage = LegacyMode ? -1 : OriginalTick;
         mfPlanEnemyCleanse(Encounter);
         const uint32_t RngBefore = Encounter.rng;
@@ -151,7 +153,7 @@ void mfRunCombatBalanceIterationTests() {
         checkEq(HpBefore - After.hp, Preview.damage, "清毒对局敌方预览和实际来伤一致");
         checkEq(After.poison, 3, "平减两点毒伤不错误削除整层毒");
         checkEq(After.poisonDamage, OriginalTick - 2, "新局及旧层数状态清毒都精确减两点");
-        checkEq(After.poisonTurns, 2, "清毒保留原毒持续回合");
+        checkEq(After.poisonTurns, 1, "清毒保留原毒持续回合");
         Game Loaded;
         string Error;
         const bool LoadedSuccessfully = loadDetachedFromJson(saveToJson(Encounter), Loaded, &Error);
@@ -159,13 +161,13 @@ void mfRunCombatBalanceIterationTests() {
         check(LoadedSuccessfully, "清毒后的精确毒跳伤可以codec往返");
         if (Loaded.player.arts.battle) {
             checkEq(Loaded.player.arts.battle->poisonDamage, OriginalTick - 2, "往返保留清毒剩余伤害而不重算整层");
-            checkEq(Loaded.player.arts.battle->poison, 3, "往返保留供引毒咒使用的毒层");
+            checkEq(Loaded.player.arts.battle->poison, 3, "往返保留本场持续与借毒经营使用的毒层");
         }
     }
     {
         Game Encounter = mfCleanseEncounter();
         auto& State = *Encounter.player.arts.battle;
-        State.poison = 3; State.poisonTurns = 3; State.poisonDamage = -1;
+        State.poison = 3; State.poisonTurns = 1; State.poisonDamage = -1;
         auto SaveObject = json::Value::parse(saveToJson(Encounter));
         auto& BattleObject = SaveObject.asObject().at("player").asObject().at("arts").asObject().at("battle");
         BattleObject.asObject().erase("poisonDamage");
@@ -177,10 +179,29 @@ void mfRunCombatBalanceIterationTests() {
         if (LoadedSuccessfully) {
             checkEq(Loaded.player.arts.battle->poisonDamage, -1, "缺字段保留旧毒层默认语义");
             checkEq(Loaded.player.arts.battle->poison, 3, "旧档加载不把在途毒归零");
-            checkEq(Loaded.player.arts.battle->poisonTurns, 3, "旧档加载不提前消耗持续回合");
+            checkEq(Loaded.player.arts.battle->poisonTurns, 1, "旧档加载不提前消耗持续回合");
             mfPlanEnemyCleanse(Loaded);
+            const string BeforePreview = saveToJson(Loaded);
+            const auto PoisonPreview = battlePreview(Loaded.player, *Loaded.player.arts.battle, "wood");
+            const auto Poison = std::find_if(PoisonPreview.statuses.begin(), PoisonPreview.statuses.end(),
+                [](const Preview::Status& Status) { return Status.id == "poison"; });
+            check(Poison != PoisonPreview.statuses.end() && Poison->perTurn == 59,
+                  "旧三层毒的只读神通预览仍显示冻结59点");
+            const auto EnemyIntent = battleEnemyPreview(Loaded);
+            checkStr(saveToJson(Loaded), BeforePreview, "旧毒预览不提交转换缓存或改变随机数");
+            const int EnemyHealthBefore = Loaded.player.arts.battle->enemyHp;
             check(battleTurn(Loaded, "end").ok, "旧缺字段档在真实动作边界转换");
             checkEq(Loaded.player.arts.battle->poisonDamage, 57, "旧三层冻结59点在转换清毒后精确保留57");
+            checkEq(Loaded.player.arts.battle->enemyHp, EnemyHealthBefore - 59 + EnemyIntent.heal,
+                    "旧毒真实扣59点，清毒治疗按权威预览兑现");
+            Game RoundTrip;
+            const string ConvertedSave = saveToJson(Loaded);
+            const bool ConvertedLoaded = loadDetachedFromJson(ConvertedSave, RoundTrip, &Error);
+            check(ConvertedLoaded, "旧毒转精确57点后可以存档往返：" + Error);
+            if (ConvertedLoaded) {
+                checkEq(RoundTrip.player.arts.battle->poisonDamage, 57, "往返不把精确57点退回旧层或新曲线伤害");
+                checkStr(saveToJson(RoundTrip), ConvertedSave, "旧毒转换后的完整战斗存档往返稳定");
+            }
         }
     }
     {
@@ -230,8 +251,8 @@ void mfRunCombatBalanceIterationTests() {
         auto& Player = Encounter.player;
         for (int Level = 1; Level <= 5; ++Level) Player.arts.nodes.push_back("10-" + std::to_string(Level));
         auto& State = *Player.arts.battle;
-        State.playerPoison = 59; State.playerPoisonTurns = 3;
-        State.enemyCards.poison = 3; State.enemyCards.poisonTurns = 3;
+        State.playerPoison = 59; State.playerPoisonTurns = 1;
+        State.enemyCards.poison = 3; State.enemyCards.poisonTurns = 1;
         State.enemyCards.poisonDamage = 59;
         const string CardUid = mfHoldCard(State, "wood");
         const auto Preview = battlePreview(Player, State, "wood");

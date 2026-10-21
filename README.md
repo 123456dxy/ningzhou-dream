@@ -1,5 +1,19 @@
 # 宁州一梦 · C++ 版
 
+2026-10-17 三项规则已接入当前源码；当前工程已用VS Release构建，完整服发行包通过42项验收。本次打包清理未重跑领域规则全量：
+
+- **筑基自择道途**：炼气后期圆满时，从突破入口选择「五行凝练」或「周天冲穴」，按后端报价选择筑基丹（凝元丹）与灵核，完成90天准备后进入玩法。成功表现永久决定本世根基，超过100分的部分每分增加1点基础气血；失败或收功可重新准备。成功后可一次性绑定已领悟神通：五行赋予第一张副本固有，周天赋予第一张副本保留。金丹、元婴等后续突破与旧在途突破安排保持原玩法，已筑基旧角色不补发根基。使用方式与兼容边界见[正式筑基集成](docs/ZHUJI_INTEGRATION.md)。
+- **丹药与续命**：疗伤改为40/200/800/2000点或回满；体魄丹增加基础气血，再经过既有生命乘区；续命丹独立累计至多500年，长寿天赋不占丹药额度。行囊中的服用预览显示当前角色实际收益、耐药和丹毒，资质/悟性丹取消旧业务总上限。用途毒量、NPC服丹及退休物品兼容见[丹药实际效果](docs/PILL_EFFECTS.md)。
+- **玩家绝对气血**：人物面板按当前值/实际最大值显示，场外和斗法共用气血点数，相关行动统一使用30点门槛；过月恢复上限的3%，完整疗养月含过月部分合计恢复10%。丹药与根基基础气血先经过2.4，再经过功法和体魄乘区。旧百分比存档按显式版本迁移一次；NPC与秘境内部百分比在边界转换。规则与实施范围见[本轮集成计划](docs/superpowers/plans/2026-10-16-three-system-integration.md)。
+
+筑基玩法需在网页端进行。控制台的炼气后期突破会提示转往网页；已在运转中的筑基局只允许查看状态、存读档与退出，保存后可在网页端读取对应存档继续。
+
+2026-10-16玄道宗立绘更新：男女图重绘为月白玄青长袖、飘带与淡金剑意，去除宽幅背景雾层；保持原外观ID与资源路径，压缩为768×1152透明WebP，两张共482,176字节。素材说明与校验记录见[立绘目录](web/assets/portraits/README.md)。
+
+2026-10-16秘境体验修正：具体怪物与机制在遭遇触发后揭晓；外层可选临时神通奖励的全部、不出或自选单一道系，普通战、行商和事件同源过滤，入场冻结且不影响永久通关奖励。见[秘境规则](docs/DUNGEON_EXPLORATION_V2.md)。
+
+2026-10-16丹毒统一：同用途所有品阶使用1/2/4点，化毒丹0点，取消越阶额外加毒；玩家、NPC、目录与服用预览同源，原有累计丹毒保留。分档见[丹药实际效果](docs/PILL_EFFECTS.md)。
+
 2026-10-15后续修正：小绿瓶四/五/六阶灵材秘境固定为金丹/元婴/化神，完整通关分别获得50/100/200份，足够对应升阶，灵石仍按原费用支付。突破修为需求和玩家/NPC正常修炼同步乘10，修为丹原药效与单次吸收上限不变，旧档按比例换算一次；规则与验证见[绿瓶秘境与修为单位修正](docs/reviews/2026-10-15-bottle-cultivation-followup.md)。
 
 2026-10-15立绘补齐：开局开放全部28张人物图（男女各14张），新增玄道宗男女专属立绘；新增六类妖兽各五境界共30张独立立绘，以及五行剑诀专属插图。素材已压缩为WebP，正式斗法和人物卡共用后端白名单；详情见[人物与妖兽素材说明](web/assets/portraits/README.md)和[功法插图说明](web/assets/manuals/README.md)。
@@ -8,17 +22,19 @@
 
 独立试战入口见 [斗法试炼场](docs/BATTLE_LAB.md)：在 VS 中构建 `ningzhou_battle_lab`，用内存角色切换八个流派、五个大境界和实际妖兽／修士对手，不影响人生存档。当前已完成五境界4380局诊断及六宗900局互打，结果与限制见 [数值报告](docs/BATTLE_BALANCE_RESULTS_2026_10_15.md) 和 [同组互打](docs/BATTLE_MIRROR_RESULTS_2026_10_15.md)；未部署到现有玩家服务。
 
-当前源码进度：**2026-10-15 永久小绿瓶、三年坊市与本地流派测试版**。下载或克隆完整仓库后可直接打开 [visual-studio/ningzhou.sln](visual-studio/ningzhou.sln)，选择 Debug/Release、x64，并将 `ningzhou_web` 设为启动项目。项目使用相对路径，可随仓库移动；Backend / Web UI 分组对应实际模块目录，输出位于 `build-vs-share/Debug` 或 `Release`。环境要求与同步方式见 [VS 打开说明](visual-studio/README.md)，本轮改动与验证范围见 [桌面便利功能记录](docs/reviews/2026-10-14-service-convenience.md)，此前试玩修正见 [2026-10-13 记录](docs/reviews/2026-10-13-desktop-test-followups.md)，此前模块整理见 [2026-10-12 版本说明](docs/reviews/2026-10-12-version-delivery.md)。
+当前源码进度：**2026-10-17 筑基、丹药续命、绝对气血、炼器与天气音乐集成版（完整服ZIP已验收）**。下载或克隆完整仓库后可直接打开 [visual-studio/ningzhou.sln](visual-studio/ningzhou.sln)，选择 Debug/Release、x64，并将 `ningzhou_web` 设为启动项目。项目使用相对路径，可随仓库移动；Backend / Web UI 分组对应实际模块目录，输出位于 `build-vs-share/Debug` 或 `Release`。环境要求与同步方式见 [VS 打开说明](visual-studio/README.md)，本轮实际范围见[集成计划](docs/superpowers/plans/2026-10-16-three-system-integration.md)、[筑基说明](docs/ZHUJI_INTEGRATION.md)和[丹药规则](docs/PILL_EFFECTS.md)。下文带日期的发行包与历史测试记录仅对应各自版本；此前便利功能见 [桌面便利功能记录](docs/reviews/2026-10-14-service-convenience.md)，此前试玩修正见 [2026-10-13 记录](docs/reviews/2026-10-13-desktop-test-followups.md)，此前模块整理见 [2026-10-12 版本说明](docs/reviews/2026-10-12-version-delivery.md)。
 
 要保留注册、登录和完整网页，构建后双击 [start-full-server.cmd](start-full-server.cmd)，打开 [http://127.0.0.1:8108/](http://127.0.0.1:8108/)。此入口将本仓库已构建程序与当前网页复制到 `local-server/runtime`，使用独立 `local-server/saves`；已有同路径完整服务时会复用，更新版本需先正常关闭旧服务。前台关闭、后台启动及日志位置见 [本机完整服务版说明](docs/LOCAL_FULL_SERVER.md)。
 
 只测试本地电脑端时，构建后双击 [start-desktop.cmd](start-desktop.cmd)。它使用最新仓库构建、独立 `saves-local`，以 `--local` 跳过登录和联网入口，仅监听本机。已有 8107 服务请先正常关闭；公网部署仍用原启动方式，不传 `--local`。
 
-给朋友的本轮发行包为 `dist/宁州一梦-完整服务器版-20261015-绿瓶修为修正.zip`。解压后双击 `启动完整服务器.cmd`，打开 http://127.0.0.1:8106/，正常注册、登录并游玩；包内包含当前VS Release EXE、官方x64 CRT DLL和完整网页资源，不含作者存档与独立斗法实验页。局域网共享可使用同包的 `启动局域网服务器.cmd`。打包方式见[完整服务器版说明](tools/release/完整服务器版使用说明.txt)，维护者运行 `tools/release/build-server-folder.ps1 -ReleaseName '宁州一梦-完整服务器版-20261015-绿瓶修为修正' -MsvcRuntimeDirectory "<官方x64 Microsoft.VC143.CRT目录>"` 复现。
+当前修正版为 `dist/宁州一梦-完整服务器版-20261017-r3.zip`。解压后双击 `启动完整服务器.cmd`，打开 http://127.0.0.1:8110/，正常注册、登录并游玩；包内包含当前VS Release EXE、官方x64 CRT DLL和完整网页资源（含五首天气音乐与玄道特效立绘），法器直伤、护体及绵护已采用固定品阶点数。包内不含作者存档与独立斗法实验页。8106仍为独立旧发行版，不会随主工程编译自动更新。局域网共享可使用同包的 `启动局域网服务器.cmd`。打包方式见[完整服务器版说明](tools/release/完整服务器版使用说明.txt)，维护者运行 `tools/release/build-server-folder.ps1 -ReleaseName '宁州一梦-完整服务器版-20261017-r3' -GameBinary 'build-vs-current/Release/ningzhou_web.exe' -MsvcRuntimeDirectory "<官方x64 Microsoft.VC143.CRT目录>" -Port 8110` 复现。不传包名时使用当天日期；不传 `GameBinary` 时从主工程的三个标准输出路径选择最近编译的程序。
 
-可选的离线免注册发行包为 `dist/宁州一梦-电脑版-离线免注册-20261015.exe`，约26 MiB，包含本轮秘境、永久小绿瓶、三年坊市、流派及五行剑相生强化更新。双击以「本地道友」开局，跳过注册与登录；首次使用独立本机进度，发行包不含作者存档和独立斗法实验页。只需转发EXE，ZIP转发包另附使用说明。素材已使用WebP，并将网页、后端与官方MSVC应用本地运行库一起压入单文件；接收者无需安装VS或另找DLL。
+2026-10-17本地清理已移除9,111个旧编译产物、VS缓存、历史运行资源、8份旧发行ZIP及可再生音乐渲染，共14,782,828,164字节。清理后845个源码及素材文件哈希不变，539个存档及账号文件路径保留，5个既有游戏服务进程仍在运行；未提交源码、原创音乐和复现工具均保留。详见[执行记录](tmp/cleanup-execution-20261017.json)及[保留校验](tmp/cleanup-preservation-20261017-verification.json)。另有66项补充旧运行文件与本轮验收副本（654,403,519字节）被自动审批以 blocked by policy 拦截，尚未删除；该拒绝未提供具体原因。
 
-复现发行时先构建当前VS Release，再运行 `tools/release/build-release.ps1 -Local -ReleaseName '宁州一梦-电脑版-离线免注册-20261015' -GameBinary 'build-vs-share/Release/ningzhou_web.exe' -MsvcRuntimeDirectory '<VS安装目录>/VC/Redist/MSVC/<版本>/x64/Microsoft.VC143.CRT'`。脚本优先选择VS Release，不再默认误取旧的build目录；MSVC产物缺运行库目录会在打包前拒绝。运行 `./tools/release/verify-local-release.ps1 -ReleaseRecordPath 'build/release-日期时间/release.json'` 可在独立目录、随机端口验收。2026-10-15该包445项发行验收通过，覆盖只带EXE首次启动、资源完整性、保存、续玩和资源修复；另实际浏览器打开发行EXE并推进一天、进入工坊。本地进度位于 `%LOCALAPPDATA%\NingzhouDream\game\runtime\saves\players`，详见[本地版使用说明](tools/release/本地版使用说明.txt)。
+离线免注册模式可通过源码入口 `start-desktop.cmd` 使用。本轮对外分发使用上方完整服务器 ZIP，保留账号、注册登录、排行榜和天机功能。旧中文入口 `打开最新界面.cmd` 现在转到 `start-full-server.cmd`，避免引用过期 EXE。
+
+需要另行生成离线单文件包时，先构建当前VS Release，再运行 tools/release/build-release.ps1 -Local，并显式传当前 GameBinary 和官方CRT目录，随后使用 tools/release/verify-local-release.ps1 验收。历史离线包的445项验收仅对应2026-10-15版本。本轮完整服已从新解压目录通过42项发行验收，涵盖238个文件完整性、真实注册建角、保存、重启登录续玩与五曲实际播放；未测试多人同时在线、天机挑战、局域网或手机实机。原离线进度位置和迁移说明见[本地版使用说明](tools/release/本地版使用说明.txt)。
 
 > 在 VS Code 里打开本目录即可获得完整的跳转、补全与 F5 调试（.vscode/ 已配好）。
 > 调试前先跑 .\build.ps1 -Debug 生成带符号的可执行文件。
@@ -77,13 +93,13 @@ cd ningzhou-cpp
 
 首次构建会自动调用 CMake 配置 Ninja 工程。
 
-给其他玩家使用的单文件发行入口为 [宁州一梦-插件复核版.exe](https://github.com/guy-used-for-testing/ningzhou-dream/releases/latest)，适用于 Windows 10/11 x64。地图与立绘已内置，双击自动准备资源并打开浏览器；不包含本项目的个人存档。玩家数据保存于 `%LOCALAPPDATA%\NingzhouDream\game\runtime`，正常关闭启动器保存独立续玩快照，下次自动恢复，游戏内手动档和死亡回档继续独立保留。使用说明见 [使用说明.txt](tools/release/使用说明.txt)。
+历史单文件发行记录见[GitHub Releases](https://github.com/guy-used-for-testing/ningzhou-dream/releases)。本轮完整服务器 ZIP 位于本文上方的2026-10-17发行说明；此次只生成本地包，尚未上传GitHub。
 
 宗门修正版补齐地图进入山门、拜师与受业、宗门任务板；修正事件实际收益记录与功法抄本修习入口，区分神通学习和携带状态，补上非战斗神通与炼器的真实数值预览。全部修复备注见 [CHANGELOG.md](CHANGELOG.md)。原续玩文件与手动档自动保留。
 
 插件复核版进一步修复手机建号和道友详情操作、支线实际耗时、同种子重开人生编号、野外死亡提示、先手反震及社交交易边界。界面审查截图、规则复现和验证入口见 [AUDIT.md](AUDIT.md)。
 
-重新生成单文件发行包：先构建最新 `build/ningzhou_web.exe`，再运行 `./tools/release/build-release.ps1`。脚本仅打包核心程序与网页运行资源，排除存档、日志及素材生成元数据；构建清单与哈希保存在新建的 `build/release-日期时间/` 中。运行 `./tools/release/verify-release.ps1 -ReleaseRecordPath "build/release-日期时间/release.json"` 可在独立目录验收解包、续玩和资源修复，不改变正在运行的正式游戏。
+当前完整服重新打包使用 tools/release/build-server-folder.ps1，验证使用 tools/release/check-server-folder-browser.mjs --release <本轮release.json>。工具从ZIP新解压后验收，不读取或覆盖现有玩家服务。build-release.ps1 和 verify-release.ps1 属于另一个单文件启动器流程，不用于验证完整服文件夹ZIP。
 
 已构建时可直接双击 `build\ningzhou_web.exe`。移动游戏时请一起复制同目录的 `web\`；存档保存在该目录的 `saves\`。本轮检查与修复详情见 [AUDIT.md](AUDIT.md)。
 
@@ -434,7 +450,7 @@ gdb build\ningzhou.exe
 
 | 分组 | 对照对象 |
 | --- | --- |
-| 静态数据表 | 药材 157 / 丹方 126 / 功法 40 / 神通 40 / 天赋 39 ... |
+| 静态数据表 | 药材155 / 丹方123（退休内容清退后）；其余目录见当前生成表与数据检查 |
 | 随机数 | JS 的 LCG，种子 20261004 前 5 个值逐位一致 |
 | 人物生成 | `buildCharacter`，4 组配点逐字段比对 |
 | 洞府加成 | `artMods`，含上限压制与丹毒惩罚 |

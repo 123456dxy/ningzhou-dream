@@ -91,16 +91,19 @@ void mfRunNpcShuffleContinuationTests() {
     {
         Game Encounter = mfShuffleEncounter();
         auto& State = *Encounter.player.arts.battle;
-        // 留足未洗抽牌，明心无需跨重洗：旧的仅一张指定前缀仍应完整保留。
+        // 留足未洗抽牌：普通NPC用完前缀后仍须继续选择已经到手的合法牌。
         for (int Card = 0; Card < 3; ++Card) {
             State.enemyCards.draw.push_back(State.enemyCards.discard.back()); State.enemyCards.discard.pop_back();
         }
         mfSetPrefix(State, true);
         const auto Preview = battleEnemyPreview(Encounter);
-        checkEq(Preview.spells.size(), 1, "没有在前缀内部重洗时，不擅自扩展既有指定前缀");
+        check(Preview.spells.size() > 1 && Preview.damage > 0,
+            "普通NPC明心未跨重洗也可继续已到手的合法牌，不把短前缀误当行动上限");
+        check(Preview.spells.size() <= static_cast<std::size_t>(mfBattleEnemyActionLimit(Encounter, State)),
+            "未跨重洗续招仍遵守同一完整修士行动上限");
         const int HpBefore = State.hp;
         check(battleTurn(Encounter, "end").ok, "未跨重洗的旧前缀正常执行");
-        checkEq(HpBefore - State.hp, 0, "仅抽牌前缀不被额外附带未知攻击");
+        checkEq(HpBefore - State.hp, Preview.damage, "未跨重洗的实际抽牌续招与当前完整意图一致");
     }
     {
         Game Encounter = mfShuffleEncounter(true);

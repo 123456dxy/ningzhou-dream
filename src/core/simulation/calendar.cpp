@@ -1,3 +1,4 @@
+#include "core/exploration/ascension_tournament.h"
 // 宁州一梦 · C++ 版 — 月历实现（对应 JS 版 calendar.mjs）
 //
 // JS 版用一个 ctx 对象把 sim 的回调注入 calendar：
@@ -12,6 +13,8 @@
 #include "core/dungeon.h"
 #include "core/checkpoint.h"
 #include "core/talents.h"
+#include "core/combat/battle_scaling.h"
+#include "core/progression/zhuji_rules.h"
 
 namespace nz {
 
@@ -74,12 +77,12 @@ int calendarTake(Game& g, const string& key, double amount) {
     return n;
 }
 
-// 用途：读取功法天赋加成后的年度排毒量。
+// 用途：读取统一每年5点的自然排毒量，不叠加功法或天赋。
 // 参与流程：日历推进与月年边界结算。
 // 使用方式：传入const Player& player，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
-double calendarDetoxPerYear(const Player& player) {
-    return BasePillPoisonDecayPerYear + (hasDan(player) ? PillPoisonDaoDecayBonusPerYear : 0);
+double calendarDetoxPerYear(const Player&) {
+    return BasePillPoisonDecayPerYear;
 }
 
 // 用途：推进一个真实世界日；工作和兽潮回合共用月年/化毒/寿尽流程。
@@ -96,13 +99,17 @@ static void advanceWorldDay(Game& game, const string& endingCause = {}) {
     }
     crafting::mfGardenDayTick(game);
     tide::dayTick(game);
-    if (game.clock.days % 30 == 0) tide::monthTick(game);
+    if (game.clock.days % 30 == 0) {
+        tide::monthTick(game);
+        const int Maximum = game.player.arts.battleActive() && !game.player.arts.battle->shadowPlayer
+            ? game.player.arts.battle->max : mfPlayerHealthMaximum(game.player);
+        mfRecoverPlayerHealth(game, mfMonthlyHealthRecovery(Maximum));
+    }
     if (crossedYear) {
         if (!game.ended && game.player.health > 0) {
             worldYear(game);
             if (game.checkpoint.restores != restores) return;
             dungeonYearTick(game);
-            game.player.arts.repel = std::max(0, game.player.arts.repel - 1);
         }
     }
     const int detox = calendarTake(game, "detox", calendarDetoxPerYear(game.player) / 360.0);
@@ -115,6 +122,7 @@ static void advanceWorldDay(Game& game, const string& endingCause = {}) {
         game.ending->age = game.player.age;
     }
     if (!game.ended && game.clock.days % 30 == 0) talentMonthTick(game);
+    if (!game.ended) mfOfferAscensionTournament(game);
     checkpointTick(game);
 }
 
@@ -185,7 +193,7 @@ CalRunResult calendarRun(Game& g, int maxDays) {
             if (g.checkpoint.restores != restores) {
                 out.ok = true; out.restored = true; return out;
             }
-        } else if (!g.player.arts.battleActive()) {
+        } else if (!g.player.arts.battleActive() && !mfZhujiBlocksActions(g)) {
             maybeChoice(g);
         }
     }

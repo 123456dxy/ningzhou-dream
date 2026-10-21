@@ -28,7 +28,8 @@ enum class TextId {
     AchievementClaimedReward, AchievementRewardNote,
     PillCultivationCompleteEffect, PillCultivationUseLimit,
     GardenReserveRequiresBottle, GardenBottleGrowthRule, GardenNoBottleGrowthRule,
-    DungeonElapsedPaused, FireSiphonDescription
+    DungeonElapsedPaused, FireSiphonDescription, PoisonBloomDescription, PoisonSiphonDescription,
+    DrawToDescription
 };
 
 struct TextArg { std::string_view name, value; };

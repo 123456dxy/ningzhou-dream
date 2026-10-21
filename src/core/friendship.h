@@ -161,8 +161,8 @@ struct BagItem {
 // 列出某个 NPC 背包里能换的东西
 // 用途：列出目标行囊物品和交情兑换条件。
 // 参与流程：NPC 背包页面及兑换报价。
-// 使用方式：传游戏与 NPC ID；空行囊会惰性初始化，即使参数为 const。
-// 返回值：按成本排序的报价；惰性补全时会修改 NPC 和 RNG。
+// 使用方式：传游戏与NPC ID，只展示现有行囊，空行囊不初始化。
+// 返回值：按成本排序的报价；不写库存、不服丹、不改RNG或时钟。
 std::vector<BagItem> npcBag(const Game& g, const std::string& npcId);
 // 花交情换一件
 struct TradeResult {

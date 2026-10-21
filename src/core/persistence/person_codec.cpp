@@ -24,6 +24,7 @@ Value personToJson(const Person& person) {
     personObject.set("cores", num(person.cores));
     personObject.set("body", num(person.body));
     personObject.set("lifeBonus", num(person.lifeBonus));
+    personObject.set("pillLifeBonus", num(person.PillLifeBonus));
     personObject.set("location", str(person.location));
     personObject.set("relations", mapToJson(person.relations));
     return personObject;
@@ -48,6 +49,7 @@ void personFromJson(const Value& personObject, Person& person) {
     person.cores = personObject["cores"].asInt();
     person.body = personObject["body"].asInt();
     person.lifeBonus = personObject["lifeBonus"].asInt();
+    person.PillLifeBonus = personObject["pillLifeBonus"].asInt();
     person.location = personObject["location"].asString("wuling");
     person.relations = jsonToMap<int>(personObject["relations"]);
 }

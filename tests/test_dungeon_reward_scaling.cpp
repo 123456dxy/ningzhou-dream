@@ -4,6 +4,7 @@
 #include "core/dungeon.h"
 #include "core/exploration/dungeon_reward_rules.h"
 #include "core/crafting/herb_acquisition.h"
+#include "core/content/forge_content.h"
 #include "core/save.h"
 #include "core/sim.h"
 #include <algorithm>
@@ -77,6 +78,7 @@ bool mfFinishRewardRoute(Game& State, int ExpectedEntryStage, bool CheckCombatAm
         const int BeforeStones = Run.stones, BeforeMaterials = mfStashMaterialCount(Run), BeforeCores = Run.cores;
         if (!dungeonChoose(State, NodeId).empty()) return false;
         if (State.player.arts.battle) {
+            const bool IsBeast = State.player.arts.battle->enemyBeast;
             State.player.arts.battle->hp = State.player.arts.battle->max;
             State.player.arts.battle->enemyHp = 0;
             battleFinish(State, true);
@@ -86,7 +88,7 @@ bool mfFinishRewardRoute(Game& State, int ExpectedEntryStage, bool CheckCombatAm
                 const int Expected = BattleStones[Major] + (Type == "elite" ? EliteStones[Major] : Type == "boss" ? BossStones[Major] : 0);
                 checkEq(State.dungeons.run->stones - BeforeStones, Expected, "真实" + Type + "灵石按入口大境界结算");
                 if (Type != "boss") checkEq(mfStashMaterialCount(*State.dungeons.run) - BeforeMaterials,
-                    Type == "elite" ? 2 : 1, "普通战一份/精英两份材料，随入口适阶");
+                    IsBeast ? 5 : Type == "elite" ? 2 : 1, "妖兽五部位、人类精英两份附带材料");
                 if (Type == "boss" && ExpectedEntryStage < 3)
                     checkEq(State.dungeons.run->cores, BeforeCores, "低阶首领不凭高境人物run.stage追加灵核");
             }
@@ -142,8 +144,10 @@ void mfRunDungeonRewardScalingTests() {
         if (State.dungeons.run) {
             for (const auto& [Name, Count] : State.dungeons.run->herbs) checkEq(findHerbByName(Name)->grade, Major + 1, "真实沿途草药不再固定一二阶");
             for (const auto& [Id, Count] : State.dungeons.run->materials) {
-                const auto Item = std::find_if(data::MaterialDef_TABLE().begin(), data::MaterialDef_TABLE().end(), [&](const auto& Entry) { return Entry.id == Id; });
-                check(Item != data::MaterialDef_TABLE().end() && Item->grade == static_cast<int>(Major + 1), "真实沿途矿材不再固定一二阶");
+                const auto* Definition = content::mfFindForgeMaterial(Id);
+                check(Definition && Definition->Material.grade <= static_cast<int>(Major + 1) &&
+                    (Definition->Source == content::ForgeMaterialSource::BeastDrop || Definition->Material.grade == static_cast<int>(Major + 1)),
+                    "部位按敌方境界、附带矿材按入口品阶，不按玩家提高");
             }
             check(dungeonStateError(State).empty(), "新适阶材料与通关状态通过持久化校验");
         }

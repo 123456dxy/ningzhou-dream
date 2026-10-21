@@ -24,6 +24,7 @@ Game mfBeastEncounter(int Stage = 6, const string& Style = "体", int EnemySpeed
     PlayerState.arts.main.clear(); PlayerState.arts.manuals.clear();
     PlayerState.arts.spells = {"sword", "wood", "skim"};
     PlayerState.arts.knownSpells = PlayerState.arts.spells;
+    PlayerState.health = mfPlayerHealthMaximum(PlayerState);
     Encounter.clock.ageBase = PlayerState.age;
     EnemySpec Enemy;
     Enemy.name = "专属动作妖兽"; Enemy.kind = "spar";
@@ -109,7 +110,7 @@ void mfRunBeastActionTests() {
             if (!Encounter.player.arts.battle) break;
             checkEq(HpBefore - State.hp, Preview.damage, "吐息毒火/扰灵/凝甲与整轮损血预告同源");
             if (Round == 1 && Style == "火") check(State.enemyCards.burn > 0 && State.enemyCards.burnTurns == 3, "烈焰吐息真实施加玩家灼烧");
-            if (Round == 1 && Style == "木") check(State.playerPoison > 0 && State.playerPoisonTurns == 3, "毒息真实施加玩家中毒");
+            if (Round == 1 && Style == "木") check(State.playerPoison > 0 && State.playerPoisonTurns == 1, "毒息真实施加玩家中毒");
             if (Round == 1 && Style == "神") check(State.enemyWeaken > 0, "咆哮扰灵只削弱后续直接攻击");
         }
         if (Encounter.player.arts.battle) checkEq(State.enemyCards.charge, 1, "第四轮蓄势保留到下一真实攻击");

@@ -46,14 +46,24 @@ const run = { siteId: site.id, siteName: site.name, type: 'wild', realmName: '�
 const route = renderDungeonRoute(run);
 check(route.includes('data-dungeon-route-summary') && route.includes('共4层 · 强敌1处 &lt;路线&gt;'), '路线摘要只展示后端字符串并转义');
 check((route.match(/data-dungeon-option="/g) || []).length === 2, '仅为当前可达节点生成路线对照卡');
-check(route.includes('岩甲妖猿') && route.includes('凝甲后重击 &lt;预告&gt;') && route.includes('血契祭坛') && route.includes('付出气血换取遗物'), '可达卡同时展示遭遇与事件机制');
-check(route.includes('高风险 · 高奖励') && route.includes('后续可达') && route.includes('松风营地') && route.includes('玄火守卫'), '精英风险与真实连接节点去向清晰');
+check(!route.includes('岩甲妖猿') && !route.includes('凝甲后重击') && !route.includes('断崖')
+  && !route.includes('玄火守卫') && !route.includes('守关平台'), '未触发战斗不在正文、title、aria或备用节点名披露怪物详情');
+check(route.includes('血契祭坛') && route.includes('付出气血换取遗物'), '事件主题和风险预告继续保留，不随怪物遮蔽扩大范围');
+check(route.includes('高风险 · 高奖励') && route.includes('后续可达') && route.includes('松风营地')
+  && route.includes('守关者'), '精英风险与真实连接去向保留，后续守关者只显示通用类型');
 check(route.includes('dungeon-room-legend') && route.includes('守关者') && route.includes('行商'), '保留节点类型图例');
 const paused = renderDungeonRoute({ ...run, phase: 'battle' });
 check(!paused.includes('data-dungeon-option="'), '战斗与领奖中不提供可提交的路线对照卡');
 const oldRoute = renderDungeonRoute({ ...run, routeSummary: undefined, nodes: nodes.map(node => ({ ...node,
   encounterName: undefined, encounterHint: undefined, eventName: undefined, eventHint: undefined })) });
-check(!oldRoute.includes('undefined') && oldRoute.includes('断崖') && oldRoute.includes('古碑'), '旧节点缺新增信息仍正常显示');
+check(!oldRoute.includes('undefined') && !oldRoute.includes('断崖') && !oldRoute.includes('守关平台')
+  && oldRoute.includes('古碑'), '旧响应name/text回退也不能泄漏未触发怪物，非战斗节点仍正常显示');
+const currentFight = renderDungeonRoute({ ...run, current: 'fight', phase: 'battle' });
+check(currentFight.includes('岩甲妖猿') && currentFight.includes('凝甲后重击 &lt;预告&gt;')
+  && !currentFight.includes('玄火守卫'), '当前已触发遭遇揭晓详情，未来守关者继续隐藏');
+const visitedFight = renderDungeonRoute({ ...run, nodes: nodes.map(node => node.id === 'fight' ? { ...node, visited: true } : node) });
+check(visitedFight.includes('岩甲妖猿') && visitedFight.includes('凝甲后重击 &lt;预告&gt;')
+  && !visitedFight.includes('玄火守卫'), '已访问战斗保留回顾信息，未访问怪物仍隐藏');
 const eventRun = { ...run, phase: 'reward', current: 'risk', rewards: [{ id: 'offer', kind: 'eventChoice', name: '献血取宝',
   description: '获得后端给定遗物', cost: 12, healthCost: 8, enabled: false, reason: '气血不足 <拒绝>' }] };
 const event = renderDungeonRun({ ...state, dungeons: { run: eventRun } });

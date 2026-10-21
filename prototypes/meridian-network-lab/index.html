@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#edf2e6">
+  <title>宁州一梦 · 周天冲穴</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wordmark"><span class="seal-mark" aria-hidden="true">宁</span><div><h1>周天冲穴</h1><span class="lab-label">独立试玩 · 宁州一梦</span></div></div>
+    <div class="resource-bar" aria-label="本次闭关状态">
+      <div class="resource qi-resource"><span>真气</span><strong id="qiValue">—</strong><small id="qiInitial">/ —</small></div>
+      <div class="resource"><span>根基</span><strong id="scoreValue">—</strong><small>分</small></div>
+      <div class="reward-chip" id="rewardValue">等待入关</div>
+    </div>
+    <nav class="toolbar" aria-label="试玩工具"><button id="prepareToggle" aria-expanded="false" aria-controls="preparePanel">入关准备</button><button id="rulesToggle" aria-expanded="false" aria-controls="rulesPanel">规则</button><button id="logToggle" aria-expanded="false" aria-controls="logPanel">手记 <span id="historyCount">0</span></button></nav>
+  </header>
+
+  <main class="play-layout">
+    <section class="map-panel" aria-label="周天经络图">
+      <div class="map-heading"><div><span class="map-kicker">周 天 经 络</span><p id="mapHint">点选穴位窥见详情，再确认冲穴。</p></div><ol id="gateList" class="gate-list" aria-label="三关进度"></ol></div>
+      <div id="mapViewport" class="map-viewport" tabindex="0" aria-label="经络地图，窄屏可拖动或滚动查看">
+        <div id="meridianMap" class="meridian-map">
+          <div class="map-watermark" aria-hidden="true">守 一</div>
+          <svg class="map-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="routeGradient"><stop stop-color="#a3c6a3"/><stop offset="1" stop-color="#c7b77f"/></linearGradient></defs><g id="mapEdges"></g></svg>
+          <div class="meditator" aria-hidden="true">
+            <svg viewBox="0 0 200 250"><defs><radialGradient id="aura"><stop stop-color="#c3ddbd" stop-opacity=".6"/><stop offset="1" stop-color="#dbe8c9" stop-opacity="0"/></radialGradient><linearGradient id="robe" x2="0" y2="1"><stop stop-color="#d1dfcc"/><stop offset="1" stop-color="#b8cdb2"/></linearGradient></defs><ellipse cx="100" cy="135" rx="98" ry="113" fill="url(#aura)"/><ellipse cx="100" cy="228" rx="76" ry="10" fill="#b7c7ad" opacity=".28"/><path d="M89 48Q85 25 100 22Q115 25 112 48Z" fill="#7d9380"/><path d="M81 48Q78 71 92 79L108 79Q123 68 118 48Q99 40 81 48" fill="#e7debf"/><path d="M86 77L77 94Q56 102 57 136L44 178L79 188L121 188L156 177L143 135Q144 101 123 94L113 77L101 96Z" fill="url(#robe)" stroke="#96b295" stroke-width="2"/><path d="M78 99L99 150L120 99M99 150L98 186M72 125L61 166L88 180M129 125L139 165L113 180" fill="none" stroke="#98b595" stroke-width="2"/><path d="M63 165Q46 178 22 205Q14 226 43 231L101 216L160 231Q186 229 178 209Q155 182 137 166L119 181L101 188L81 180Z" fill="#c0d1b7" stroke="#98b295" stroke-width="2"/><path d="M30 216Q63 203 99 215M171 218Q139 205 101 215M88 178Q98 167 113 179Q101 191 88 178" fill="none" stroke="#98b295" stroke-width="2"/><circle cx="100" cy="155" r="12" fill="#f9e9a9" opacity=".7"/><circle cx="100" cy="155" r="4" fill="#fff8cf"/></svg>
+            <span>静守丹田 · 真气循脉</span>
+          </div>
+          <div id="mapNodes" class="map-nodes"></div>
+          <div id="flowMarker" class="flow-marker is-hidden" aria-hidden="true"><i></i></div>
+          <div id="eventLayer" class="event-layer" aria-hidden="true"></div>
+          <div id="mapLoading" class="map-loading">正在展开周天经络…</div>
+        </div>
+      </div>
+      <div class="map-footer"><div class="map-legend"><span class="legend-dot current"></span>真气所在 <span class="legend-dot open"></span>已通 <span class="legend-dot adjacent"></span>相邻可冲 <span class="legend-dot unknown"></span>未明</div><span class="drag-hint">↔ 拖动 / 滚动查看全图</span><span id="positionLabel">丹田候气</span></div>
+    </section>
+
+    <aside class="detail-panel" aria-label="选中穴位与冲穴报价">
+      <div class="detail-top"><span id="detailKind" class="eyebrow">选穴 · 未结算</span><span id="detailStatus" class="detail-status">窥脉</span></div>
+      <h2 id="detailName">择穴而行</h2>
+      <p id="detailEffect" class="detail-effect">先点亮处查看。真气只沿相连经脉移动，每一次冲穴都由你确认。</p>
+      <div id="detailStats" class="detail-stats"></div>
+      <div id="quoteOutcomes" class="quote-outcomes"><p>选中穴位只预览，不会消耗真气。</p></div>
+      <button id="primaryAction" class="primary-button" disabled>选取相邻穴位</button>
+      <div id="actionReason" class="action-reason" aria-live="polite"></div>
+      <div id="buffHint" class="buff-hint is-hidden"></div>
+      <div class="utility-actions"><button id="restoreAction" disabled>灵核 · 恢复本穴次数</button><p id="restoreHint">仅恢复刚失败穴位的次数，不返还真气。</p></div>
+      <div class="seal-section"><button id="sealAction" class="seal-button" disabled>归元定基</button><p id="sealHint">通任、督、冲三关，再回丹田。</p></div>
+      <button id="withdrawAction" class="quiet-button" disabled>收功离关</button>
+      <div id="notice" class="notice" role="status" aria-live="polite">正在连接独立沙盘…</div>
+      <button id="reconnectAction" class="reconnect-button is-hidden">重新连接</button>
+    </aside>
+  </main>
+
+  <section id="preparePanel" class="drawer preparation-drawer is-hidden" aria-labelledby="prepareTitle">
+    <div class="drawer-heading"><h2 id="prepareTitle">入关准备</h2><button data-close="preparePanel" aria-label="关闭入关准备">×</button></div>
+    <p id="preparationHint">调整后重新入关生效，本局进度将清空。</p>
+    <label class="preparation-field" for="pillsInput">筑基丹 <span class="pill-stepper"><button id="pillMinus" aria-label="少用一枚筑基丹">−</button><output id="pillsInput">1</output><button id="pillPlus" aria-label="多用一枚筑基丹">＋</button></span></label>
+    <label class="preparation-field" for="coreInput">携带灵核 <input id="coreInput" type="checkbox" checked></label>
+    <label class="preparation-field" for="talentInput">修行天赋 <select id="talentInput"><option value="none">凡体</option><option value="daoBody">先天道体</option><option value="steady">沉稳根骨</option></select></label>
+    <button id="startAction" class="primary-button">重新入关</button>
+  </section>
+  <section id="rulesPanel" class="drawer rules-drawer is-hidden" aria-labelledby="rulesTitle"><div class="drawer-heading"><h2 id="rulesTitle">冲穴要诀</h2><button data-close="rulesPanel" aria-label="关闭规则">×</button></div><div id="guideHints"></div></section>
+  <section id="logPanel" class="drawer log-drawer is-hidden" aria-labelledby="logTitle"><div class="drawer-heading"><h2 id="logTitle">修行手记</h2><button data-close="logPanel" aria-label="关闭手记">×</button></div><ol id="historyList"></ol></section>
+
+  <div id="confirmBackdrop" class="modal-backdrop is-hidden"><section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle"><span id="confirmKicker" class="eyebrow">归元定基</span><h2 id="confirmTitle">确认永久根基</h2><div id="confirmBody"></div><div class="dialog-actions"><button id="confirmCancel">再想一想</button><button id="confirmAction" class="primary-button">确认定基</button></div></section></div>
+  <div id="toast" class="toast" role="status"></div>
+</body>
+</html>

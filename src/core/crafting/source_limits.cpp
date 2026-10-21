@@ -28,7 +28,7 @@ int ordinaryMaterialGradeLimit(const Player& player) {
 // 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
 string ordinaryHerbError(const Player& player, int grade) {
     if (grade < 1) return "药材品阶无效。";
-    if (grade > 2) return "三品及以上药材不在普通坊市出售，可向天机阁购买定向材料秘境情报，通关保底获得十份。";
+    if (grade > 2) return "三品及以上药材不在普通坊市出售；三至五品药材可向五城天机阁执事固定价购买，也可购买定向材料秘境情报，通关保底获得十份。";
     if (grade > ordinaryHerbGradeLimit(player)) return "境界不足以购入此品阶药材。";
     return "";
 }
@@ -39,7 +39,7 @@ string ordinaryHerbError(const Player& player, int grade) {
 // 返回值：对应文字、ID或失败原因；动作错误接口成功时为空。
 string ordinaryMaterialError(const Player& player, int grade) {
     if (grade < 1) return "炼器材料品阶无效。";
-    if (grade > 2) return "三阶及以上炼器材料不在普通坊市出售，可向天机阁购买定向材料秘境情报，通关保底获得十份。";
+    if (grade > 2) return "三阶及以上炼器材料不在普通坊市出售；三至五阶新矿物可向五城天机阁执事固定价购买，其他材料请查看实际来源或秘境情报。";
     if (grade > ordinaryMaterialGradeLimit(player)) return "二阶炼器材料需达到筑基期。";
     return "";
 }

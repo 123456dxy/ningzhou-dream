@@ -1,6 +1,7 @@
 #include "core/exploration/dungeon_events.h"
 #include "core/exploration/dungeon_reward_rules.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/content/game_ids.h"
 #include "core/dungeon.h"
 #include "core/foundation/state_limits.h"
@@ -13,7 +14,7 @@
 
 namespace nz {
 namespace {
-enum class EventAction { Heal, Stones, Card, Relic, Remove };
+enum class EventAction { Heal, Stones, Card, Relic, Remove, Continue };
 struct EventOffer {
     DungeonReward Reward;
     EventAction Action = EventAction::Heal;
@@ -33,12 +34,13 @@ const DungeonNode* mfCurrentEvent(const DungeonRun& Run) {
     return Found == Run.nodes.end() ? nullptr : &*Found;
 }
 // 用途：从真实适境神通中选攻击或经营牌；流程：事件冻结；用法：传境界、稳定种子与类别；返回：目录指针或空。
-const SpellDef* mfEventCard(int Stage, uint32_t Seed, bool Utility) {
+const SpellDef* mfEventCard(const DungeonRun& Run, int Stage, uint32_t Seed, bool Utility) {
     vector<const SpellDef*> Pool;
     for (const auto& Spell : allSpells()) {
         if (Spell.id == "strike" || Spell.id == "defend" || Spell.stage > Stage) continue;
+        if (!mfDungeonCardRewardAllowed(Run, Spell)) continue;
         const auto Kind = content::parseSpellKind(Spell.kind);
-        const bool IsUtility = Kind == content::SpellKind::Draw || Kind == content::SpellKind::Foresee ||
+        const bool IsUtility = Kind == content::SpellKind::Draw || Kind == content::SpellKind::DrawTo || Kind == content::SpellKind::Foresee ||
             Kind == content::SpellKind::Redraw || Kind == content::SpellKind::Mana;
         const bool IsAttack = Kind == content::SpellKind::Attack || Kind == content::SpellKind::Fire ||
             Kind == content::SpellKind::Sword || Kind == content::SpellKind::Drain ||
@@ -75,7 +77,7 @@ vector<EventOffer> mfEventOffers(const Game& State, const DungeonRun& Run, const
         Offers.push_back(std::move(Offer));
     };
     const auto AddCard = [&](const string& Id, bool Utility, int Copies, int HealthCost, int StoneCost) {
-        if (const auto* Spell = mfEventCard(RewardStage, Seed + (Utility ? 7u : 13u), Utility))
+        if (const auto* Spell = mfEventCard(Run, RewardStage, Seed + (Utility ? 7u : 13u), Utility))
             Add(Id, "取法·" + Spell->name,
                 "将" + std::to_string(Copies) + "张「" + Spell->name + "」加入本次临时牌组，离境消失。" +
                 (HealthCost ? "付出健康度" + std::to_string(HealthCost) + "点，必须至少保留1点。" : "") +
@@ -127,6 +129,9 @@ vector<EventOffer> mfEventOffers(const Game& State, const DungeonRun& Run, const
         Add("medicine", "换取疗伤灵露", "消耗探索灵石" + std::to_string(18 * Rules.CurrencyScale) + "，恢复健康度30点，最多恢复至100。", EventAction::Heal, 30, 0, 18 * Rules.CurrencyScale);
         break;
     }
+    // 只为启用偏好的新探索提供零收益出口；旧在途冻结选项的文案、顺序与空集合保持原样。
+    if (Offers.empty() && Run.CardRewardRulesVersion == 1)
+        Add("continue", "继续探索", "没有符合本次偏好的临时神通，继续前行，不增加额外收益。", EventAction::Continue, 0);
     return Offers;
 }
 // 用途：验证冻结奖励未被修改；流程：报价/读档；用法：比较全字段；返回：是否完全一致。
@@ -178,6 +183,13 @@ DungeonEventQuote mfQuoteDungeonEvent(const Game& State, const string& RewardId)
         Quote.Reason = "当前没有可选择的秘境事件。"; return Quote;
     }
     const auto& Run = *State.dungeons.run;
+    if (const auto Error = mfValidateDungeonCardRewardPreference(Run.CardRewardPreference); !Error.empty()) {
+        Quote.Reason = Error; return Quote;
+    }
+    if (Run.CardRewardRulesVersion < 0 || Run.CardRewardRulesVersion > 1 ||
+        (Run.CardRewardRulesVersion == 0 && Run.CardRewardPreference.Mode != DungeonCardRewardMode::All)) {
+        Quote.Reason = "秘境临时卡奖励规则与入场偏好不符。"; return Quote;
+    }
     if (State.ended || State.pending || State.job || State.player.health <= 0 || State.player.location != Run.location) {
         Quote.Reason = "请先完成当前事件，并留在秘境入口所在地。"; return Quote;
     }
@@ -231,6 +243,7 @@ string mfClaimDungeonEvent(Game& State, const string& RewardId) {
         if (Card == Candidate.deck.end() || Card->spell == "strike" || Card->spell == "defend") return "待遗忘的临时神通已失效。";
         Candidate.deck.erase(Card); break;
     }
+    case EventAction::Continue: break;
     }
     Candidate.rewards.clear(); Candidate.phase = "route";
     // 只复制日志写集，不复制全州NPC；日志分配成功后才提交资源与牌组。
@@ -241,7 +254,7 @@ string mfClaimDungeonEvent(Game& State, const string& RewardId) {
     static_assert(std::is_nothrow_move_assignable_v<DungeonRun>);
     static_assert(noexcept(State.logs.swap(Journal.logs)));
     *State.dungeons.run = std::move(Candidate);
-    State.player.health = State.dungeons.run->health;
+    State.player.health = mfHealthFromPercent(State.dungeons.run->health, mfPlayerHealthMaximum(State.player));
     State.logs.swap(Journal.logs); State.eventSeq = Journal.eventSeq;
     return "";
 }

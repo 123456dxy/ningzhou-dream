@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <chrono>
 
 #include "core/battle.h"
 #include "core/calendar.h"
@@ -21,6 +22,7 @@ Game smallGame() {
     CreateOptions opts;
     opts.seed = 734;
     Game g = createGame(opts);
+    g.pending.reset();
     g.npcs.clear();
     return g;
 }
@@ -121,7 +123,7 @@ void runStateIntegrityTests() {
         g.player.health = 50;
         g.job = planJob(g, "rest", 10);
         calendarRun(g);
-        checkEq(g.player.health, 56, "十天休养按日恢复气血");
+        checkEq(g.player.health, 53, "十天休养按日累计额外7%月恢复，月初自然恢复尚未结算");
         g.job = planJob(g, "gather", 15);
         const int herbs = g.player.herbs;
         calendarRun(g);
@@ -170,6 +172,7 @@ void runStateIntegrityTests() {
     }
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         Npc& n = g.npcs[0];
         n.alive = false;
         Job j; j.actionType = "bond"; j.kind = "master"; j.npcId = n.id;
@@ -182,6 +185,7 @@ void runStateIntegrityTests() {
     }
     {
         Game original = createGame(CreateOptions{});
+        original.pending.reset(); // 在途工作夹具从空闲状态开始。
         original.flags = {{"choiceYear", 3}, {"invitation", 1}};
         original.clock.carry["xp"] = 0.1234567890123456;
         original.player.arts.combatPrep = {{"attack", 0.1}, {"reduction", 0.12}};
@@ -216,7 +220,7 @@ void runStateIntegrityTests() {
         b.intentSpell = "rain"; b.enemyDao = "水"; b.enemySpells = {"rain", "water"};
         b.enemyCd = {{"rain", 2}}; b.enemyWeaken = 1;
         b.buff = 0.1; b.reduction = 0.12;
-        b.playerPoison = 7; b.playerPoisonTurns = 2;
+        b.playerPoison = 7; b.playerPoisonTurns = 1;
         b.huntFee = 145; b.wildTask = "妖祸";
         b.carryMana = 2; b.manaBonus = 1; b.manaPenalty = 1;
         b.drawNext = 2; b.pendingDraw = 1; b.carryCap = 4; b.hpCostPct = 10;
@@ -239,6 +243,7 @@ void runStateIntegrityTests() {
     {
         CreateOptions opts; opts.traits = {"longlife"}; opts.traitsExplicit = true;
         Game original = createGame(opts);
+        original.pending.reset();
         Game restored; string err;
         check(loadFromJson(saveToJson(original), restored, &err), "长生天赋存档可读取");
         checkEq(restored.player.lifeBonus, 15, "长生天赋额外寿元不会因派生字段被漏存");
@@ -324,16 +329,22 @@ void runStateIntegrityTests() {
         checkNear(json::Value::parse(json::Value(tiny).dump()).asNumber(), tiny, "序列化小数不截断六位", 1e-17);
     }
     {
-        const auto base = std::filesystem::temp_directory_path() / "ningzhou-state-integrity-test";
+        const auto Unique = std::chrono::steady_clock::now().time_since_epoch().count();
+        // 工作区临时目录可在受限测试进程中写入，且每次运行只占用自己的子目录。
+        const auto base = std::filesystem::current_path() / "tmp" /
+            ("ningzhou-state-integrity-test-" + std::to_string(Unique));
         const auto target = base / std::filesystem::u8path("中文存档.json");
         const auto utf8 = target.u8string();
         const string path(reinterpret_cast<const char*>(utf8.data()), utf8.size());
         Game first = smallGame(); string err;
-        check(saveToFile(first, path, &err), "中文路径存档写入成功");
+        const bool FirstSaved = saveToFile(first, path, &err);
+        check(FirstSaved, "中文路径存档写入成功：" + err);
         Game second = first; second.player.stones += 10;
-        check(saveToFile(second, path, &err), "原存档原子替换成功");
+        const bool Replaced = saveToFile(second, path, &err);
+        check(Replaced, "原存档原子替换成功：" + err);
         Game out;
-        check(loadFromFile(path, out, &err), "中文路径存档读取成功");
+        const bool Loaded = loadFromFile(path, out, &err);
+        check(Loaded, "中文路径存档读取成功：" + err);
         checkEq(out.player.stones, second.player.stones, "替换后读到新存档");
         std::error_code ec;
         std::filesystem::remove(target, ec);

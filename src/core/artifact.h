@@ -14,6 +14,8 @@ struct ArtifactAbility {
 // 使用方式：先检查显式器型，再按旧器名和槽位补齐。
 // 返回值：合法器型 ID；显式器型无效时为空。
 string artifactShape(const Gear& gear);
+// 只有白名单出生遗宝可在炼气催动二阶固定效果，其余装备沿用原有品阶资格。
+int mfArtifactRequiredStage(const Gear& GearState);
 // 用途：把法器器型、品阶、元素和铭刻转为主动神通。
 // 参与流程：法宝目录与实战主动施术。
 // 使用方式：传单件装备；非自炼或非法装备返回无效能力。

@@ -3,6 +3,15 @@
 namespace nz::api {
 namespace {
 constexpr RouteInfo routes[] = {
+    {RouteId::ArtsLifebound, "/api/arts/lifebound", RouteEffect::Mutation},
+    {RouteId::PillBatchQuote, "/api/pills/use-quote", RouteEffect::ReadOnly, true, true, true, true},
+    {RouteId::PillBatchUse, "/api/pills/use", RouteEffect::Mutation},
+    {RouteId::AlchemyQuote, "/api/alchemy/quote", RouteEffect::ReadOnly, true, true, true, true},
+    {RouteId::TianjiShop, "/api/tianji-shop", RouteEffect::ReadOnly, true, true, true, true},
+    {RouteId::TianjiShopQuote, "/api/tianji-shop/quote", RouteEffect::ReadOnly, true, true, true, true},
+    {RouteId::TianjiShopBuy, "/api/tianji-shop/buy", RouteEffect::Mutation},
+    {RouteId::AscensionTournament, "/api/ascension-tournament", RouteEffect::ReadOnly, true, true, true, true},
+    {RouteId::AscensionTournamentEnter, "/api/ascension-tournament/enter", RouteEffect::Mutation, false, false, true, false},
     {RouteId::Achievements, "/api/achievements", RouteEffect::ReadOnly, false, false, false, false},
     {RouteId::Advance, "/api/advance", RouteEffect::Mutation, false, false, false, true},
     {RouteId::ArtsAux, "/api/arts/aux", RouteEffect::Mutation, false, false, false, false},
@@ -19,6 +28,7 @@ constexpr RouteInfo routes[] = {
     {RouteId::Bond, "/api/bond", RouteEffect::Mutation, false, false, false, false},
     {RouteId::BookBuy, "/api/book-buy", RouteEffect::Mutation, false, false, false, false},
     {RouteId::Breakthrough, "/api/breakthrough", RouteEffect::Mutation, false, false, false, false},
+    {RouteId::Zhuji, "/api/zhuji", RouteEffect::ReadOnly, true, true, true, true},
     {RouteId::BuildCheck, "/api/build-check", RouteEffect::ReadOnly, false, false, false, false},
     {RouteId::BuildOptions, "/api/build-options", RouteEffect::ReadOnly, false, false, false, false},
     {RouteId::Buy, "/api/buy", RouteEffect::Mutation, false, false, false, false},

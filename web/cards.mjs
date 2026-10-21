@@ -9,13 +9,13 @@
 // 20 种 kind → 中文标签
 const KIND_LABEL = {
   shield: '护盾', guard: '护盾', heal: '治疗', mana: '聚气', float: '聚气',
-  charge: '蓄势', water: '蓄水', poison: '施毒', soul: '震荡', fire: '灼烧',
+  charge: '蓄势', water: '蓄水', poison: '施毒', poisonBloom: '滋毒经营', soul: '震荡', fire: '灼烧',
   sword: '剑术', human: '剑术', wave: '爆发', heavy: '爆发',
-  poisonBurst: '爆发', soulBurst: '爆发', bodyBurst: '爆发',
+  poisonBurst: '爆发', poisonSiphon: '借毒治疗', soulBurst: '爆发', bodyBurst: '爆发',
   steal: '夺灵', drain: '穿盾', attack: '攻击',
   // 灵力经营（参考杀戮尖塔）
   store: '蓄灵', flow: '聚气', burst: '夺灵',
-  draw: '抽牌', foresee: '预谋',
+  draw: '抽牌', drawTo: '补牌', foresee: '预谋',
   exhaust: '本场移除', redraw: '换手', empower: '增伤', ward: '减伤', fireBurst: '引爆', fireSiphon: '焰转治疗',
 };
 
@@ -39,6 +39,7 @@ const KIND_RULE = {
   wave: '每层水势增伤，施术后消耗全部水势。',
   heavy: '每层重势增伤 12%，施术后消耗全部重势。',
   poisonBurst: '每层毒追加伤害，施术后清除毒。',
+  poisonSiphon: '借对手的活跃毒势恢复气血；不消耗毒层，不造成伤害，不触发毒疗。',
   soulBurst: '每层震荡增伤 25%，每层穿盾 5%（最高30%），施术后消耗震荡。',
   bodyBurst: '体魄、重势增伤；出牌前有 3 灵力时额外增伤 15%。',
   mana: '恢复灵力；卡牌进入弃牌堆，本回合不能再抽回。',
@@ -48,7 +49,8 @@ const KIND_RULE = {
   heal: '恢复气血，单卡最高气血 14%；冷却按回合结算。',
   charge: '获得重势，上限 4 层，供爆发神通消耗。',
   water: '水势 +2，上限 6 层，供水系爆发消耗。',
-  poison: '叠毒，上限 99 层；回合结束结算，持续 3 回合。',
+  poison: '叠毒，上限 99 层；回合结束结算，本场持续。',
+  poisonBloom: '使对手现有毒层增加 50%；本场持续。',
   soul: '叠加震荡，上限 6 层，供神识爆发消耗。',
   fire: '附加灼烧；回合结束结算，持续 3 回合。',
   steal: '命中后恢复灵力。',
@@ -59,6 +61,7 @@ const KIND_RULE = {
   flow: '此后每回合灵力 +1（本场持续）；每次施术令当前气血上限下降 8%，本场结束后恢复。',
   burst: '立刻获得灵力；代价是此后每回合灵力 −1（本场持续）。',
   draw: '本回合立刻多抽牌；卡牌本身也要花灵力，等于用灵力换手牌。',
+  drawTo: '出牌后将手牌补至指定张数；已达到目标时不补牌、不弃牌。',
   foresee: '下回合多抽牌；本回合不出力，把资源留给下一波。',
   exhaust: '选择一张其它卡牌，仅移除这一张，本场不再抽到；同名其它卡仍保留，下一场恢复。',
   redraw: '弃掉其它手牌，再重抽相同数量 +1 张；弃牌仍会在牌堆重洗后出现。',
@@ -96,15 +99,16 @@ export function battleStatusRows(b) {
   // 调用方式：状态摘要传入value。
   // 返回值：百分比字符串。
   const percent = value => `${Math.round(value * 100)}%`;
-  if (b.swordQi > 0) add('剑气', `${b.swordQi} / 8 层`, '本场积累；部分剑击消耗');
-  if (b.charge > 0) add('重势', `${b.charge} / 4 层`, '爆发神通消耗后清空');
-  if (b.water > 0) add('水势', `${b.water} / 6 层`, '水系爆发消耗后清空');
+  if (b.swordQi > 0) add('剑气', `${b.swordQi} / ${b.resourceCaps?.swordQi ?? '—'} 层`, '本场积累；部分剑击消耗');
+  if (b.charge > 0) add('重势', `${b.charge} / ${b.resourceCaps?.charge ?? '—'} 层`, '爆发神通消耗后清空');
+  if (b.water > 0) add('水势', `${b.water} / ${b.resourceCaps?.water ?? '—'} 层`, '水系爆发消耗后清空');
+  if (b.soul > 0) add('震荡', `${b.soul} / ${b.resourceCaps?.soul ?? '—'} 层`, '神识爆发消耗后清空');
   if (b.swordSequence > 0) add('连续剑牌', `${b.swordSequence} 张`, '本回合累计；非剑牌会打断');
   if (b.elementalSwordSequence > 0) add('五行剑连段', `${b.elementalSwordSequence} / 3`, '跨回合保留；非五行牌不打断，错序五行重新起段');
   if (b.elementalSwordEnhancementLayers > 0) add('相生强化', `${b.elementalSwordEnhancementLayers} / ${b.elementalSwordEnhancementLimit ?? '—'} 层 · 相生附加收益 +${b.elementalSwordEnhancementPercent ?? 0}%`, '功法层数决定每层倍率；仅增强五剑相生附加收益，跨回合保留，新战斗归零');
   if (b.enemyElementalSwordEnhancementLayers > 0) add('敌方相生强化', `${b.enemyElementalSwordEnhancementLayers} / ${b.elementalSwordEnhancementLimit ?? '—'} 层`, '敌方五行剑诀本场积累；不强化抽牌或返灵', 'bad');
   if (b.fireGrowthRounds > 0) add('焰势成长', `${b.fireGrowthRounds} / ${b.fireGrowthMaxRounds ?? '—'} 轮`, '本场实际灼烧结算后积累；强化后续叠焰与引爆，新战斗归零');
-  if (b.discardPower > 0) add('弃牌锐势', `下次直接攻击 +${percent(b.discardPower)}`, '只消耗一次；治疗与抽牌不消耗');
+  if (b.discardPower > 0) add('弃牌锐势', `下次直接攻击 +${percent(b.discardPower)}${b.resourceCaps?.discardPower != null ? ` / 上限 ${percent(b.resourceCaps.discardPower)}` : ''}`, '只消耗一次；治疗与抽牌不消耗');
   if (b.buff) add('攻击增伤', `${b.buff > 0 ? '+' : ''}${percent(b.buff)}`, '本场持续，可叠加', b.buff > 0 ? 'good' : 'bad');
   if (b.effectiveReduction != null && b.effectiveReduction > 0) add('总减伤', percent(b.effectiveReduction), '当前实际减伤，已计入功法与守势');
   else if (b.reduction) add('战斗减伤', percent(Math.abs(b.reduction)), '本场持续');
@@ -117,7 +121,7 @@ export function battleStatusRows(b) {
   const weakened = b.weakened ?? b.enemyWeaken ?? 0;
   if (weakened > 0) add('扰灵', `${weakened} 层${b.weakenedPenalty != null ? ` · 下次直接攻击 −${percent(b.weakenedPenalty)}` : ''}`, b.weakenedDescription || '下一次直接攻击会削弱；治疗与抽牌不消耗', 'bad');
   if (b.hpCostPct > 0) add('聚气损耗', `累计施术代价 ${b.hpCostPct}% · 当前上限 ${b.max}`, '每次按当前上限减少 8%，本场结束恢复', 'bad');
-  if (b.playerPoison > 0) add('受毒', `每回合 ${b.playerPoison} 点 · 剩 ${b.playerPoisonTurns} 回合`, '结束回合时结算', 'bad');
+  if (b.playerPoison > 0) add('受毒', `每回合 ${b.playerPoison} 点 · 本场持续`, '结束回合时结算；可由清毒效果削减', 'bad');
   return rows;
 }
 
@@ -133,6 +137,8 @@ export function cardNumbers(card, { showDamage = true } = {}) {
   else if (showDamage && card.damage > 0) out.push(`气血 ${card.damage}`);
   if (card.shield > 0) out.push(`盾 ${card.shield}`);
   if (card.heal > 0) out.push(`疗 ${card.heal}`);
+  else if (card.heal === 0 && card.kind === 'poisonSiphon') out.push('疗 0');
   if (card.qi > 0) out.push(`势 ${card.qi}`);
+  if (card.kind === 'drawTo' && Number.isFinite(card.draw) && card.draw >= 0) out.push(`抽 ${card.draw} 张`);
   return out.join(' · ');
 }

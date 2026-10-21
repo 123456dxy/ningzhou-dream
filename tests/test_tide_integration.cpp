@@ -2,6 +2,7 @@
 #include "core/sim.h"
 #include "core/tide.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/save.h"
 #include "core/calendar.h"
 #include "core/interface/views.h"
@@ -14,6 +15,7 @@ Game tideFixture(int stage=6) {
     CreateOptions options; options.seed=20261013; options.traitsExplicit=true;
     Game game=createGame(options); game.npcs.clear(); game.pending.reset(); game.job.reset();
     game.checkpoint.enabled=false; game.player.stage=stage; game.player.highestStage=stage;
+    game.player.health=mfPlayerHealthMaximum(game.player);
     game.tide.active=true; game.tide.monthsLeft=12; game.tide.rulesVersion=0;
     tide::ensureTide(game);
     return game;
@@ -21,13 +23,15 @@ Game tideFixture(int stage=6) {
 // 用途：固定只承受守势的妖兽，消除计日测试的随机死亡；流程：测试；无返回值。
 void safeEnemy(Game& game) {
     auto& battle=*game.player.arts.battle;
-    battle.enemyPower=0; battle.intentKind="guard"; battle.enemyHp=battle.enemyMax=100000;
+    battle.BeastActions.clear(); battle.enemyPower=0; battle.intentKind="guard";
+    battle.intentRaw=0; battle.intentScale=0; battle.enemyHp=battle.enemyMax=100000;
 }
 // 用途：找到本场固定普通攻击；流程：快速击杀测试；返回手牌UID，保证不伪造战场卡牌。
 string attackCard(Game& game) {
     auto& battle=*game.player.arts.battle;
-    for (const auto& card : battle.deck) if (card.spell=="sword") {
-        battle.hand={card.uid}; battle.draw.clear(); battle.discard.clear(); battle.mana=10;
+    for (const auto& card : battle.deck) if (card.spell=="strike") {
+        battle.hand={card.uid}; battle.draw.clear(); battle.discard.clear(); battle.exhausted.clear(); battle.mana=10;
+        for (const auto& Other : battle.deck) if (Other.uid != card.uid) battle.draw.push_back(Other.uid);
         return card.uid;
     }
     return "";
@@ -57,7 +61,8 @@ void runTideIntegrationTests() {
     }
     {
         auto game=tideFixture(); tide::fight(game,0); safeEnemy(game);
-        auto& battle=*game.player.arts.battle; battle.enemyHp=1; battle.poison=100; battle.poisonTurns=3;
+        auto& battle=*game.player.arts.battle; battle.enemyHp=1;
+        battle.poison=1; battle.poisonDamage=1; battle.poisonTurns=1;
         battleTurn(game,"end");
         checkEq(game.clock.days,game.tide.startDay+1,"持续伤害提前结束回合也耗一天");
         checkEq(game.tide.playerScore,1,"持续伤害击殺正常记分");
@@ -111,14 +116,15 @@ void runTideIntegrationTests() {
         battle.set("kind",json::Value("hunt")); battle.set("enemy",json::Value("兽潮先锋"));
         battle.asObject().erase("huntFee"); battle.asObject().erase("tideEventId"); battle.asObject().erase("tideBattlefield");
         arts.set("battle",battle); player.set("arts",arts); saved.set("player",player);
-        check(loadFromJson(saved.dump(),loaded,&error),"旧hunt兽潮在途战斗可迁移："+error);
+        const bool LegacyLoaded=loadFromJson(saved.dump(),loaded,&error);
+        check(LegacyLoaded,"旧hunt兽潮在途战斗可迁移："+error);
         check(loaded.player.arts.battle && loaded.player.arts.battle->kind=="tide" &&
             loaded.player.arts.battle->tideEventId==loaded.tide.eventId,"先恢复旧battle来源，再补本期归属");
     }
     {
         auto game=tideFixture(); game.clock.days=359; game.tide.startDay=300; game.tide.endDay=360;
         game.tide.lastProcessedDay=359; tide::fight(game,0);
-        auto& battle=*game.player.arts.battle; battle.hp=1; battle.intentKind="attack"; battle.intentScale=100;
+        auto& battle=*game.player.arts.battle; battle.hp=1; battle.BeastActions.clear(); battle.intentKind="attack"; battle.intentScale=100;
         battle.enemyPower=100000; battleTurn(game,"end");
         check(game.ended && game.ending,"年末致命兽潮回合正常结束人生");
         checkEq(game.clock.days,360,"致命回合只耗一天，不重复扣天");

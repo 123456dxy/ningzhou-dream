@@ -1,5 +1,7 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/persistence/forge_codec.h"
+#include "core/combat/artifact_effects.h"
 #include "core/arts.h"
 #include "core/character_build.h"
 #include "core/crafting/cave_garden.h"
@@ -10,11 +12,16 @@
 #include "core/combat/elemental_sword.h"
 #include "core/combat/hand_rules.h"
 #include "core/combat/fire_growth.h"
+#include "core/combat/water_flow.h"
+#include "core/combat/battle_scaling.h"
+#include "core/progression/zhuji_rules.h"
 #include "core/travel.h"
 #include "core/npc_learning.h"
 #include "core/location_services.h"
 #include "core/dungeon.h"
 #include "core/sect_trial.h"
+#include "core/exploration/ascension_tournament.h"
+#include "core/content/gear_templates.h"
 #include "core/sim.h"
 #include "core/society.h"
 #include <set>
@@ -23,12 +30,13 @@
 namespace nz::persistence {
 
 namespace {
-bool validPerson(const Person& person) {
+bool validPerson(const Person& person, int HealthMaximum = 100) {
     return !person.name.empty() && person.stage >= 0 && person.stage < static_cast<int>(REALMS().size()) &&
            person.age >= 0 && person.age <= 100000 && person.lifespan > 0 && person.lifespan <= 100000 &&
-           person.health >= 0 && person.health <= 100 && person.xp >= 0 && person.stones >= 0 &&
+           person.health >= 0 && person.health <= HealthMaximum && person.xp >= 0 && person.stones >= 0 &&
            person.herbs >= 0 && person.pills >= 0 && person.cores >= 0 && person.body >= 0 &&
-           person.apt > 0 && person.insight >= 0 && person.sword >= 0 && person.alchemy >= 0 && findLoc(person.location);
+           person.apt > 0 && person.insight >= 0 && person.sword >= 0 && person.alchemy >= 0 &&
+           person.PillLifeBonus >= 0 && person.PillLifeBonus <= 500 && findLoc(person.location);
 }
 
 bool nonnegativeMap(const map<string, int>& values) {
@@ -43,7 +51,7 @@ std::string saveStateError(const Game& game) {
         return "坊市账期或收购资金无效";
     if (const auto Error = crafting::mfGardenStateError(game); !Error.empty()) return Error;
     if (const auto error=tideStateError(game); !error.empty()) return error;
-    if (!validPerson(game.player)) return "角色属性、境界或地点无效";
+    if (!validPerson(game.player, mfPlayerHealthMaximum(game.player))) return "角色属性、境界或地点无效";
     if (!game.player.portraitId.empty()) {
         const auto* portrait = findPlayerPortrait(game.player.portraitId);
         if (!portrait || game.player.gender != portrait->gender) return "角色立绘无效";
@@ -61,9 +69,39 @@ std::string saveStateError(const Game& game) {
         !findSect(game.world.mineOwner) || game.world.market <= 0 || game.world.market > 10)
         return "世界库存、灵脉归属或行情无效";
     const Arts& arts = game.player.arts;
+    if (arts.BaseHealthBonus < 0 || arts.FoundationHealthBonus < 0 || arts.FoundationHealthBonus > 20 ||
+        arts.aptPills < 0) return "永久气血或服丹记录无效";
+    if (arts.LifeboundKind != "" && arts.LifeboundKind != "innate" && arts.LifeboundKind != "retain")
+        return "本命效果无效";
+    if ((!arts.LifeboundKind.empty() && game.player.stage < 3) ||
+        (!arts.LifeboundSpell.empty() && (arts.LifeboundKind.empty() || !battleSpell(arts.LifeboundSpell) ||
+         battleSpell(arts.LifeboundSpell)->stage > game.player.stage ||
+         (arts.LifeboundSpell != "strike" && arts.LifeboundSpell != "defend" &&
+          std::find(arts.knownSpells.begin(), arts.knownSpells.end(), arts.LifeboundSpell) == arts.knownSpells.end()))))
+        return "本命神通无效或尚未领悟";
+    if (arts.CombatPillDoseCount < 0 || arts.CombatPillDoseCount > 3 ||
+        (arts.breakBuff.empty() ? arts.BreakthroughPillStage != -1 :
+         (arts.breakBuff != "stage" || arts.BreakthroughPillStage != game.player.stage ||
+          (arts.BreakthroughPillStage != 2 && arts.BreakthroughPillStage != 5 &&
+           arts.BreakthroughPillStage != 8 && arts.BreakthroughPillStage != 11))))
+        return "丹药准备枚数或指定突破境界无效";
+    if (game.player.Zhuji) {
+        const auto& Run = *game.player.Zhuji;
+        if (const auto Error = mfZhujiRunError(Run); !Error.empty()) return Error;
+        if (Run.Status == ZhujiStatus::Preparing && (game.player.stage != 2 || !game.job || game.job->actionType != "breakthrough"))
+            return "筑基准备与闭关任务不一致";
+        if (Run.Status == ZhujiStatus::Active && (game.player.stage != 2 || game.job || game.pending || game.player.arts.battleActive() || game.dungeons.run))
+            return "筑基运行与当前活动不一致";
+        if (Run.Status == ZhujiStatus::Success && (!Run.Settled || game.player.stage < 3 ||
+            arts.FoundationHealthBonus != std::max(0, Run.Score - 100) ||
+            arts.LifeboundKind != (Run.Route == ZhujiRoute::Elements ? "innate" : "retain"))) return "筑基根基结算不一致";
+        if ((Run.Status == ZhujiStatus::Failed || Run.Status == ZhujiStatus::Withdrawn) && (!Run.Settled || game.player.stage != 2))
+            return "筑基失败结算不一致";
+    }
     auto gearError = [](const vector<Gear>& gears, const map<string, string>& equipped) -> string {
         std::set<string> ids;
         for (const auto& gear : gears) {
+            if (const auto Error = mfForgeGearStateError(gear); !Error.empty()) return Error;
             if (gear.id.empty() || !ids.insert(gear.id).second || gear.grade < 1 || gear.grade > 6 ||
                 gear.bonus < 0 || gear.bonus > 10 ||
                 (gear.slot != "weapon" && gear.slot != "armor" && gear.slot != "accessory") ||
@@ -98,14 +136,18 @@ std::string saveStateError(const Game& game) {
             (!npc.sect.empty() && !findSect(npc.sect)) || !nonnegativeMap(npc.bag)) return "同道数据无效";
         if (const auto error = gearError(npc.gear, npc.equipped); !error.empty()) return error;
         const auto& pills = npc.pillState;
-        if (pills.poison < 0 || pills.poison > 100 || pills.aptPills < 0 || pills.aptPills > 10 ||
+        if (pills.poison < 0 || pills.poison > 100 || pills.aptPills < 0 || pills.BaseHealthBonus < 0 ||
             pills.hpBonus < 0 || pills.hpBonus > 200 || pills.heart < 0 || pills.heart > 500 ||
             pills.mind < 0 || pills.mind > 500 || pills.speed < 0 || pills.speed > 500 ||
             pills.points < 0 || pills.points > 100 || pills.repel < 0 || pills.repel > 2 ||
             (pills.breakBuff != "" && pills.breakBuff != "stage") ||
             pills.combatBuff < 0 || pills.combatBuff > 0.1) return "同道服丹属性无效";
+        if (pills.CombatPillDoseCount < 0 || pills.CombatPillDoseCount > 3 ||
+            (pills.breakBuff.empty() ? pills.BreakthroughPillStage != -1 :
+             (pills.BreakthroughPillStage != npc.stage || (npc.stage != 2 && npc.stage != 5 && npc.stage != 8 && npc.stage != 11))))
+            return "同道丹药准备无效";
         for (const auto& [id, count] : pills.used)
-            if (!findRecipe(id) || count < 0 || count > 10000) return "同道耐药记录无效";
+            if ((!findRecipe(id) && id != "5519" && id != "5318" && id != "5319") || count < 0 || count > 10000) return "同道耐药记录无效";
         for (const auto& [dao, exp] : pills.daoExp)
             if (daoIndex(dao) < 0 || exp < 0 || exp > 10000) return "同道丹药悟道经验无效";
         std::set<string> pillNodes;
@@ -120,6 +162,9 @@ std::string saveStateError(const Game& game) {
     if (game.npcs.size() > 10000 || game.logs.size() > 10000) return "人口或纪事数据过大";
     if (game.job.has_value()) {
         const Job& job = *game.job;
+        if (job.ForgeProduct && (job.actionType != "forge" || !job.paid ||
+            job.ForgeProduct->ForgeVersion != 2 || !mfForgeGearStateError(*job.ForgeProduct).empty() ||
+            job.ForgeProduct->craftCost != job.cost)) return "新版炼器冻结合同无效";
         static const std::set<string> jobs = {
             "plan", "travel", "join", "breakthrough", "social", "socialElapsed",
             "task", "commission", "hunt", "mine", "arena", "quest", "brew", "forge",
@@ -190,7 +235,7 @@ std::string saveStateError(const Game& game) {
             const Player& shadow = *battle.shadowPlayer;
             if (battle.kind != "tianji" || battle.lethal || !battle.npcId.empty() || !battle.quest.empty() ||
                 !battle.advKind.empty() || !battle.dungeonSite.empty() || !battle.wildTask.empty() ||
-                !battle.enemyCards.enabled || battle.enemyBeast || shadow.arts.battle || !validPerson(shadow) ||
+                !battle.enemyCards.enabled || battle.enemyBeast || shadow.arts.battle || !validPerson(shadow, mfPlayerHealthMaximum(shadow)) ||
                 (battle.shadowOutcome != "" && battle.shadowOutcome != "win" && battle.shadowOutcome != "loss" &&
                  battle.shadowOutcome != "draw" && battle.shadowOutcome != "retreat")) return "天机留影状态无效";
             if (battle.enemy != shadow.name || battle.enemyStage != shadow.stage || battle.enemySect != shadow.sect ||
@@ -216,8 +261,9 @@ std::string saveStateError(const Game& game) {
             battle.drawNext < 0 || battle.drawNext > 256 || battle.pendingDraw < 0 || battle.pendingDraw > 256 ||
             battle.enemyPower < 0 || battle.turn < 0 || battle.buff < 0 || battle.reduction < 0 || battle.guard < 0 ||
             battle.deck.size() > 256 || battle.hand.size() > BattleCards::MaximumHandSize || battle.played < 0 || battle.played > 24 ||
-            battle.discardPower < 0 || battle.discardPower > 0.3 + 1e-9 ||
+            battle.discardPower < 0 || battle.discardPower > battle.ArtifactState.SharpnessCap + 1e-9 ||
             battle.swordSequence < 0 || battle.swordSequence > 24 || battle.comboDraws < 0 || battle.comboDraws > 2 ||
+            battle.WaterFlowDraws < 0 || battle.WaterFlowDraws > WaterFlow::DrawLimit ||
             battle.ElementalSwordManaReturns < 0 || battle.ElementalSwordManaReturns > ElementalSword::ManaReturnLimitPerTurn ||
             battle.ElementalSwordSequence < 0 || battle.ElementalSwordSequence > ElementalSword::SwordChainCycleLength ||
             battle.ElementalSwordEnhancementLayers < 0 || battle.ElementalSwordEnhancementLayers > ElementalSword::MaximumEnhancementLayers ||
@@ -226,19 +272,30 @@ std::string saveStateError(const Game& game) {
         if (battle.enemyStage < 0 || battle.enemyStage > 12 || battle.playerSpeed < 0 || battle.enemySpeed < 0)
             return "斗法境界或遁速无效";
         if (const auto Error = BeastCombat::mfPlanStateError(battle); !Error.empty()) return Error;
+        if (!mfArtifactSnapshotStateValid(battle.ArtifactState) || !mfArtifactSnapshotStateValid(battle.enemyCards.ArtifactState) ||
+            battle.swordQi < 0 || battle.swordQi > battle.ArtifactState.SwordQiCap ||
+            battle.water < 0 || battle.water > battle.ArtifactState.WaterCap ||
+            battle.soul < 0 || battle.soul > battle.ArtifactState.SoulCap ||
+            battle.charge < 0 || battle.charge > battle.ArtifactState.ChargeCap) return "法器资源冻结状态无效";
         if (battle.poisonDamage < -1 || battle.poisonDamage > BATTLE_BURN_CAP ||
             battle.enemyCards.poisonDamage < -1 || battle.enemyCards.poisonDamage > BATTLE_BURN_CAP)
             return "斗法毒伤数值无效";
-        if (battle.poison < 0 || battle.poison > BATTLE_POISON_CAP || battle.poisonTurns < 0 || battle.poisonTurns > 3 ||
+        if (battle.poison < 0 || battle.poison > BATTLE_POISON_CAP || battle.poisonTurns < 0 || battle.poisonTurns > 1 ||
             battle.burn < 0 || battle.burn > BATTLE_BURN_CAP || battle.burnTurns < 0 || battle.burnTurns > 3 ||
-            battle.playerPoison < 0 || battle.playerPoison > BATTLE_BURN_CAP || battle.playerPoisonTurns < 0 || battle.playerPoisonTurns > 3)
+            battle.playerPoison < 0 || battle.playerPoison > BATTLE_BURN_CAP || battle.playerPoisonTurns < 0 || battle.playerPoisonTurns > 1)
             return "斗法持续伤害状态无效";
         for (const auto& [id, cooldown] : battle.cooldowns)
             if ((!battleSpell(id) && !equippedArtifactAbility(game.player, id)) || cooldown < 0 || cooldown > 24)
                 return "神通或法宝冷却无效";
         std::set<string> cards;
+        bool HasLifeboundCard = false;
         for (const auto& c : battle.deck) {
             if (c.uid.empty() || !battleSpell(c.spell) || !cards.insert(c.uid).second) return "斗法牌组无效";
+            if (c.Innate || c.Retain) {
+                if (HasLifeboundCard || (c.Innate && c.Retain) || c.spell != arts.LifeboundSpell ||
+                    (c.Innate ? arts.LifeboundKind != "innate" : arts.LifeboundKind != "retain")) return "斗法本命副本无效";
+                HasLifeboundCard = true;
+            }
         }
         std::set<string> placed;
         for (const auto* pile : {&battle.hand, &battle.draw, &battle.discard, &battle.exhausted}) {
@@ -259,6 +316,7 @@ std::string saveStateError(const Game& game) {
                 if (!enemyCards.count(id) || !enemyPlaced.insert(id).second) return "对手牌堆引用无效或重复";
         if (enemyPlaced.size() != enemyCards.size()) return "对手牌组存在未归入牌堆的神通";
         for (const auto& id : enemy.planned) {
+            if (mfEnemyArtifactAvailable(game, battle, id)) continue;
             if (battle.shadowPlayer) {
                 // Draw/redraw may reshuffle and replay a UID. Artifact actions have no card UID.
                 if (!enemyCards.count(id) && !equippedArtifactAbility(*battle.shadowPlayer, id))
@@ -274,20 +332,21 @@ std::string saveStateError(const Game& game) {
                 enemy.carryMana < 0 || enemy.carryCap < 0 || enemy.carryCap > manaCap || enemy.carryMana > enemy.carryCap ||
                 enemy.played < 0 || enemy.played > 24 || enemy.drawNext < 0 || enemy.drawNext > 256 ||
                 enemy.swordSequence < 0 || enemy.swordSequence > 24 || enemy.comboDraws < 0 || enemy.comboDraws > 2 ||
+                enemy.WaterFlowDraws < 0 || enemy.WaterFlowDraws > WaterFlow::DrawLimit ||
                 enemy.ElementalSwordManaReturns < 0 || enemy.ElementalSwordManaReturns > ElementalSword::ManaReturnLimitPerTurn ||
                 enemy.ElementalSwordSequence < 0 || enemy.ElementalSwordSequence > ElementalSword::SwordChainCycleLength ||
                 enemy.ElementalSwordEnhancementLayers < 0 || enemy.ElementalSwordEnhancementLayers > ElementalSword::MaximumEnhancementLayers ||
                 enemy.FireGrowthRounds < 0 || enemy.FireGrowthRounds > FireGrowth::MaximumGrowthRounds ||
-                enemy.swordQi < 0 || enemy.swordQi > 8 || enemy.water < 0 || enemy.water > 6 || enemy.soul < 0 || enemy.soul > 6 ||
-                enemy.poison < 0 || enemy.poison > BATTLE_POISON_CAP || enemy.charge < 0 || enemy.charge > 4 || enemy.lock < 0 || enemy.lock > 2 ||
-                enemy.poisonTurns < 0 || enemy.poisonTurns > 3 || enemy.burn < 0 || enemy.burn > BATTLE_BURN_CAP || enemy.burnTurns < 0 || enemy.burnTurns > 3 ||
+                enemy.swordQi < 0 || enemy.swordQi > enemy.ArtifactState.SwordQiCap || enemy.water < 0 || enemy.water > enemy.ArtifactState.WaterCap || enemy.soul < 0 || enemy.soul > enemy.ArtifactState.SoulCap ||
+                enemy.poison < 0 || enemy.poison > BATTLE_POISON_CAP || enemy.charge < 0 || enemy.charge > enemy.ArtifactState.ChargeCap || enemy.lock < 0 || enemy.lock > 2 ||
+                enemy.poisonTurns < 0 || enemy.poisonTurns > 1 || enemy.burn < 0 || enemy.burn > BATTLE_BURN_CAP || enemy.burnTurns < 0 || enemy.burnTurns > 3 ||
                 enemy.buff < 0 || enemy.buff > 0.3 + 1e-9 || enemy.reduction < 0 || enemy.reduction > 0.2 + 1e-9 ||
-                enemy.guard < 0 || enemy.guard > ElementalSword::TemporaryGuardCap + 1e-9 || enemy.discardPower < 0 || enemy.discardPower > 0.3 + 1e-9)
+                enemy.guard < 0 || enemy.guard > ElementalSword::TemporaryGuardCap + 1e-9 || enemy.discardPower < 0 || enemy.discardPower > enemy.ArtifactState.SharpnessCap + 1e-9)
                 return "对手斗法参数无效";
             for (const int value : {enemy.speed, enemy.body, enemy.mind, enemy.shuffles, enemy.manaBonus, enemy.manaPenalty, enemy.hpCostPct})
                 if (value < 0 || value > 100000) return "对手斗法属性无效";
             for (const auto& [id, cooldown] : enemy.cooldowns)
-                if ((!battleSpell(id) && !(battle.shadowPlayer && equippedArtifactAbility(*battle.shadowPlayer, id))) ||
+                if ((!battleSpell(id) && !mfEnemyArtifactAvailable(game, battle, id)) ||
                     cooldown < 0 || cooldown > 24) return "对手神通冷却无效";
             for (const auto& [id, level] : enemy.manuals) {
                 ManualInfo info;
@@ -303,19 +362,35 @@ std::string saveStateError(const Game& game) {
     }
     if (game.pending.has_value()) {
         const Pending& person = *game.pending;
-        if (person.type != "sectInvitation" && person.type != "valley" && person.type != "adventure")
+        if (person.type != "sectInvitation" && person.type != "valley" && person.type != "adventure" &&
+            person.type != AscensionTournamentBattleKind)
             return "抉择类型无效";
         if (person.options.empty() || (person.type == "adventure" && !person.adventure.has_value()))
             return "抉择内容不完整";
         std::set<string> choices;
         for (const auto& object : person.options)
             if (object.id.empty() || !choices.insert(object.id).second) return "抉择选项无效";
+        if (person.adventure) {
+            const auto& Reward = *person.adventure;
+            if (Reward.RewardVersion < 0 || Reward.RewardVersion > 1 ||
+                (Reward.RewardVersion == 0 && !Reward.GearTemplateId.empty()) ||
+                (Reward.RewardVersion == 1 && (Reward.kind != "backhill" || Reward.grade < 1 || Reward.grade > 5 ||
+                    !content::mfFindGearTemplate(Reward.GearTemplateId)))) return "奇遇法器奖励模板无效";
+        }
     }
     if ((game.pending.has_value() && arts.battleActive()) ||
         (game.ended && (game.job.has_value() || game.pending.has_value() || arts.battleActive())))
         return "存档包含互相冲突的行动状态";
     if (const string error = dungeonStateError(game); !error.empty()) return error;
     if (const string error = sectTrialStateError(game); !error.empty()) return error;
+    if (const string Error = mfAscensionTournamentStateError(game); !Error.empty()) return Error;
+    if (arts.battle) {
+        const auto& Reward = *arts.battle;
+        if (Reward.AdvRewardVersion < 0 || Reward.AdvRewardVersion > 1 ||
+            (Reward.AdvRewardVersion == 0 && !Reward.AdvGearTemplateId.empty()) ||
+            (Reward.AdvRewardVersion == 1 && (Reward.advKind != "backhill" || Reward.advGrade < 1 || Reward.advGrade > 5 ||
+                !content::mfFindGearTemplate(Reward.AdvGearTemplateId)))) return "斗法法器奖励模板无效";
+    }
     if (arts.battle && ((!arts.battle->dungeonSite.empty() || !arts.battle->dungeonNode.empty()) && !game.dungeons.run))
         return "秘境斗法缺少在途探索状态";
     const auto& checkpoint = game.checkpoint;

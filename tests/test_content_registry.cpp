@@ -25,8 +25,8 @@ void runContentRegistryTests() {
     std::printf("\n-- 稳定业务 ID 与展示词表 --\n");
     checkEq(allDaoIds().size(), 12, "十二大道均有稳定 ID");
     checkEq(allSectIds().size(), 6, "六宗门均有稳定 ID");
-    checkEq(allSpellKinds().size(), 31, "全部三十一类神通均有稳定 ID");
-    checkEq(allBattleKinds().size(), 10, "全部十类斗法均有稳定 ID");
+    checkEq(allSpellKinds().size(), 34, "全部三十四类神通均有稳定 ID（含补至指定手牌数）");
+    checkEq(allBattleKinds().size(), 11, "全部十一类斗法均有稳定 ID");
     const DaoId legacyOrder[] = {DaoId::Metal, DaoId::Wood, DaoId::Water, DaoId::Fire,
         DaoId::Earth, DaoId::Mind, DaoId::Body, DaoId::Sword, DaoId::Qi, DaoId::Array,
         DaoId::Alchemy, DaoId::Artifact};
@@ -56,6 +56,8 @@ void runContentRegistryTests() {
           parseSpellKind("fireBurst") == SpellKind::FireBurst, "驼峰神通值迁移不丢类别");
     check(parseBattleKind("sect_trial") == BattleKind::SectTrial &&
           parseBattleKind("sectTrial") == BattleKind::SectTrial, "旧宗门试炼类别兼容");
+    check(parseBattleKind("ascension_tournament") == BattleKind::AscensionTournament &&
+          parseBattleKind("ascensionTournament") == BattleKind::AscensionTournament, "升仙大会稳定与wire类别一致");
     check(!parseDaoId("未知") && !parseDaoId("") && !parseSectId("unknown") &&
           !parseSpellKind("unknown") && !parseBattleKind("unknown"), "未知标识不会落入有效类别");
     check(!parseDaoId("金道新版名称") && stableId(DaoId::Metal) == "metal" &&

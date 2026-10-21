@@ -19,6 +19,8 @@ michangsheng-demo/*.mjs
 ningzhou-cpp/data/reference_tables.h     ← 自动生成，不要手改
 ```
 
+`extract-data.py`在原始两份dump之上应用受版本控制的`data/reference_overrides.json`，再生成头文件。本地覆盖同时保存已经存在的抄本、丹术与悬赏风险文案，以及正式丹药改版；不修改仓库外的JS项目。覆盖按稳定表名和ID定位，未知表、字段、ID、重复目标和类型不一致会明确失败。两份dump仍为忽略的原始中间文件。
+
 完整命令：
 
 ```powershell
@@ -26,9 +28,13 @@ cd ningzhou-cpp
 node tools\dump-data.mjs    > tools\data-dump.json
 node tools\dump-society.mjs > tools\society-dump.json
 python tools\extract-data.py
+python tools\extract-data.py --check
+python tools\test_reference_data.py
 ```
 
-**什么时候要重跑**：只有在 JS 版改了数据表（新增药材、调丹方、加天赋）时才需要。
+`--check`逐字节验证当前生成表，`--output`可指定独立输出路径，`--overrides`可指定覆盖输入。生成结果固定为UTF-8无BOM、CRLF，跨平台重生不会重排整表。本轮先只编码原有10行本地差异，确认与原78908字节逐字节一致，再加入丹药调整。
+
+**什么时候要重跑**：JS原始数据或本地覆盖输入改变时重跑。
 改 C++ 代码不用重跑。
 
 ## 2. 对照脚本（怀疑数值算错时用）

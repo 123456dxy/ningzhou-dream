@@ -304,10 +304,10 @@ void runTalentTests() {
         if (game.player.arts.battle) {
             auto& battle = *game.player.arts.battle; talentHand(battle, {"strike"});
             check(battleTurn(game, "strike").ok && battle.attacked, "龙血回血测试本回合确实打出攻击牌");
-            battle.hp = 500; battle.intentKind = "guard"; battle.intentName = "凝盾";
+            battle.hp = 500; battle.BeastActions.clear(); battle.intentKind = "guard"; battle.intentName = "凝盾";
             check(battleTurn(game, "end").ok, "龙血通过真实结束回合触发");
             checkEq(battle.hp, 530, "龙族血脉攻击后仍恢复3%气血，不要求静养");
-            battle.hp = 999; battle.intentKind = "guard";
+            battle.hp = 999; battle.BeastActions.clear(); battle.intentKind = "guard";
             battleTurn(game, "end");
             checkEq(battle.hp, 1000, "龙血回合治疗不能超过气血上限");
         } else check(false, "龙族血脉斗法可建立");

@@ -44,7 +44,7 @@ void mfAdvanceEnhancement(Battle& State, const ArtMods& Modifiers, bool HasSword
         State.ElementalSwordEnhancementLayers = std::min(MaximumEnhancementLayers, State.ElementalSwordEnhancementLayers + 1);
 }
 
-// 用途：将有效功法层数和本场强化换算成有界倍率；流程：真实效果与只读展示；返回：1至2，只放大相生附加收益。
+// 用途：将有效功法层数和本场强化换算成有界倍率；流程：真实效果与只读展示；返回：1至1.5，只放大相生附加收益。
 double mfEnhancementMultiplier(const ArtMods& Modifiers, const Battle& State) {
     return 1.0 + std::clamp(Modifiers.ElementalSwordMastery, 0.0, 1.0) * EnhancementPerMastery *
         std::clamp(State.ElementalSwordEnhancementLayers, 0, MaximumEnhancementLayers);
@@ -67,7 +67,7 @@ double mfDamageMultiplier(const SpellDef& Spell, bool HasGeneratingCombo, double
 // 用途：兑现水剑剑气与五行剑诀连续相生资源；流程：真实施法与只读副本；返回：无，真实资源与计数同步。
 void mfApplyResources(const Player& PlayerState, const ArtMods& Modifiers, Battle& State,
                       const SpellDef& Spell, bool HasSwordCombo) {
-    if (Spell.id == "waterSword") State.swordQi = std::min(8, State.swordQi + 1);
+    if (Spell.id == "waterSword") State.swordQi = std::min(State.ArtifactState.SwordQiCap, State.swordQi + 1);
     if (!HasSwordCombo || Modifiers.ElementalSwordMastery <= 0) return;
     const int ManaGain = jsFloor(Modifiers.ElementalSwordMastery);
     if (ManaGain > 0 && State.ElementalSwordManaReturns < ManaReturnLimitPerTurn) {
@@ -93,7 +93,7 @@ void mfApplyHitBenefits(Battle& State, const SpellDef& Spell, bool HasGenerating
 // 用途：按真实五剑参数解释相生、剑气、吸血和守势；流程：后端预览说明；返回：纯文案，规则不从文字反推。
 std::string mfRulesDescription(const SpellDef& Spell, const ArtMods& Modifiers) {
     if (!mfIsElementalSword(Spell)) return "";
-    std::string Description = "五行剑顺序：土→金→水→木→火→土；进度可跨回合，穿插气、神、普通攻击/防御等非五行牌不打断；剑气仍封顶8层。";
+    std::string Description = "五行剑顺序：土→金→水→木→火→土；进度可跨回合，穿插气、神、普通攻击/防御等非五行牌不打断；保留剑气增伤，剑气仍封顶8层，不叠加普通剑修的同轮连剑增伤。";
     if (Spell.id == "waterSword") Description += "水剑额外获得1层剑气。";
     if (Spell.id == "woodSword") Description += "木剑按目标实际气血损失的" + std::to_string(jsRound(WoodLifeStealFraction * 100)) + "%吸血；盾挡和溢出伤害不吸血。";
     if (Spell.id == "fireSword") Description += "火剑相生时追加" + std::to_string(jsRound((FireComboDamageMultiplier - 1) * 100)) + "%直接伤害。";

@@ -2,6 +2,7 @@
 
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/combat/hand_rules.h"
 #include "core/save.h"
 #include "core/sim.h"
@@ -23,6 +24,7 @@ Game mfHandCapacityEncounter() {
     Encounter.player.lifespan = realmOf(6).life + Encounter.player.lifeBonus;
     Encounter.player.arts.spells = {"skim", "refresh", "gather"};
     ensureArts(Encounter);
+    Encounter.player.health = mfPlayerHealthMaximum(Encounter.player);
     EnemySpec Opponent;
     Opponent.name = "手牌容量对手";
     Opponent.stage = 6;

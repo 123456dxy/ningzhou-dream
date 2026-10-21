@@ -7,6 +7,7 @@
 #include "data/reference_tables.h"
 #include <filesystem>
 #include <chrono>
+#include <stdexcept>
 
 namespace nztest {
 namespace {
@@ -61,19 +62,26 @@ json::Value mfPotionSaleRequest(int Count, int UnitPrice) {
 
 // 类型：独立接口测试的绑定和文件路径守卫；拥有临时目录，退出恢复默认会话和路径；不读取玩家存档。
 struct QuickTradeSessionScope {
+    std::filesystem::path TemporaryRoot;
     std::filesystem::path Directory;
+    bool OwnsDirectory = false;
     explicit QuickTradeSessionScope(api::Session& Session) {
-        Directory = std::filesystem::temp_directory_path() /
+        TemporaryRoot = (std::filesystem::current_path() / "tmp").lexically_normal();
+        std::filesystem::create_directories(TemporaryRoot);
+        Directory = TemporaryRoot /
             ("ningzhou-quick-trade-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        std::filesystem::create_directories(Directory);
-        setSaveDirOverride(Directory.string());
+        OwnsDirectory = std::filesystem::create_directory(Directory);
+        if (!OwnsDirectory) throw std::runtime_error("一键交易测试临时目录已存在。");
+        const auto Utf8 = Directory.u8string();
+        setSaveDirOverride(string(reinterpret_cast<const char*>(Utf8.data()), Utf8.size()));
         api::bindSession(&Session);
     }
     ~QuickTradeSessionScope() {
         api::bindSession(nullptr);
         setSaveDirOverride("");
         std::error_code Error;
-        std::filesystem::remove_all(Directory, Error);
+        if (OwnsDirectory && Directory.parent_path() == TemporaryRoot)
+            std::filesystem::remove_all(Directory, Error);
     }
 };
 }
@@ -101,7 +109,7 @@ void mfRunTradeQuickActionsApiTests() {
     checkEq(SaleResponse.status, 200, "批量售出使用既有sell接口");
     checkEq(Session.g.player.arts.potions.at(PotionId), 17, "批量出售真实扣除三枚");
     checkEq(Session.g.player.stones - InitialStones, 3LL * Price, "批量出售真实收益与报价相符");
-    checkEq(Session.g.economy.sold.at("potion:" + PotionId), 3, "批量出售累计同类需求三枚");
+    check(Session.g.economy.sold.empty(), "批量出售不新增已取消的同类需求账");
     checkEq(static_cast<int>(Sale["gain"].asNumber()), 3 * Price, "接口返回本笔实际总收益");
 
     for (const int Count : {0, -1, 21}) {

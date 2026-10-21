@@ -1,5 +1,6 @@
 ﻿// 宁州一梦 · C++ 版 — 声望系统（实现）
 #include "core/renown.h"
+#include "core/combat/battle_scaling.h"
 
 #include <algorithm>
 #include <cmath>
@@ -220,10 +221,10 @@ vector<Source> sources(const Game& g) {
     const auto breakthrough = breakthroughInfo(g);
     string breakthroughError = busy;
     if (breakthroughError.empty() && !breakthrough.ready) breakthroughError = "修为尚未圆满，或已达到最高境界。";
-    if (breakthroughError.empty() && g.player.health < 35) breakthroughError = "闭关需气血至少35。";
+    if (breakthroughError.empty() && g.player.health < HealthGateMinimum) breakthroughError = "闭关需气血至少30。";
     if (breakthroughError.empty() && g.player.stones < breakthrough.cost) breakthroughError = "闭关所需灵石不足。";
     add({"breakthrough", "成功突破", "小境界 +3 / 大境界 +12",
-         {"修为圆满、气血至少35，并支付本次闭关的灵石费用。",
+         {"修为圆满、气血至少30，并支付本次闭关的灵石费用。",
           "当前目标 " + breakthrough.next + "；所需 " + std::to_string(breakthrough.cost) + " 灵石；本次成功后声望 +" + std::to_string(breakthrough.major ? 12 : 3) + "。"},
          "仅成功晋升时获得；失败不增加声望。", false, "", {"chronicle", "", "", "查看闭关突破"}}, breakthroughError);
 
@@ -241,11 +242,11 @@ vector<Source> sources(const Game& g) {
     const bool justice = g.pending && g.pending->type == "adventure" && g.pending->adventure && g.pending->adventure->kind == "justice";
     const string justiceError = justice ? (g.ended ? "这一世已结束。" : "") : "游历寻缘时随机触发「路见不平」，需等待对应机缘。";
     add({"justiceFight", "行侠·出手相助", "+3",
-         {"遇到「路见不平」时选择出手相助，并击败拦路恶徒。", "出手需要气血至少35；失败或避开冲突无声望。"},
+         {"遇到「路见不平」时选择出手相助，并击败拦路恶徒。", "出手需要气血至少30；失败或避开冲突无声望。"},
          "每次触发机缘可选一次，与掩护撤离互斥。", false, "", {"quests", "travel", "", "查看游历机缘"}},
-        justiceError.empty() && g.player.health < 35 ? "气血不足35，无法出手相助。" : justiceError);
+        justiceError.empty() && g.player.health < HealthGateMinimum ? "气血不足30，无法出手相助。" : justiceError);
     add({"justiceRescue", "行侠·掩护撤离", "+1",
-         {"遇到「路见不平」时选择掩护受困者撤离。", "无需斗法，气血损失3点，最低保留1点。"},
+         {"遇到「路见不平」时选择掩护受困者撤离。", "无需斗法，损失气血上限的3%，最低保留1点。"},
          "每次触发机缘可选一次，与出手相助互斥。", false, "", {"quests", "travel", "", "查看游历机缘"}}, justiceError);
 
     const int used = g.bonds.wildMonth == g.clock.days / 30 ? g.bonds.wildCount : 0;
@@ -253,7 +254,7 @@ vector<Source> sources(const Game& g) {
     if (wildError == "请前往方壶山、青石灵脉或无尽海接野外悬赏。") wildError = "需抵达野外地点接悬赏。";
     const auto* location = findLoc(g.player.location);
     add({"wildTask", "野外悬赏胜利", "每胜 +2",
-         {"在野外地点接清剿山匪、驱除药田妖兽或截回商路货箱；气血至少50，报名3灵石。",
+         {"在野外地点接清剿山匪、驱除药田妖兽或截回商路货箱；气血至少30，报名3灵石。",
           "分别准备6 / 7 / 9天后进行非致命斗法；无尽海悬赏需筑基。"},
          "每月最多3次，本月已接 " + std::to_string(used) + " / 3；失败也占报名次数。", false, "",
          {"quests", "wild", location && string(location->type) == "wild" ? "" : "fanghu", "查看野外悬赏"}}, wildError);

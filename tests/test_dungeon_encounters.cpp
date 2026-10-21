@@ -2,6 +2,7 @@
 #include "core/exploration/dungeon_encounters.h"
 #include "core/content/game_ids.h"
 #include "core/combat/beast_actions.h"
+#include "core/combat/battle_scaling.h"
 #include "core/save.h"
 #include <algorithm>
 #include <array>
@@ -22,6 +23,7 @@ Game mfEncounterFixture(int EntryStage = 6) {
     State.player.arts.main.clear(); State.player.arts.manuals.clear();
     State.player.arts.spells = {"gold", "water", "gather"};
     State.player.arts.knownSpells = State.player.arts.spells;
+    State.player.health = mfPlayerHealthMaximum(State.player);
     DungeonSite Site;
     Site.id = "encounter-site"; Site.name = "遭遇测试秘境"; Site.stage = EntryStage; Site.type = "wild";
     State.dungeons.sites.push_back(Site);

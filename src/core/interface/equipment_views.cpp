@@ -2,7 +2,10 @@
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
 #include "core/arts.h"
+#include "core/content/artifact_appearances.h"
 #include "core/artifact.h"
+#include "core/combat/artifact_effects.h"
+#include "core/combat/artifact_status.h"
 #include "core/battle.h"
 #include "core/shop.h"
 #include "core/crafting/material_supply.h"
@@ -31,12 +34,17 @@ Player artifactProjectedPlayer(const Player& player, const Gear& gear) {
 // 使用方式：传入const Player& player, const Gear& gear，按本模块入口调用。
 // 返回值：可直接供接口序列化的JSON值。
 Value artifactPassiveView(const Player& player, const Gear& gear) {
+    if (gear.ForgeVersion == 2) {
+        Value Entry(json::Object{}); Entry.set("text", str(mfArtifactPassiveDescription(gear)));
+        Entry.set("effectId", str(gear.EffectId)); Entry.set("inscription", str(gear.InscriptionId));
+        return Entry;
+    }
     Player projected = artifactProjectedPlayer(player, gear);
     const ArtMods before = talentMods(player), after = talentMods(projected);
     const double primary = gear.bonus * (artHas(player.arts, "器", 3) ? 1.2 : 1.0) * (gear.inscribed ? 1.12 : 1.0);
     const double element = gear.bonus * 0.5;
     const double polarity = gear.bonus * (gear.polarity == "天阳" ? 0.1 : 0.2);
-    const std::string primaryName = gear.slot == "weapon" ? "攻击倍率" : gear.slot == "armor" ? "气血倍率" : "灵力属性";
+    const std::string primaryName = gear.slot == "weapon" ? "攻击倍率" : gear.slot == "armor" ? "每回合护盾（按气血上限）" : "灵力属性";
     const double primaryValue = gear.slot == "accessory" ? jsRound(primary * 10) : primary * 100;
     std::string text = "装备被动：" + primaryName + "+" + decimal(primaryValue) +
         (gear.slot == "accessory" ? "点" : "个百分点") + "；";
@@ -44,6 +52,7 @@ Value artifactPassiveView(const Player& player, const Gear& gear) {
     text += (gear.polarity == "天阳" ? "攻击倍率+" : "护盾倍率+") + decimal(polarity * 100) + "个百分点。";
     text += "替换当前同槽装备后：攻击倍率" + decimal((after.attack - before.attack) * 100) +
         "个百分点、气血上限" + std::to_string(battleReferenceState(projected).max - battleReferenceState(player).max) +
+        "、每回合护盾" + decimal((after.roundShield - before.roundShield) * 100) + "个百分点" +
         "、每回合灵力" + std::to_string(battleEnergy(projected) - battleEnergy(player)) +
         "（已计入属性上限；灵力属性每4点影响自然回复）。";
     Value entry(json::Object{});
@@ -54,6 +63,7 @@ Value artifactPassiveView(const Player& player, const Gear& gear) {
     Value delta(json::Object{});
     delta.set("attackPct", num((after.attack - before.attack) * 100)); delta.set("hpPct", num((after.hp - before.hp) * 100));
     delta.set("shieldPct", num((after.shield - before.shield) * 100)); delta.set("mana", num(after.mana - before.mana));
+    delta.set("roundShieldPct", num((after.roundShield - before.roundShield) * 100));
     delta.set("hpMax", num(battleReferenceState(projected).max - battleReferenceState(player).max));
     delta.set("manaRegen", num(battleEnergy(projected) - battleEnergy(player)));
     const int elementIndex = daoIndex(gear.element); delta.set("elementPct", num(elementIndex >= 0 ? (after.elements[elementIndex] - before.elements[elementIndex]) * 100 : 0));
@@ -77,6 +87,23 @@ Value artifactView(const Player& player, const ArtifactAbility& ability) {
     entry.set("passive", artifactPassiveView(player, ability.gear));
     entry.set("canEquip", Value(player.stage >= spell.stage));
     entry.set("inscribed", Value(ability.gear.inscribed));
+    if (const auto* Appearance = content::mfFindArtifactAppearance(ability.shape)) {
+        entry.set("appearanceId", string(Appearance->Id)); entry.set("illustration", string(Appearance->Path));
+    }
+    if (ability.gear.ForgeVersion == 2) {
+        const Battle Reference = battleReferenceState(projected);
+        entry.set("cost", num(mfArtifactActionCost(projected, ability.gear, Reference)));
+        const auto Quote = mfQuoteArtifactAction(projected, Reference, ability.gear);
+        entry.set("healthCost", num(Quote.HealthCost));
+        entry.set("effectId", str(ability.gear.EffectId));
+        entry.set("inscription", str(ability.gear.InscriptionId));
+        entry.set("description", str(mfArtifactEffectDescription(ability.gear)));
+        if (mfArtifactSelectsStatus(ability.gear)) entry.set("targetMode", str("status-one"));
+        if (ability.gear.EffectId == "redraw") {
+            entry.set("targetMode", str("hand-many")); entry.set("targetMin", num(1));
+            entry.set("targetMax", num(ability.gear.grade));
+        }
+    }
     return entry;
 }
 
@@ -104,7 +131,15 @@ void mfAppendEquipmentState(const Game& GameState, Value& State, const shop::Mar
             entry.set("bonus", num(gr.bonus));
             entry.set("price", num(gr.price));
             entry.set("element", str(gr.element)); entry.set("polarity", str(gr.polarity));
+            entry.set("forgeVersion", num(gr.ForgeVersion)); entry.set("effectId", str(gr.EffectId));
+            entry.set("effectText", str(gr.ForgeVersion == 2 ? mfArtifactEffectDescription(gr) : ""));
+            entry.set("inscription", str(gr.InscriptionId));
             entry.set("crafted", Value(gr.crafted)); entry.set("shape", str(artifactShape(gr)));
+            entry.set("origin", gr.Origin);
+            entry.set("requiredStage", mfArtifactRequiredStage(gr));
+            if (const auto* Appearance = content::mfFindArtifactAppearance(artifactShape(gr))) {
+                entry.set("appearanceId", string(Appearance->Id)); entry.set("illustration", string(Appearance->Path));
+            }
             {
                 Value actions(json::Object{});
                 constexpr std::pair<const char*, RouteId> actionRoutes[] = {

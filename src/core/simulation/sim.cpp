@@ -2,6 +2,7 @@
 // 本文件覆盖 sim.mjs 的：纪事、数值公式、世界年度推进、NPC 年度行动、
 // 宗门刷新、人口修剪、新游戏生成、结算。
 #include "core/sim.h"
+#include "core/progression/zhuji_rules.h"
 #include "core/crafting/cave_garden.h"
 #include "core/crafting/herb_acquisition.h"
 #include "core/social/npc_consumables.h"
@@ -18,8 +19,10 @@
 
 #include "core/adventure.h"
 #include "core/arts.h"
+#include "core/exploration/ascension_tournament.h"
 #include "core/calendar.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/conflict.h"
 #include "core/cultivate.h"
 #include "core/renown.h"
@@ -112,14 +115,13 @@ static Npc* findNpc(Game& g, const string& id) {
     return nullptr;
 }
 
-// 玩家受到的伤害。体魄每点降低 2%，上限 30%（对应 JS 的 damage）。
+// 玩家场外伤害参数沿用旧百分比点数；体魄只增加气血上限，不另加减伤。
 // 用途：扣除玩家气血并处理致命结局。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入Game& g, int amount，按本模块入口调用。
 // 返回值：无；完成说明所述写入或展示操作。
 void applyDamage(Game& g, int amount) {
-    const int actual = jsRound(
-        amount * 1.0);   // 体魄不再减伤（改为提供气血上限）
+    const int actual = mfHealthPercentAmount(mfPlayerHealthMaximum(g.player), amount);
     g.player.health = std::max(0, g.player.health - actual);
 }
 
@@ -168,17 +170,19 @@ void addRelation(Game& g, const string& npcId, int delta) {
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Person& p, const Arts* arts，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
-int powerOf(const Person& p, const Arts* arts) {
+static int mfPowerAtHealth(const Person& PersonState, const Arts* ArtsState, double HealthPercent) {
     // JS: round(realm.power*(.75+health/400) + sqrt(sword)*1.7
     //            + sqrt(insight)*.8 + (artMods.attack-1)*realm.power)
-    const RealmDef& r = realmOf(p.stage);
-    double attackMod = 1.0;
-    if (arts) attackMod = artModsOf(*arts).attack;
-    double v = r.power * (0.75 + p.health / 400.0) +
-               jsSqrt(static_cast<double>(p.insight)) * 0.8 +
-               (attackMod - 1.0) * r.power;
-    return jsRound(v);
+    const RealmDef& Realm = realmOf(PersonState.stage);
+    double AttackModifier = 1.0;
+    if (ArtsState) AttackModifier = artModsOf(*ArtsState).attack;
+    const double Power = Realm.power * (0.75 + HealthPercent / 400.0) +
+               jsSqrt(static_cast<double>(PersonState.insight)) * 0.8 +
+               (AttackModifier - 1.0) * Realm.power;
+    return jsRound(Power);
 }
+
+int powerOf(const Person& p, const Arts* arts) { return mfPowerAtHealth(p, arts, p.health); }
 
 // 用途：计算人物基础战力。
 // 参与流程：人生推进、成长与世界模拟。
@@ -186,6 +190,13 @@ int powerOf(const Person& p, const Arts* arts) {
 // 返回值：说明所述数值结果；不额外消耗资源。
 int power(const Person& p) {
     return powerOf(p, nullptr);
+}
+
+// 兼容既有power接口；玩家绝对气血先归一，NPC仍由Person重载使用旧百分比。
+int power(const Player& PlayerState) {
+    const int Maximum = mfPlayerHealthMaximum(PlayerState);
+    return mfPowerAtHealth(PlayerState, nullptr,
+        Maximum > 0 ? clamp(PlayerState.health * 100.0 / Maximum, 0.0, 100.0) : 0.0);
 }
 
 // 用途：检查玩家是否准备突破丹药。
@@ -319,7 +330,7 @@ double breakthroughChance(const Game& g) {
                     (hasTalent(p, "steady") ? 0.04 : 0.0) +
                     (major && p.pills > 0 ? 0.18 : 0.0) +
                     (major && p.cores > 0 ? 0.1 : 0.0);
-    if (major && p.arts.breakBuff == "stage") chance += 0.06;
+    if (major && p.arts.breakBuff == "stage" && p.arts.BreakthroughPillStage == p.stage) chance += 0.06;
     if (major) {
         chance += std::min(0.05, p.arts.heart * 0.0005);
         chance += artHas(p.arts, "神", 3) ? 0.03 : 0.0;
@@ -492,6 +503,7 @@ static Npc makeNpc(Game& g, int i, int stageOverride = -1) {
     npcHistory(g, n, "出身" + (se.empty() ? string("散修") :
                               string(findSect(se)->name)) +
                      "，愿在宁州求得一线长生。");
+    friendship::ensureNpcBag(g, n);
     return n;
 }
 
@@ -568,9 +580,10 @@ static void npcTurn(Game& g, Npc& n) {
     if (!n.alive) return;
     if (n.isNewborn && n.bornYear == g.year) return;
 
-    n.pillState.poison = std::max(0, n.pillState.poison -
-        BasePillPoisonDecayPerYear - (artHas(artNpcLoadout(n), "丹", 2) ? PillPoisonDaoDecayBonusPerYear : 0));
-    n.pillState.repel = std::max(0, n.pillState.repel - 1);
+    friendship::ensureNpcBag(g, n);
+    n.pillState.poison = std::max(0, n.pillState.poison - BasePillPoisonDecayPerYear);
+    const int PurchasedPills = mfAcquireNpcSurvivalPills(g, n);
+    if (PurchasedPills > 0) npcHistory(g, n, "按坊市报价采购化毒或续命丹 " + std::to_string(PurchasedPills) + " 枚。");
     const int pillsTaken = npcConsumeUsefulPills(n);
     if (pillsTaken > 0) npcHistory(g, n, "服用行囊中适用的丹药 " + std::to_string(pillsTaken) + " 枚。");
     n.age++;
@@ -600,9 +613,9 @@ static void npcTurn(Game& g, Npc& n) {
         chance += std::min(0.1, jsSqrt(n.insight) * 0.01);
         chance += clamp((n.apt - 55) * 0.001, -0.02, 0.05);
         chance += std::min(0.1, n.pillState.heart * 0.001);
-        if (major && !n.pillState.breakBuff.empty()) {
+        if (major && n.pillState.breakBuff == "stage" && n.pillState.BreakthroughPillStage == n.stage) {
             chance += 0.06;
-            n.pillState.breakBuff.clear();
+            n.pillState.breakBuff.clear(); n.pillState.BreakthroughPillStage = -1;
         }
 
         if (major) {
@@ -668,15 +681,14 @@ static void npcTurn(Game& g, Npc& n) {
         n.stones -= upkeep;
         gainXp(n, cultivationRateFor(n.stage, n.apt) * (n.sect.empty() ? 1.0 : 1.12) *
                   artPoisonCultivationMultiplier(n.pillState.poison));
-        n.insight = std::min(500, n.insight + 1);
+        n.insight = std::min(std::max(500, n.insight), n.insight + 1);
     } else if (roll < 0.7) {
         n.goal = "游历寻缘";
         n.location = pickOf(g, LOCATIONS()).id;
         gainXp(n, cultivationRateFor(n.stage, n.apt) * 0.3 *
                   artPoisonCultivationMultiplier(n.pillState.poison));
         npcHistory(g, n, "游历至" + string(findLoc(n.location)->name) + "。");
-        if (findLoc(n.location)->danger > power(n) &&
-            randomOf(g) < (n.pillState.repel > 0 ? 0.07 : 0.14)) {
+        if (findLoc(n.location)->danger > power(n) && randomOf(g) < 0.14) {
             damagePerson(n, randIntOf(g, 12, 30));
             if (n.health <= 0)
                 killNpc(g, n, "在" + string(findLoc(n.location)->name) + "遇险陨落");
@@ -707,7 +719,7 @@ static void npcTurn(Game& g, Npc& n) {
                     killNpc(g, *loser, "在资源争夺中陨落");
             } else {
                 n.goal = "同道论道";
-                n.insight = std::min(500, n.insight + 2);
+                n.insight = std::min(std::max(500, n.insight), n.insight + 2);
                 gainXp(n, (5 + group) * CultivationUnits::Scale);
                 n.relations[other->id] = other->relations[n.id] =
                     clampInt(n.relations[other->id] + 5, -100, 100);
@@ -934,11 +946,17 @@ BreakthroughInfo breakthroughInfo(const Game& g) {
 void finish(Game& g, const string& cause) {
     if (g.ended) return;
     g.ended = true;
+    if (g.player.Zhuji && (g.player.Zhuji->Status == ZhujiStatus::Preparing || g.player.Zhuji->Status == ZhujiStatus::Active)) {
+        g.player.Zhuji->Status = ZhujiStatus::Withdrawn;
+        g.player.Zhuji->Settled = true;
+        ++g.player.Zhuji->Revision;
+    }
     // 秘境意外死亡不结算临时战利品；是否恢复进度交由结算页选择。
     dungeonAbandon(g);
     g.pending.reset();
     g.job.reset();
     g.player.arts.battle.reset();
+    g.player.AscensionTournament.Active = false;
 
     Ending e;
     e.cause = cause;
@@ -973,6 +991,7 @@ void finish(Game& g, const string& cause) {
 // 使用方式：传入Game& g，按本模块入口调用。
 // 返回值：无；完成说明所述写入或展示操作。
 void maybeChoice(Game& g) {
+    if (mfOfferAscensionTournament(g)) return;
     if (g.pending.has_value() || g.ended || g.year == 0) return;
 
     auto& flags = g.flags;
@@ -1150,6 +1169,7 @@ Game createGame(const CreateOptions& source) {
     // 五项开局天赋会发放实际物品（法器/丹炉/材料）
     adventureBirth(g);
     talentBirth(g);
+    p.health = mfPlayerHealthMaximum(p);
 
     logEvent(g, "self",
              "十六岁，你离开故乡，在武陵城落脚。行囊里是 " +
@@ -1179,6 +1199,8 @@ Game createGame(const CreateOptions& source) {
              false, g.npcs[0].id);
     logEvent(g, "sim",
              "每月30天，安排短行动可以在同月做多次。默认计划执行至下月；长工作分月继续。");
+    mfInitializeAscensionTournament(g);
+    mfOfferAscensionTournament(g);
     return g;
 }
 
@@ -1335,13 +1357,13 @@ void monthComplete(Game& g, const Job& job) {
             // 灵石不足时只有一半效果；带伤修炼也打折
             double mult = (p.sect.empty() ? 1.0 : 1.16) *
                           (job.paid ? 1.0 : 0.5) *
-                          (p.health < 50 ? 0.6 : 1.0) *
+                          (p.health < HealthGateMinimum ? 0.6 : 1.0) *
                           ((p.sect.empty() && hasTalent(p, "solitary")) ? 1.08 : 1.0);
             // 用不含配给的基础速度，乘上本次实际生效的配给
             const double baseAnnual = cultivate::baseRate(p);
             growth = calendarTake(g, "xp", baseAnnual * supplyNow * ratio * mult);
             gainXpP(growth);
-            p.insight = std::min(INSIGHT_MAX, p.insight +
+            p.insight = std::min(std::max(INSIGHT_MAX, p.insight), p.insight +
                                           calendarTake(g, "insight", ratio));
             if (p.sect == "jinhong")
                 swordGain(g, calendarTake(g, "sword", ratio * 2));
@@ -1392,8 +1414,8 @@ void monthComplete(Game& g, const Job& job) {
                      false, "", "灵药 +" + std::to_string(found));
         } else if (job.plan == "rest") {
             const int restored = std::min(
-                100 - p.health,
-                calendarTake(g, "rest", (20 + (hasTalent(p, "body") ? 8 : 0)) *
+                std::max(0, mfPlayerHealthMaximum(p) - p.health),
+                calendarTake(g, "rest", mfRestExtraHealthRecovery(mfPlayerHealthMaximum(p)) *
                         static_cast<double>(month)));
             p.health += restored;
             gainXpP(annual * ratio * 0.2);
@@ -1401,7 +1423,7 @@ void monthComplete(Game& g, const Job& job) {
                                     std::to_string(restored) + "。");
         } else if (job.plan == "explore") {
             gainXpP(annual * ratio * 0.4);
-            p.insight = std::min(INSIGHT_MAX, p.insight +
+            p.insight = std::min(std::max(INSIGHT_MAX, p.insight), p.insight +
                                           calendarTake(g, "insight", ratio * 2));
             // 游历给的是「涓流」：你在各处露过面，别人慢慢记住你。
             // 原版是一年 +1，200 年下来能到 188 —— 比突破、行侠、
@@ -1409,7 +1431,7 @@ void monthComplete(Game& g, const Job& job) {
             // 这里降到 0.4/年，让事迹成为声望的主要来源。
             p.renown += calendarTake(g, "renown", ratio * 0.4);
             const double risk =
-                std::max(0.005, (a.repel ? 0.01 : 0.04) -
+                std::max(0.005, 0.04 -
                                     clamp((p.luck - 45) * 0.001, -0.02, 0.03));
             if (here->danger > power(p) && randomOf(g) < risk * month) {
                 applyDamage(g, randIntOf(g, 12, 30));
@@ -1436,6 +1458,10 @@ void monthComplete(Game& g, const Job& job) {
         }
 
     } else if (type == "breakthrough") {
+        if (p.Zhuji && p.Zhuji->Status == ZhujiStatus::Preparing) {
+            mfCompleteZhujiPreparation(g);
+            return;
+        }
         BreakthroughInfo b = breakthroughInfo(g);
         if (job.breakthroughPrepared) {
             b.major = job.breakthroughMajor;
@@ -1449,7 +1475,7 @@ void monthComplete(Game& g, const Job& job) {
             p.xp = 0;
             g.clock.carry["xp"] = 0;
             p.lifespan = realmOf(p.stage).life + p.lifeBonus;
-            p.health = std::min(100, p.health + 15);
+            p.health = std::min(mfPlayerHealthMaximum(p), p.health + 15);
             p.renown += b.major ? 12 : 3;
             if (b.major) p.achievements.emplace_back(realmName(p.stage), g.year);
             talentBreakthrough(g, b.major);

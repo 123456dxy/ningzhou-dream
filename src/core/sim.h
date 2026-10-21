@@ -131,6 +131,8 @@ int marketPrice(const Game& g, const string& item);
 // 使用方式：传入const Person& p，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。
 int power(const Person& p);
+// 兼容power名称；玩家按绝对气血/上限归一后使用同一战力规则。
+int power(const Player& PlayerState);
 // 用途：计算与人物往来的基础赠礼成本。
 // 参与流程：人生推进、成长与世界模拟。
 // 使用方式：传入const Person& p，按本模块入口调用。

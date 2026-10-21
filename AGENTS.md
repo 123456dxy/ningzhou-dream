@@ -2,6 +2,8 @@
 
 先读 `docs/BACKEND_ARCHITECTURE.md` 与 `docs/CODING_STANDARDS.md`，按本次任务涉及的领域读取模块 README。CMake 是构建源，静态 Visual Studio 项目由 `tools/generate-vs-projects.py` 同步。
 
+- 优先修改当前工作区 `visual-studio/ningzhou.sln` 对应的源码，并用 Visual Studio/MSBuild 验证；不要在旧工作树修改后再覆盖当前工程。新增或删除文件后同步工程列表，CMake 继续作为跨平台构建配置的权威来源。
+
 - C++20；新增类型、枚举项、命名空间、变量和成员函数使用 PascalCase，命名空间级功能函数使用 `mf` 加 PascalCase。既有 `nz` 和公共接口名按兼容边界保留，命名迁移与行为变更分开；完整规则及必要例外以 `docs/CODING_STANDARDS.md` 为准。新增逻辑放职责模块，避免继续堆入 api.cpp / app.mjs。
 - 数值、费用、耗时、资格、掉落和实际效果由后端集中计算。预览与执行共用同一规则；前端只展示报价与提交选择。
 - 只读查询不推进活动时钟或共享 RNG、不写存档，也不让 NPC 服丹。固定种子或克隆状态上的隔离预演可以推进局部副本，但不得提交回活动状态。真实随机或资源变化只在动作边界发生。

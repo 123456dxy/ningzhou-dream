@@ -77,7 +77,7 @@ void mfRunHerbAcquisitionTests() {
                 }
             }
         }
-        checkEq(data::RecipeDef_TABLE().size(), 126, "完整126丹方目录参与用途阶段审计");
+        checkEq(data::RecipeDef_TABLE().size(), 123, "完整123丹方目录参与用途阶段审计");
         check(CatalogValid, "全目录丹方均有满足品阶与容量的合法开炉阶段");
         check(IngredientsReady, "全目录药材最低获取阶段不晚于真实最早开炉阶段");
         check(BreakthroughIngredientsReady, "筑基/凝丹/结婴/化神材料在稳定ID准备门槛前可取得");

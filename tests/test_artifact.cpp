@@ -5,6 +5,8 @@
 #include "core/artifact.h"
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/beast_actions.h"
+#include "core/combat/battle_scaling.h"
 #include "core/calendar.h"
 #include "core/economy.h"
 #include "core/json.h"
@@ -21,10 +23,11 @@ Game artifactGame(int stage = 6) {
     Game g = createGame(options);
     g.npcs.clear(); g.pending.reset(); g.job.reset(); g.plan = "rest";
     auto& p = g.player;
-    p.stage = p.highestStage = stage; p.health = 100; p.body = 0;
+    p.stage = p.highestStage = stage; p.body = 0;
     p.stones = 5000; p.lifespan = 3000;
     p.arts.main.clear(); p.arts.manuals.clear(); p.arts.aux.clear(); p.arts.nodes.clear();
     p.arts.gear.clear(); p.arts.equipped.clear(); p.arts.spells.clear(); p.arts.speed = 200;
+    p.health = mfPlayerHealthMaximum(p);
     return g;
 }
 
@@ -47,6 +50,7 @@ void artifactBattle(Game& g, const Gear& gear) {
     Battle& b = *g.player.arts.battle;
     b.max = 1000; b.hp = 500; b.shield = 0; b.mana = 12;
     b.enemyMax = b.enemyHp = 1000000; b.enemyShield = 0;
+    BeastCombat::mfPlanActions(g);
 }
 
 struct ArtifactPiles {
@@ -139,6 +143,7 @@ void runArtifactTests() {
             checkEq(loaded.player.arts.battle->cooldowns[id], 3, "读档完整保留钟的独立冷却");
             rejectedUnchanged(loaded, id, "读档后仍处于法宝冷却");
             for (int expected : {2, 1, 0}) {
+                loaded.player.arts.battle->BeastActions.clear();
                 loaded.player.arts.battle->intentKind = "guard"; battleTurn(loaded, "end");
                 checkEq(loaded.player.arts.battle->cooldowns[id], expected, "法宝冷却每完整回合只递减一次");
                 if (expected > 0) rejectedUnchanged(loaded, id, "等待不足完整冷却回合");
@@ -171,7 +176,7 @@ void runArtifactTests() {
         for (const string dao : {"火", "木", "水", "神", "土"}) {
             Game g = artifactGame(); artifactBattle(g, artifactGear("seal", dao));
             Battle& b = *g.player.arts.battle; b.burn = 90; b.burnTurns = 2;
-            b.poison = 9; b.poisonTurns = 3; b.water = 4; b.soul = 4; b.charge = 3;
+            b.poison = 9; b.poisonTurns = 1; b.water = 4; b.soul = 4; b.charge = 3;
             if (dao == "火") g.player.arts.nodes = {"3-5"};
             if (dao == "水") g.player.arts.nodes = {"2-4", "2-5"};
             const string id = "artifact:artifact-test-seal";
@@ -188,7 +193,20 @@ void runArtifactTests() {
         fire.player.arts.nodes = {"3-2", "3-4"};
         artifactBattle(plain, artifactGear("sword", "火")); artifactBattle(fire, artifactGear("sword", "火"));
         battleTurn(plain, "artifact:artifact-test-sword"); battleTurn(fire, "artifact:artifact-test-sword");
-        check(fire.player.arts.battle->burn > plain.player.arts.battle->burn, "火剑施加状态受到火道翻倍与薪火强化");
+        checkEq(fire.player.arts.battle->burn, plain.player.arts.battle->burn, "火道与薪火尚未实际跳焰时不即时增强法宝灼烧");
+        for (int Round = 0; Round < 2; ++Round) {
+            for (Game* Encounter : {&plain, &fire}) {
+                Encounter->player.arts.battle->BeastActions.clear();
+                Encounter->player.arts.battle->intentKind = "guard";
+                check(battleTurn(*Encounter, "end").ok, "法宝灼烧经真实回合结算并等待冷却");
+            }
+        }
+        checkEq(fire.player.arts.battle->FireGrowthRounds, 2, "法宝灼烧真实兑现两轮火道成长");
+        const int PlainBurn = plain.player.arts.battle->burn, FireBurn = fire.player.arts.battle->burn;
+        check(battleTurn(plain, "artifact:artifact-test-sword").ok &&
+              battleTurn(fire, "artifact:artifact-test-sword").ok, "法宝冷却后可再次真实叠焰");
+        check(fire.player.arts.battle->burn - FireBurn > plain.player.arts.battle->burn - PlainBurn,
+              "法宝新增灼烧受到已经兑现的火道与薪火成长强化");
         Game wood = artifactGame(); wood.player.arts.nodes = {"1-4"};
         artifactBattle(wood, artifactGear("sword", "木", true)); const int hp = wood.player.arts.battle->hp;
         battleTurn(wood, "artifact:artifact-test-sword");

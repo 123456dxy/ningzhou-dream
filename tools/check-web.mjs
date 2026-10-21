@@ -20,6 +20,11 @@ import * as caveUI from '../web/cave-ui.mjs';
 import { renderEnding } from '../web/legacy.mjs';
 import { renderSectPicker, renderSectSpellLibrary, renderSectMentors, renderSectTasks } from '../web/sects.mjs';
 import * as artifacts from '../web/artifacts.mjs';
+import * as forgeUI from '../web/forge.mjs';
+import * as artifactRedrawUI from '../web/artifact-redraw.mjs';
+import * as artifactStatusUI from '../web/artifact-status.mjs';
+import { renderBeastIntent } from '../web/beast-intent.mjs';
+import { loadDungeonCardRewardPreference, saveDungeonCardRewardPreference } from '../web/dungeon-card-preferences.mjs';
 import { renderNumericPreview } from '../web/numeric-preview.mjs';
 import { renderRenownSources } from '../web/renown.mjs';
 import { renderEconomy, forgeRequirements, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade, loadEcoOptions, loadForgeOptions, invalidateEco } from '../web/economy.mjs';
@@ -30,19 +35,38 @@ import { renderTaskPanel } from '../web/task-panel.mjs';
 import { renderCraftSupply, renderSalvageQuote } from '../web/workshop.mjs';
 import * as serviceNavigation from '../web/service-navigation.mjs';
 import * as friendFilters from '../web/friend-filters.mjs';
+import { mfRenderMusicButton, mfRenderMusicSettingsEntry } from '../web/music-controls.mjs';
+import { renderAlchemy } from '../web/alchemy.mjs';
+import { renderAscensionTournament } from '../web/ascension-tournament.mjs';
+import { renderTianjiSteward, mountTianjiSteward } from '../web/tianji-steward.mjs';
+import { captureUiPosition, restoreUiPosition } from '../web/ui-position.mjs';
+import { bindPillBatchControls } from '../web/pill-batch.mjs';
+import { mfRenderZhuji, mfBindZhuji, mfResetZhuji } from '../web/zhuji.mjs';
+import { effectPurpose, renderArtsDetails } from '../web/compact-arts.mjs';
+import { quantityValue, renderQuantitySlider, updateQuantitySlider, renderPotionSaleActions } from '../web/quantity-controls.mjs';
+import { renderBattle as renderMobileBattle, battleNumbers as mobileBattleNumbers } from '../web/v2/views/battle.mjs';
+import { renderArts as renderMobileArts } from '../web/v2/views/arts.mjs';
+import { renderTianji as renderMobileTianji } from '../web/v2/views/tianji.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 let checks = 0;
 function verify(ok, label) { assert.ok(ok, label); checks++; }
 const state = {
   player: { name: '测试', gender: '女', age: 16, lifespan: 100, stage: 0, realmName: '炼气初期',
-    location: 'wuling', locationName: '武陵城', stones: 1000, health: 100, sword: 0 },
+    location: 'wuling', locationName: '武陵城', stones: 1000, health: 180, healthMax: 240, sword: 0 },
   clock: { year: 1, month: 1, day: 1, left: 30 }, world: { market: 1, coreStock: 2, pillStock: 2 },
   arts: { points: 3, nodes: ['0-1'], spells: ['one'], exp: { 金: 100 }, focus: '金', mods: { cult: 1 },
     manualList: [], manuals: {}, herbs: {}, potions: {}, durability: 40 },
   nearby: [{ id: 'friend', name: '道友', realmName: '炼气初期' }],
   market: [{ kind: 'gear', id: 'blade-1', name: '剑', grade: 1, price: 50 }],
-  brewOptions: Array.from({ length: 15 }, (_, n) => ({ id: `r${n}`, name: `丹方${n}`, grade: 1, enabled: true, chance: .5, stoneCost: 8, days: 5 })),
+  brewOptions: Array.from({ length: 15 }, (_, n) => ({ id: `r${n}`, name: `丹方${n}`, grade: 1, enabled: true, chance: .5, stoneCost: 8, days: 5,
+    batchQuotes: Object.fromEntries([1, 3, 5, 10].map(batchCount => [batchCount, {
+      enabled: true, reason: '', id: `r${n}`, batchCount,
+      stoneCost: 80 + batchCount, durationDays: 50 + batchCount, durabilityCost: batchCount,
+      successProbability: .5, outputPerSuccess: 2, expectedOutput: batchCount,
+      ingredients: [{ id: 'sample-herb', name: '报价药材', required: 20 + batchCount, owned: 40, missing: 0 }],
+    }])),
+  })),
   manualSources: Array.from({ length: 14 }, (_, n) => ({ id: `m${n}`, name: `功法${n}`, city: 'wuling', stage: 0, price: 10 })),
   furnaces: [], gears: [], inCity: true,
   locations: [
@@ -136,7 +160,7 @@ verify(nodes.includes('已领悟'), '道法节点以最新 state 的拥有列表
 const spells = renderSpellPicker({ max: 4, spells: [{ id: 'one', name: '灵击', cost: 1, stage: 0, carried: false, kind: 'attack' }] }, state);
 verify(spells.includes('已携带 · 点击卸下'), '神通携带状态不依赖旧缓存');
 verify(spells.includes('直接攻击'), '神通选择说明其实际用途');
-verify(spells.includes('所需境界：炼气初期'), '已达境界的神通仍显示携带门槛');
+verify(spells.includes('所需境界：炼气初期') || spells.includes('需炼气初期'), '已达境界的神通仍显示携带门槛');
 const dynamicState = { ...state, player: { ...state.player, stage: 3 }, arts: { ...state.arts,
   spellSlots: 6, spells: ['strike', 'defend', 'one'], mandatorySpells: [{ id: 'strike' }, { id: 'defend' }] } };
 const dynamicSpells = renderSpellPicker({ max: 4, spells: [
@@ -146,9 +170,9 @@ const dynamicSpells = renderSpellPicker({ max: 4, spells: [
   { id: 'high', name: '金丹法', cost: 40, actualCost: 2, stage: 6, stageName: '金丹初期' },
 ] }, dynamicState);
 verify(dynamicSpells.includes('普通攻击与防御固定常备，各五张') && dynamicSpells.includes('每种额外神通入牌组两张'), '普通招式与额外神通分别显示五张和两张的牌组规则');
-verify(dynamicSpells.includes('额外神通 1 / 6 槽') && !dynamicSpells.includes('data-id="strike"'), '槽位使用当前境界，固定牌不计额外槽且不可卸下');
+verify(dynamicSpells.includes('额外神通 1 / 6 槽') && !/<button[^>]*data-action="spell"[^>]*data-id="strike"/.test(dynamicSpells), '槽位使用当前境界，固定牌不计额外槽且不可卸下');
 verify(dynamicSpells.includes('灵力 1') && !dynamicSpells.includes('灵力 20'), '配装显示实际灵力费用');
-verify(dynamicSpells.includes('所需境界：金丹初期') && dynamicSpells.includes('尚未达到金丹初期'), '高境界神通同时显示门槛与不可用原因');
+verify((dynamicSpells.includes('所需境界：金丹初期') || dynamicSpells.includes('需金丹初期')) && dynamicSpells.includes('尚未达到金丹初期'), '高境界神通同时显示门槛与不可用原因');
 const buildState = { ...dynamicState, artBuilds: [{ id: 'metal', name: '锐金弃牌', desc: '弃牌积累锐势，下一次直攻消耗锐势。', manuals: ['gold'], spells: ['one'], nodes: ['0-1'] }], arts: { ...dynamicState.arts, manualList: [{ id: 'gold', name: '金诀', isAux: true }] } };
 const buildHTML = renderArtBuilds(buildState, { spells: [{ id: 'one', name: '灵击' }] }, [{ id: '0-1', name: '锐势' }]);
 verify(buildHTML.includes('3 / 3 已具备') && buildHTML.includes('金诀') && buildHTML.includes('下一次直攻消耗锐势'), '流派组合解析组件与当前配装并显示真实触发条件');
@@ -159,7 +183,7 @@ const learningPicker = renderSpellPicker({ spells: [
   { id:'known', name:'已学神通', stage:0, known:true, enabled:true, preview },
   { id:'blocked', name:'受限神通', stage:0, known:true, enabled:false, reason:'当前不可调整' },
 ] }, learningState);
-verify(/class="card unlearned"[^>]*data-spell-id="unknown" disabled/.test(learningPicker)
+verify(/<article class="[^"]*\bunlearned\b[^"]*">[\s\S]*?data-spell-id="unknown" disabled/.test(learningPicker)
   && !learningPicker.includes('data-action="spell" data-id="unknown"') && learningPicker.includes('未学会'), '未学神通明确置灰标记且不提供携带动作');
 verify(learningPicker.includes('已学会 · 未携带') && learningPicker.includes('data-action="spell" data-id="known"')
   && !learningPicker.includes('data-action="spell" data-id="blocked"'), '已学未携带与后端禁止调整分别展示，动作遵守核心可用状态');
@@ -235,9 +259,18 @@ const document = { querySelector: element, getElementById(id) { return element('
   querySelectorAll() { return []; }, addEventListener(type, fn) { handlers[type] = fn; },
   body: { setAttribute() {}, removeAttribute() {} } };
 const requests = [];
-const context = { ...tianji, ...serviceNavigation, ...friendFilters, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, renderFriendList, document, console, setTimeout, clearTimeout,
+const context = { ...tianji, ...serviceNavigation, ...friendFilters, ...forgeUI, ...artifactRedrawUI, ...artifactStatusUI, location: { hash: '' }, window: { addEventListener() {} }, ...shell, ...cards, ...portraits, ...dungeons, ...caveUI, ...artifacts, renderBeastIntent, renderNumericPreview, renderAtlas, selectedTravelMode, travelFeedback, isTravelJob, LOCATION_ART, locationArt, renderLocationArt, renderFriendList, document, console, setTimeout, clearTimeout,
   renderSectMentors, renderSectTasks, brewRequirements, renderBrewIncome, renderPillEffect, marketGrade, renderInventoryPanel, renderTaskPanel, renderCraftSupply, renderSalvageQuote,
   renderCavePage, renderCraftPricing,
+  renderAlchemy, renderAscensionTournament, renderTianjiSteward, mountTianjiSteward,
+  captureUiPosition, restoreUiPosition, bindPillBatchControls,
+  mfRenderZhuji, mfBindZhuji, mfResetZhuji, effectPurpose, renderArtsDetails,
+  quantityValue, renderQuantitySlider, updateQuantitySlider, renderPotionSaleActions,
+  mfRenderMusicButton, mfRenderMusicSettingsEntry,
+  // This rendering sandbox has no media DOM. Playback contracts are exercised by
+  // check-weather-music.mjs and the real-browser checks, rather than mocked here.
+  mfCreateMusicControls: () => Object.freeze({ setWeather() {}, refreshControls() {}, dispose() {} }),
+  loadDungeonCardRewardPreference, saveDungeonCardRewardPreference,
   renderManualIllustration, renderTidePanel, shouldRenderTide, renderTideMarket, renderTideBattleNotice,
   invalidateEco() {}, invalidateRoster() {}, invalidateSects() {}, invalidateSpells() {},
   invalidateFriendCache() {}, loadNpcBag:async()=>null,
@@ -249,7 +282,7 @@ for (const name of ['ningzhou-atlas']) {
 }
 let source = readFileSync(join(rootDir, 'web', 'app.mjs'), 'utf8').replace(/^import[\s\S]*?;\r?\n/gm, '');
 source = source.slice(0, source.indexOf('(async function boot()'));
-source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = { viewMarket, viewBattle, viewMap, renderSidebar, call, refreshEconomy, refreshEconomyView, refreshForgePreview, manualSourceRows, setSub, setTab:next=>tab=next, setShopKind:next=>shopKind=next, getTab:()=>tab, getState: () => S, getEconomy:()=>({options:ecoOpts,forge:forgeOpts,preview:forgePreview}), focusMap: (id, mode) => { mapFocus = id; mapModes[id] = mode; } };`;
+source += `\nS = ${JSON.stringify(state)}; render = () => {}; globalThis.api = { viewMarket, viewBattle, viewMap, renderSidebar, call, refreshEconomy, refreshEconomyView, refreshForgePreview, manualSourceRows, setSub, setTab:next=>tab=next, setShopKind:next=>shopKind=next, setBrewBatch:next=>brewBatch=next, getTab:()=>tab, getState: () => S, getEconomy:()=>({options:ecoOpts,forge:forgeOpts,preview:forgePreview}), focusMap: (id, mode) => { mapFocus = id; mapModes[id] = mode; } };`;
 vm.runInNewContext(source, context);
 context.api.renderSidebar();
 verify(element('#player-card').innerHTML.includes('<strong>16</strong><span>岁</span>'), '年龄显示单位而不粘连月份');
@@ -263,12 +296,23 @@ verify(element('#player-card').innerHTML.includes('<label>斗法气血</label>')
 sidebarState.battle = savedBattleForSidebar;
 context.api.renderSidebar();
 verify(element('#player-card').innerHTML.includes('<label>气血</label>')
-  && element('#player-card').innerHTML.includes(`/ 100</span>`), '斗法结束侧栏恢复健康度口径');
+  && element('#player-card').innerHTML.includes('<strong>180</strong><span>/ 240</span>'), '斗法结束侧栏恢复人物实际绝对气血与上限');
 context.api.setTab('workshop');
 context.api.setSub('workshop', 'brew');
 const brew = context.api.viewMarket();
 verify(brew.includes('丹方14'), '完整可炼丹方可访问，不截断为前九条');
 verify(brew.includes('data-brew-batch'), '批量炼丹入口可访问');
+context.api.setBrewBatch(3);
+const batchBrew = context.api.viewMarket();
+verify(batchBrew.includes('83 灵石') && batchBrew.includes('53 天') && batchBrew.includes('23 / 40 / 0'),
+  '炼丹使用后端整批费用、时间和实际材料，不把单炉值重新相乘');
+const batchQuote = sidebarState.brewOptions[0].batchQuotes[3];
+sidebarState.brewOptions[0].batchQuotes[3] = { ...batchQuote, enabled: false, reason: '整批测试缺料', ingredients: [{ id: 'sample-herb', name: '报价药材', required: 23, owned: 21, missing: 2 }] };
+const blockedBatchBrew = context.api.viewMarket();
+verify(blockedBatchBrew.includes('整批测试缺料') && blockedBatchBrew.includes('23 / 21 / 2')
+  && /data-action="craft"[^>]*disabled/.test(blockedBatchBrew), '整批报价的阻止理由、材料缺口与开炉禁用一致');
+sidebarState.brewOptions[0].batchQuotes[3] = batchQuote;
+context.api.setBrewBatch(1);
 const sixthGradeRecipe = { ...sidebarState.brewOptions[0], id: 'grade-six', grade: 6 };
 sidebarState.brewOptions.push(sixthGradeRecipe);
 verify(context.api.viewMarket().includes('<option value="6"'), '炼丹品阶筛选从真实丹方目录生成，六阶丹方可单独选择');
@@ -347,7 +391,57 @@ verify(ownedBooks.includes('data-action="learn"') && ownedBooks.includes('开始
 context.api.getState().battle = { hp: 100, max: 100, shield: 0, enemy: '敌方', enemyHp: 100, enemyMax: 100, enemyShield: 0,
   playerPoison: 7, playerPoisonTurns: 2, poison: 3, burn: 4, hand: [], log: [], turn: 0, cooldowns: {} };
 const combat = context.api.viewBattle();
-verify(combat.includes('受毒：每回合 7 点 · 剩 2 回合') && combat.indexOf('中毒 3 层') > combat.indexOf('对手'), '斗法玩家受毒和敌方毒层分别显示在双方状态');
+verify(combat.includes('受毒：每回合 7 点 · 本场持续') && combat.indexOf('中毒 3 层 · 本场持续') > combat.indexOf('对手'), '斗法玩家受毒和敌方毒层本场持续并分别显示在双方状态');
+const poisonSiphon = { id:'poisonSiphon', uid:'poison-siphon-1', name:'借毒回春', dao:'木', stage:3, stageName:'筑基初期',
+  kind:'poisonSiphon', cost:20, actualCost:2, cooldown:2, rawDamage:0, damage:0, heal:17,
+  description:'权威借毒治疗说明：不消耗毒层，不触发毒疗。', preview:{valid:true,text:'实际治疗 17 点；不消耗毒层。'},
+  learned:true, known:true, playable:true, canEquip:true };
+verify(cards.cardKind(poisonSiphon)==='借毒治疗' && cards.cardNumbers(poisonSiphon)==='疗 17'
+  && cards.cardRule(poisonSiphon)===poisonSiphon.description, '借毒回春分类为治疗，显示后端治疗值并优先权威说明');
+verify(cards.cardNumbers({...poisonSiphon,heal:0})==='疗 0'
+  && mobileBattleNumbers({...poisonSiphon,heal:0})==='疗 0'
+  && !tianji.tianjiCardNumbers({...poisonSiphon,heal:0}).includes('伤'), '借毒治疗为零仍显示疗0，所有摘要不误报伤0');
+verify(cards.cardKind({kind:'poisonBurst'})==='爆发' && cards.cardRule({kind:'poisonBurst'}).includes('清除毒'), '保留旧毒爆kind供旧阳木法印使用');
+const siphonState={...state,player:{...state.player,stage:3},arts:{...state.arts,spells:['poisonSiphon'],knownSpells:['poisonSiphon']}};
+const siphonPicker=renderSpellPicker({max:4,spells:[poisonSiphon]},siphonState);
+verify(siphonPicker.includes('用途：借毒治疗') && siphonPicker.includes(poisonSiphon.description)
+  && siphonPicker.includes('实际治疗 17 点') && siphonPicker.includes('灵力 2') && siphonPicker.includes('冷却 2 回合'), '经典道法显示借毒治疗、后端试算、真实费用与冷却');
+const mobileSiphonArts=renderMobileArts(siphonState,{artsTab:'spells'},{spells:{max:4,spells:[poisonSiphon]}});
+verify(mobileSiphonArts.includes('借毒治疗') && mobileSiphonArts.includes('实际治疗 17 点')
+  && mobileSiphonArts.includes('灵力 2') && mobileSiphonArts.includes('冷却 2'), '手机道法正确识别借毒治疗并展示权威预览');
+const siphonBattle={...context.api.getState().battle,hp:50,max:100,enemyHp:100,mana:3,intentDamage:8,hand:[{...poisonSiphon,cost:2}],enemyIntentStatuses:[]};
+context.api.getState().battle=siphonBattle;
+const classicSiphon=context.api.viewBattle(),mobileSiphon=renderMobileBattle({...siphonState,battle:siphonBattle});
+verify([classicSiphon,mobileSiphon].every(html=>html.includes('借毒治疗')&&html.includes('疗 17')&&html.includes(poisonSiphon.description)
+  && !/伤(?:害)? 0|打出 0/.test(html)), '经典与手机战斗只显示借毒治疗，不渲染攻击或零伤害');
+const siphonEncounter={id:'siphon-test',revision:2,state:'active',battle:siphonBattle,target:{id:'target',name:'测试留影'},log:[]};
+const siphonTianji={phase:'fighting',entry:{id:'self',name:'测试角色'},encounter:siphonEncounter};
+const classicSiphonTianji=tianji.renderTianji(siphonTianji),mobileSiphonTianji=renderMobileTianji(siphonState,{}, {tianji:siphonTianji});
+verify([classicSiphonTianji,mobileSiphonTianji].every(html=>html.includes('借毒治疗')&&html.includes('疗 17')
+  && html.includes(poisonSiphon.description)&& !/伤(?:害)? 0|打出 0/.test(html)), '经典与手机天机手牌共用治疗分类与实际回复，不误报攻击');
+const labRenderContext={...cards,document:{querySelector:()=>({addEventListener(){}}),addEventListener(){}}};
+let labRenderSource=readFileSync(join(rootDir,'web','battle-lab.mjs'),'utf8').replace(/^import[^\n]+\r?\n/gm,'').replace('void initialize();','');
+labRenderSource+='\nglobalThis.labCard=renderCard; globalThis.labNumbers=cardPreviewNumbers;';
+vm.runInNewContext(labRenderSource,labRenderContext);
+const labSiphon=labRenderContext.labCard({...poisonSiphon,cost:2},0);
+verify(labSiphon.includes('借毒治疗') && labSiphon.includes('疗 17') && labSiphon.includes(poisonSiphon.description)
+  && !/打出 0|气血 0/.test(labSiphon) && labRenderContext.labNumbers({...poisonSiphon,heal:0})==='疗 0', '试炼借毒手牌按后端治疗展示，零回复不误报攻击或辅助空白');
+const drawTo={id:'softwater',uid:'softwater-1',name:'柔水无痕',dao:'水',kind:'drawTo',stage:3,cost:3,actualCost:2,cooldown:2,
+  rawDamage:0,damage:0,heal:0,draw:4,playable:true,known:true,canEquip:true,description:'权威补牌规则：出牌后补至8张，8张以上不补也不弃。',
+  preview:{valid:true,text:'当前出牌后补4张。'}};
+verify(cards.cardKind(drawTo)==='补牌' && cards.cardRule(drawTo)===drawTo.description
+  && cards.cardNumbers(drawTo)==='抽 4 张' && cards.cardNumbers({...drawTo,draw:0})==='抽 0 张', '柔水以补牌辅助分类显示权威数量，零抽牌仍有明确摘要');
+const drawToArts=renderSpellPicker({max:4,spells:[drawTo]},siphonState);
+const drawToMobileArts=renderMobileArts({...siphonState,arts:{...siphonState.arts,knownSpells:['softwater']}},{artsTab:'spells'},{spells:{max:4,spells:[drawTo]}});
+verify([drawToArts,drawToMobileArts].every(html=>html.includes('补牌')&&html.includes(drawTo.description)&&html.includes('灵力 2')&&html.includes('冷却 2')), '经典与手机道法显示新柔水用途、真实费用与冷却');
+verify(mobileBattleNumbers(drawTo)==='抽 4 张' && mobileBattleNumbers({...drawTo,draw:0})==='抽 0 张'
+  && tianji.tianjiCardNumbers(drawTo)==='抽 4 张' && labRenderContext.labNumbers(drawTo)==='抽 4 张', '手机、天机和试炼补牌摘要一致且不会重复抽牌数字');
+const drawToBattle={...siphonBattle,hand:[{...drawTo,cost:2}]};
+context.api.getState().battle=drawToBattle;
+const drawToEncounter={...siphonEncounter,battle:drawToBattle},drawToTianji={...siphonTianji,encounter:drawToEncounter};
+const drawToSurfaces=[context.api.viewBattle(),renderMobileBattle({...siphonState,battle:drawToBattle}),
+  tianji.renderTianji(drawToTianji),renderMobileTianji(siphonState,{}, {tianji:drawToTianji}),labRenderContext.labCard({...drawTo,cost:2},0)];
+verify(drawToSurfaces.every(html=>html.includes('补牌')&&html.includes('抽 4 张')&&html.includes(drawTo.description)&&!/伤(?:害)? 0|打出 0/.test(html)), '所有战斗界面把新柔水渲染为补牌而非攻击');
 context.api.getState().battle = null;
 
 const actionButton = { disabled: false, dataset: { action: 'advance-step', days: '1' } };
@@ -413,7 +507,7 @@ verify(!element('#location-art-modal').open && requests.length === beforeArtwork
 const targetBattle = { hp: 100, max: 100, shield: 0, enemy: '敌方', enemyHp: 100, enemyMax: 100, enemyShield: 0,
   mana: 4, maxMana: 3, nextMana: 6, manaCap: 9, hand: [{ uid: 'purge-1', id: 'purge', name: '涤念', kind: 'exhaust', cost: 1, requiresTarget: true }],
   log: [], turn: 0, cooldowns: {}, draw: 4, discard: 2, exhausted: 2, exhaustedSpells: [{ id: 'removed', name: '旧神通', copies: 2 }],
-  removalOptions: [{ id: 'purge', name: '涤念', copies: 2 }, { id: 'strike', name: '普通攻击', dao: '体', copies: 5 }] };
+  removalOptions: [{ uid: 'purge-2', id: 'purge', name: '涤念', copies: 1 }, { uid: 'strike-1', id: 'strike', name: '普通攻击', dao: '体', copies: 1 }] };
 context.api.getState().battle = targetBattle;
 context.api.getState().arts.spellList = [{ id: 'swordFocus', name: '剑意激发' }];
 targetBattle.cooldowns = { swordFocus: 3 };
@@ -431,17 +525,17 @@ const clickAction = async (action, id) => {
 const beforeTarget = requests.length;
 await clickAction('play', 'purge-1');
 verify(element('#battle-target-modal').open && requests.length === beforeTarget
-  && !element('#battle-target-modal').innerHTML.includes('data-id="purge"'), '移除牌先打开目标弹窗且不发请求，不能移除自身');
-await clickAction('removal-select', 'strike');
-verify(requests.length === beforeTarget && element('#battle-target-modal').innerHTML.includes('将移除「普通攻击」5 张'), '选择目标预览五张普通牌，不消耗卡牌');
+  && !element('#battle-target-modal').innerHTML.includes('data-id="purge-2"'), '移除牌先打开目标弹窗且不发请求，不能移除自身同名牌');
+await clickAction('removal-select', 'strike-1');
+verify(requests.length === beforeTarget && element('#battle-target-modal').innerHTML.includes('将移除「普通攻击」1 张'), '选择目标预览单张普通牌，不消耗卡牌');
 await clickAction('removal-cancel');
 verify(!element('#battle-target-modal').open && requests.length === beforeTarget, '取消目标选择不消耗回合、卡牌与灵力');
 await clickAction('play', 'purge-1');
-await clickAction('removal-select', 'strike');
+await clickAction('removal-select', 'strike-1');
 await clickAction('removal-confirm');
 await clickAction('removal-confirm');
 verify(requests.length === beforeTarget + 1 && requests.at(-1).path === '/api/battle/turn'
-  && requests.at(-1).body.id === 'purge-1' && requests.at(-1).body.target === 'strike', '确认移除只发送一次带定义 ID 目标的出牌请求');
+  && requests.at(-1).body.id === 'purge-1' && requests.at(-1).body.target === 'strike-1', '确认移除只发送一次带单张牌 UID 目标的出牌请求');
 context.api.getState().battle = null;
 
 // 秘境地点情报、爬塔状态和洞府门槛均以真实 API 字段为准。
@@ -503,7 +597,7 @@ verify(caveUI.caveSupplyAccess(dungeonState,'qi',1).enabled && !caveUI.caveSuppl
   && caveUI.caveSupplyAccess(dungeonState,'stone',3).enabled, '洞府限制灵气档位，普通灵石配给仍可配置');
 verify(caveUI.renderCaveUpgrade(dungeonState).includes('声望达到 20') && /data-action="cave-upgrade" disabled/.test(caveUI.renderCaveUpgrade(dungeonState)), '洞府升级显示所需声望与费用，不足时禁用');
 verify(caveUI.renderCaveSupplyLimits(dungeonState).includes('需灵脉洞府'), '灵气方案逐项解释洞府档位门槛');
-const runState = {...dungeonState,dungeons:{...dungeonState.dungeons,run:{siteId:'known',siteName:'碧泉洞天',phase:'route',type:'intel',realmName:'炼气初期',health:64,current:'start',elapsedDays:2,cleared:0,targetName:'灵叶草',nodes:[
+const runState = {...dungeonState,dungeons:{...dungeonState.dungeons,run:{siteId:'known',siteName:'碧泉洞天',phase:'route',type:'intel',realmName:'炼气初期',health:64,healthCurrent:154,healthMax:240,current:'start',elapsedDays:2,cleared:0,targetName:'灵叶草',nodes:[
   {id:'start',type:'start',row:0,lane:1,name:'入境',visited:true,next:['fight','camp']},
   {id:'fight',type:'battle',row:1,lane:0,name:'林中斗法',available:true,next:['boss']},
   {id:'camp',type:'camp',row:1,lane:2,name:'清泉营地',available:true,next:['boss']},
@@ -512,7 +606,7 @@ const runState = {...dungeonState,dungeons:{...dungeonState.dungeons,run:{siteId
 const routeHTML = dungeons.renderDungeons(runState);
 verify(routeHTML.includes('dungeon-edge') && routeHTML.includes('left:16.666666666666668%') && routeHTML.includes('由下至上')
   && /data-id="boss"[^>]*disabled/.test(routeHTML), '爬塔分支连接显示真实路线，未相连守关者不可直达');
-verify(routeHTML.includes('气血 <b>64</b>') && routeHTML.includes('碧泉玉') && routeHTML.includes('灵叶草 ×2'), '秘境显示当前气血、真实遗物与可读战利品');
+verify(routeHTML.includes('气血 <b>154</b> / 240') && routeHTML.includes('碧泉玉') && routeHTML.includes('灵叶草 ×2'), '秘境显示当前绝对气血、真实遗物与可读战利品');
 verify(routeHTML.includes('提前退出后入口消失，无法再次进入') && routeHTML.includes('主动退出带回已得物资，战斗中逃离只带回一半'), '未通关离开入口附近明确提示入口消失与两种战利品规则');
 runState.dungeons.run.phase = 'reward';
 runState.dungeons.run.rewards = [{id:'choice-0',kind:'spell',name:'水箭',desc:'一张水道神通'},{id:'choice-1',kind:'relic',name:'护心玉',desc:'持续获得护盾'},{id:'choice-2',kind:'stones',name:'灵石',desc:'本次行囊加 12 灵石'}];
@@ -595,7 +689,7 @@ verify(requests.length===renownRequests, '不可用法宝的过期点击按当�
 context.api.getState().battle.artifacts[0].playable=true;
 
 for (const [action, path, data] of [
-  ['dungeon-enter','dungeon/enter',{id:'known'}],['dungeon-choose','dungeon/choose',{id:'fight'}],
+  ['dungeon-enter','dungeon/enter',{id:'known',cardRewardPreference:{mode:'all',daos:[]}}],['dungeon-choose','dungeon/choose',{id:'fight'}],
   ['dungeon-claim','dungeon/claim',{id:'choice-1'}],['dungeon-leave','dungeon/leave',{}],
   ['dungeon-intel','dungeon/intel',{kind:'material',id:'ore'}],['cave-upgrade','cave/upgrade',{}],
   ['checkpoint-restore','checkpoint/restore',{}],
@@ -607,6 +701,22 @@ for (const [action, path, data] of [
   await handlers.click({target:{closest(sel){return sel==='[data-action]'?actionButton:null;}}});
   verify(requests.length===count+1 && requests.at(-1).path==='/api/'+path && JSON.stringify(requests.at(-1).body)===JSON.stringify(data), `${action} 只发送一次规范动作请求`);
 }
+
+context.api.getState().battle = {...targetBattle,turn:3,artifacts:[{...ability,playable:true,targetMode:'status-one',statusToken:'status-contract-1',
+  preview:{text:'选择一种状态削除。'},targets:[{id:'poison',name:'中毒',layers:18,removeLayers:5,remainingLayers:13,unit:'层',description:'每轮毒伤。'}]}]};
+const beforeStatus = requests.length;
+await clickAction('artifact-play',ability.id);
+await clickAction('artifact-status-select','poison');
+await clickAction('artifact-status-cancel');
+verify(!element('#battle-target-modal').open && requests.length===beforeStatus,
+  '清浊打开并选择状态后取消不提交动作，不消耗灵力或回合');
+await clickAction('artifact-play',ability.id);
+await clickAction('artifact-status-select','poison');
+await clickAction('artifact-status-confirm');
+await clickAction('artifact-status-confirm');
+verify(requests.length===beforeStatus+1 && requests.at(-1).path==='/api/battle/turn'
+  && JSON.stringify(requests.at(-1).body)===JSON.stringify({id:ability.id,target:'poison',expectedTurn:3,expectedStatusToken:'status-contract-1'}),
+  '单状态确认只提交一次目标及回合状态凭据，不混入手牌多选数组');
 
 context.fetch = async () => ({ ok: false, json: async () => ({ ok: false, error: '存档失败' }) });
 actionButton.dataset = { action: 'save' };

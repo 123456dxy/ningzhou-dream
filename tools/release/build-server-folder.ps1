@@ -1,9 +1,10 @@
 ﻿#requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$ReleaseName = '宁州一梦-完整服务器版-20261015',
+    [string]$ReleaseName = ('宁州一梦-完整服务器版-' + (Get-Date -Format 'yyyyMMdd')),
     [string]$GameBinary = '',
-    [string]$MsvcRuntimeDirectory = ''
+    [string]$MsvcRuntimeDirectory = '',
+    [ValidateRange(1024, 65535)][int]$Port = 8106
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,7 +16,13 @@ if ([string]::IsNullOrWhiteSpace($ReleaseName) -or $ReleaseName.Length -gt 100 -
     throw 'ReleaseName must be a single valid folder name.'
 }
 if ([string]::IsNullOrWhiteSpace($GameBinary)) {
-    $GameBinary = Join-Path $Workspace 'build-vs-share/Release/ningzhou_web.exe'
+    $BuildCandidates = @('build-backend-desktop/ningzhou_web.exe',
+        'build-vs-share/Release/ningzhou_web.exe', 'build-vs2022/Release/ningzhou_web.exe',
+        'build-vs-current/Release/ningzhou_web.exe', 'build/ningzhou_web.exe') |
+        ForEach-Object { Get-Item -LiteralPath (Join-Path $Workspace $_) -ErrorAction SilentlyContinue } |
+        Where-Object { -not $_.PSIsContainer } | Sort-Object LastWriteTimeUtc -Descending
+    if (-not $BuildCandidates) { throw 'Build ningzhou_web before packaging.' }
+    $GameBinary = @($BuildCandidates)[0].FullName
 }
 $BuiltGame = (Resolve-Path -LiteralPath $GameBinary).Path
 if (-not (Test-Path -LiteralPath $BuiltGame -PathType Leaf)) { throw 'Build ningzhou_web before packaging.' }
@@ -78,15 +85,27 @@ $StartTemplate = @'
 setlocal
 cd /d "%~dp0"
 echo Ningzhou Dream - full server
-echo Open http://127.0.0.1:8106/ in your browser.
+echo Open http://127.0.0.1:__PORT__/ in your browser.
 echo Keep this window open. Press Ctrl+C to stop the server.
-"%~dp0ningzhou_web.exe" --host __HOST__ --port 8106 --web web --data saves --feedback feedback
+%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -Command "$ErrorActionPreference='Stop'; try { $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop); if ($listeners.LocalPort -contains __PORT__) { Write-Host 'Port __PORT__ is already in use. Close the previous server before starting this version.'; exit 1 } } catch { Write-Host $_.Exception.Message; exit 1 }; exit 0"
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+"%~dp0ningzhou_web.exe" --host __HOST__ --port __PORT__ --web web --data saves --feedback feedback
 if errorlevel 1 pause
 '@
-$StartTemplate = $StartTemplate.Replace("`r`n","`n").Replace("`n","`r`n")
+$StartTemplate = $StartTemplate.Replace('__PORT__', [string]$Port).Replace("`r`n","`n").Replace("`n","`r`n")
 [IO.File]::WriteAllText((Join-Path $Package '启动完整服务器.cmd'), $StartTemplate.Replace('__HOST__','127.0.0.1'), [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText((Join-Path $Package '启动局域网服务器.cmd'), $StartTemplate.Replace('__HOST__','0.0.0.0'), [Text.Encoding]::ASCII)
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '完整服务器版使用说明.txt') -Destination (Join-Path $Package '使用说明.txt')
+$Instructions = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '完整服务器版使用说明.txt')).Replace('8106', [string]$Port)
+[IO.File]::WriteAllText((Join-Path $Package '使用说明.txt'), $Instructions, $Utf8)
+[IO.File]::WriteAllText((Join-Path $Package '版本信息.txt'),
+    ($ReleaseName + "`r`n" + '完整服务器模式，包含注册登录。' + "`r`n" +
+     '本机网址：http://127.0.0.1:' + $Port + '/' + "`r`n" +
+     '程序SHA-256：' + (Get-FileHash -LiteralPath $BuiltGame -Algorithm SHA256).Hash + "`r`n" +
+     '本版本包含法器固定伤害／护盾、清浊／破护单状态削层，以及玄道男女周身五行灵光外观。' + "`r`n" +
+     '无纹法器一至五阶：直伤20/40/120/450/1800；护体20/50/150/500/2000；绵护3/8/25/100/400。' + "`r`n"), $Utf8)
 
 $Manifest = @(Get-ChildItem -LiteralPath $Package -File -Recurse | Sort-Object FullName | ForEach-Object {
     [ordered]@{path=$_.FullName.Substring($Package.Length+1).Replace('\','/'); length=$_.Length;
@@ -103,7 +122,7 @@ Move-Item -LiteralPath $PendingOutput -Destination $Output -Force
 $Record = [ordered]@{zip=$Output; size=(Get-Item -LiteralPath $Output).Length;
     sha256=(Get-FileHash -LiteralPath $Output -Algorithm SHA256).Hash; buildRoot=$BuildRoot;
     packageDirectory=$Package; files=$Manifest.Count; gameBinary=$BuiltGame;
-    gameSha256=(Get-FileHash -LiteralPath $BuiltGame -Algorithm SHA256).Hash; mode='full-server';
+    gameSha256=(Get-FileHash -LiteralPath $BuiltGame -Algorithm SHA256).Hash; mode='full-server'; port=$Port;
     msvcRuntime=$RequiresMsvcRuntime; createdAt=[DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).ToString('o')}
 [IO.File]::WriteAllText((Join-Path $BuildRoot 'release.json'), ($Record | ConvertTo-Json -Depth 5), $Utf8)
 Write-Output ($Record | ConvertTo-Json -Depth 5)

@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "created": "2026-10-18",
+  "generator": "built-in image_gen.imagegen",
+  "mode": "one independent generation call per asset",
+  "format": "PNG RGBA",
+  "canvas": {
+    "width": 1254,
+    "height": 1254
+  },
+  "transparency": "Genuine generated alpha; no background removal or other image post-processing",
+  "visualQA": "All eleven generated images inspected individually; complete isolated objects, no people, text, UI, scenery, or checkerboard background.",
+  "assets": [
+    {
+      "shape": "sword",
+      "file": "sword-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. Subject: exactly one ancient immortal straight double-edged sword, full complete object, elegant long silver-jade blade, celadon jade guard with carved cloud motifs, antique gold fittings, a small muted red gemstone in pommel. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Centered diagonal composition in a square canvas, the sword occupies around 78 percent, generous clean transparent margins, no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, isolated object with no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles."
+    },
+    {
+      "shape": "needle",
+      "file": "needle-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one long slender immortal flying needle, unmistakably a very thin needle rather than a sword, tapered polished silver pin with small celadon jade filigree finial and tiny muted ruby, diagonal full-length silhouette, extremely slender elegant proportions, sculpted antique gold cloud collar. No sword crossguard, no thread."
+    },
+    {
+      "shape": "seal",
+      "file": "seal-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one ancient Chinese immortal square treasure seal, compact heavy square celadon jade stamp block, sculpted coiled dragon knob on top, gold corner bands and subtle geometric engravings; three-quarter view clearly showing broad square base and top dragon, no readable writing or symbols on any face."
+    },
+    {
+      "shape": "ruler",
+      "file": "ruler-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one Chinese immortal ritual ruler, thick flat elongated rectangular jade measuring baton, blunt squared ends, gold edging and incised cloud geometry, one little dark blue stone near its top; diagonal three-quarter view showing its straight rectangular silhouette and thickness. No blade, no sword guard, no numbers or measurement marks."
+    },
+    {
+      "shape": "box",
+      "file": "box-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one long closed ancient Chinese immortal sword casket, a rectangular hardwood case built to contain flying swords, unmistakable box with hinged lid, squared ends, antique gold bands and latch, celadon jade inset panels and raised cloud carving, three-quarter diagonal view showing broad top and narrow long side; no sword outside it, no handles suggesting a weapon, no text."
+    },
+    {
+      "shape": "armor",
+      "file": "armor-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one complete empty Chinese immortal lamellar torso armor without a wearer, broad sculpted shoulder pauldrons, fitted breastplate, overlapping lower waist plates, antique gold and cool silver metal, celadon jade scale details, subtle engraved cloud motifs, small muted ruby chest clasp. Front three-quarter view, recognizable broad protective cuirass silhouette, empty neckline, no head, body or mannequin, no helmet or separate objects."
+    },
+    {
+      "shape": "robe",
+      "file": "robe-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one complete empty traditional Chinese immortal ceremonial long robe floating neatly with natural fabric drape, wide flowing sleeves and layered floor-length hem, deep muted teal silk with warm ivory lapels and antique gold embroidered cloud borders, jade belt clasp. Frontal symmetrical silhouette, no wearer, face, head, hands, mannequin or body, no armor, one garment only."
+    },
+    {
+      "shape": "bell",
+      "file": "bell-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one ancient Chinese immortal hanging ritual bell, broad hollow bronze bell body with flared scalloped lower lip, ornate double-dragon suspension loop on top, antique gold engraved cloud relief and celadon jade insets; three-quarter view with dark hollow underside subtly visible, compact stout bell silhouette, no rope, no clapper separate from object, no letters."
+    },
+    {
+      "shape": "pearl",
+      "file": "pearl-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one Chinese immortal spirit pearl, a single large luminous polished pearlescent celadon jade sphere held by an integral minimal antique gold lotus petal cradle hugging only its lower quarter, tiny blue-green inner marbling, clearly dominant round orb silhouette; soft painted internal sheen, no external glow aura or light particles, no extra beads, no pedestal separated from the pearl."
+    },
+    {
+      "shape": "ring",
+      "file": "ring-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one Chinese immortal treasure ring weapon, a thick large circular celadon jade annulus with a clearly open transparent central hole, antique gold bands wrapping its outer circumference and subtle sculpted cloud clasps, small muted red inset gemstone, three-quarter view giving slight ellipse; unmistakable full closed circle with empty center, no extra loops, chain, fingers, jewelry box or base."
+    },
+    {
+      "shape": "token",
+      "file": "token-v1.png",
+      "prompt": "Use case: stylized-concept. Asset type: premium Chinese xianxia game inventory equipment illustration. High-end finely hand-painted fantasy item art, dimensional material rendering, crisp restrained carved detail, legible silhouette on ivory parchment UI, not photography. Exactly one complete isolated object centered in a square canvas with 12 percent empty margin on all sides, occupy at most 76 percent canvas; no cropped parts. Palette celadon jade, antique gold, cool silver, minimal gem accent. True transparent alpha background, no ground plane or drop shadow. No people, hands, text, characters, logos, UI, frame, checkerboard, scenery, aura or particles. Subject: one ancient Chinese immortal command token, a vertical thick small shield-shaped jade plaque with angled shoulders and pointed lower tip, ornate gold border with relief cloud carvings and one small inset dark teal gem, short attached braided cord loop and tiny elegant tassel, three-quarter view showing beveled depth; command badge silhouette, no text, no writing, no Chinese characters, no decorative alphabet or runes."
+    }
+  ]
+}

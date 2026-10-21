@@ -4,9 +4,14 @@
 #include "core/combat/fire_growth.h"
 #include "core/combat/elemental_sword.h"
 #include "core/combat/hand_rules.h"
+#include "core/combat/poison_rules.h"
+#include "core/combat/water_flow.h"
+#include "core/content/game_ids.h"
 #include "core/content/beast_portraits.h"
 #include "core/arts.h"
 #include "core/artifact.h"
+#include "core/combat/artifact_effects.h"
+#include "core/combat/artifact_status.h"
 #include "core/battle.h"
 #include "core/talents.h"
 #include "data/reference_tables.h"
@@ -155,6 +160,9 @@ Value battle(const Game& game) {
             cardView.set("uid", str(battle.hand[i]));
             cardView.set("id", str(spell->id));
             cardView.set("name", str(spell->name));
+            const auto CardState = std::find_if(battle.deck.begin(), battle.deck.end(), [&](const Card& Item) { return Item.uid == battle.hand[i]; });
+            cardView.set("innate", Value(CardState != battle.deck.end() && CardState->Innate));
+            cardView.set("retain", Value(CardState != battle.deck.end() && CardState->Retain));
             cardView.set("dao", str(spell->dao));
             cardView.set("kind", str(spell->kind));
             cardView.set("cost", num(cost));
@@ -177,6 +185,14 @@ Value battle(const Game& game) {
                           "，有 " + std::to_string(battle.mana) + "）";
                 else if (battle.played >= 24)
                     why = "本回合出牌已达上限";
+                else if (content::parseSpellKind(spell->kind) == content::SpellKind::PoisonBloom) {
+                    const auto Quote = PoisonRules::mfQuoteBloom(game.player.stage, battle);
+                    if (!Quote.Allowed) why = Quote.Error;
+                }
+                else if (content::parseSpellKind(spell->kind) == content::SpellKind::PoisonSiphon) {
+                    const auto Quote = PoisonRules::mfQuoteSiphon(game.player.stage, battle);
+                    if (!Quote.Allowed) why = Quote.Error;
+                }
                 else if (battleNeedsTarget(*spell)) {
                     const bool hasTarget = std::any_of(battle.deck.begin(), battle.deck.end(), [&](const Card& card) {
                         return card.spell != spell->id &&
@@ -192,6 +208,8 @@ Value battle(const Game& game) {
             cardView.set("elementalGenerationReady", Value(preview.ElementalGenerationReady));
             cardView.set("shield", num(preview.shield));
             cardView.set("heal", num(preview.heal));
+            cardView.set("healPotential", num(preview.healPotential));
+            cardView.set("draw", num(preview.draw));
             cardView.set("qi", num(preview.qi));
             cardView.set("text", str(preview.text));
             hand.push_back(std::move(cardView));
@@ -209,6 +227,55 @@ Value battle(const Game& game) {
                 battle.mana < cost ? "灵力不足，需" + std::to_string(cost) + "点。" :
                 battle.played >= 24 ? "本回合施术已达上限。" : "";
             artifact.set("playable", Value(reason.empty())); artifact.set("reason", str(reason)); artifact.set("cooldownRemaining", num(cooldown));
+            if (ability.gear.ForgeVersion == 2) {
+                const auto Quote = mfQuoteArtifactAction(game.player, battle, ability.gear);
+                artifact.set("playable", Value(Quote.Allowed)); artifact.set("reason", str(Quote.Error));
+                artifact.set("cost", num(Quote.Cost)); artifact.set("healthCost", num(Quote.HealthCost));
+                artifact.set("nextAvailableTurn", num(Quote.NextAvailableTurn));
+                if (ability.gear.EffectId == "fire_burst" || ability.gear.EffectId == "poison_burst") {
+                    const auto Strike = mfQuoteArtifactStatusStrike(ability.gear, battle);
+                    Value Breakdown(json::Object{});
+                    Breakdown.set("statusId", str(Strike.StatusId));
+                    Breakdown.set("statusName", str(Strike.StatusName));
+                    Breakdown.set("statusLayers", num(Strike.StatusLayers));
+                    Breakdown.set("damagePerLayer", num(Strike.DamagePerLayer));
+                    Breakdown.set("inscriptionMultiplier", num(Strike.InscriptionMultiplier));
+                    Breakdown.set("statusDamage", num(Strike.Damage));
+                    Breakdown.set("consumesStatus", false);
+                    Breakdown.set("remainingTurns", Strike.StatusId == "burn" ? battle.burnTurns : battle.poisonTurns);
+                    Breakdown.set("rawDamage", preview.RawDamage);
+                    Breakdown.set("healthDamage", preview.damage);
+                    Breakdown.set("text", preview.text);
+                    artifact.set("breakdown", std::move(Breakdown));
+                }
+                if (mfArtifactSelectsStatus(ability.gear)) {
+                    artifact.set("targetMode", str("status-one")); artifact.set("statusToken", str(Quote.StatusToken));
+                    json::Array Targets;
+                    for (const auto& Status : Quote.StatusTargets) {
+                        Value Target(json::Object{}); Target.set("id", str(Status.Id)); Target.set("name", str(Status.Name));
+                        Target.set("unit", str(Status.Unit)); Target.set("description", str(Status.Description));
+                        Target.set("layers", num(Status.Layers)); Target.set("removeLayers", num(Status.RemoveLayers));
+                        Target.set("remainingLayers", num(Status.RemainingLayers)); Targets.push_back(std::move(Target));
+                    }
+                    artifact.set("targets", Value(std::move(Targets)));
+                    Value CurrentPreview = artifact["preview"];
+                    CurrentPreview.set("reference", Value(false)); CurrentPreview.set("text", str(preview.text));
+                    CurrentPreview.set("context", str("按当前斗法状态选择一种状态，确认后按本法器品阶削层。"));
+                    CurrentPreview.set("cost", num(Quote.Cost)); artifact.set("preview", std::move(CurrentPreview));
+                }
+                if (ability.gear.EffectId == "redraw") {
+                    artifact.set("targetMode", str("hand-many")); artifact.set("targetMin", num(1));
+                    artifact.set("targetMax", num(Quote.MaxTargets));
+                    json::Array Targets;
+                    for (const auto& Uid : battle.hand) {
+                        Value Target(json::Object{}); Target.set("id", str(Uid)); Target.set("uid", str(Uid));
+                        const auto CardIt = std::find_if(battle.deck.begin(), battle.deck.end(), [&](const Card& Item) { return Item.uid == Uid; });
+                        const auto* Definition = CardIt == battle.deck.end() ? nullptr : battleSpell(CardIt->spell);
+                        Target.set("name", str(Definition ? Definition->name : Uid)); Targets.push_back(std::move(Target));
+                    }
+                    artifact.set("targets", Value(std::move(Targets)));
+                }
+            }
             artifact.set("damage", num(preview.damage)); artifact.set("shield", num(preview.shield)); artifact.set("heal", num(preview.heal));
             artifact.set("rawDamage", num(preview.RawDamage));
             artifact.set("elementalGenerationReady", Value(preview.ElementalGenerationReady));
@@ -231,6 +298,12 @@ Value battle(const Game& game) {
     entry.set("poisonTurns", num(battle.poisonTurns));
     entry.set("burnTurns", num(battle.burnTurns));
     entry.set("water", num(battle.water));
+    {
+        Value Caps(json::Object{});
+        Caps.set("water", num(battle.ArtifactState.WaterCap)); Caps.set("swordQi", num(battle.ArtifactState.SwordQiCap));
+        Caps.set("soul", num(battle.ArtifactState.SoulCap)); Caps.set("charge", num(battle.ArtifactState.ChargeCap));
+        Caps.set("discardPower", num(battle.ArtifactState.SharpnessCap)); entry.set("resourceCaps", std::move(Caps));
+    }
     entry.set("soul", num(battle.soul));
     entry.set("charge", num(battle.charge));
     entry.set("swordQi", num(battle.swordQi));
@@ -260,6 +333,9 @@ Value battle(const Game& game) {
     entry.set("enemyFireGrowthRounds", num(battle.enemyCards.FireGrowthRounds));
     entry.set("enemyElementalSwordSequence", num(battle.enemyCards.ElementalSwordSequence));
     entry.set("comboDraws", num(battle.comboDraws));
+    entry.set("waterFlowDraws", num(battle.WaterFlowDraws));
+    entry.set("waterFlowDrawLimit", num(WaterFlow::DrawLimit));
+    entry.set("enemyWaterFlowDraws", num(battle.enemyCards.WaterFlowDraws));
     entry.set("lastDao", str(battle.last));
     entry.set("manaCap", num(battleManaCap(game.player)));
     entry.set("nextMana", num(battleNextMana(game.player, battle)));

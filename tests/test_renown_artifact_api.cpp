@@ -49,8 +49,8 @@ void runRenownArtifactApiTests() {
     check(!source(g, "wildTask").enabled && source(g, "wildTask").limit.find("3 / 3") != string::npos, "悬赏显示已用三次月限并关闭资格");
     g.bonds.wildMonth = -1;
     check(source(g, "wildTask").enabled && source(g, "wildTask").limit.find("0 / 3") != string::npos, "其他月份的悬赏记录不占当前月份资格");
-    g.player.health = 49;
-    check(!source(g, "wildTask").enabled, "伤势低于50不能报名悬赏");
+    g.player.health = 29;
+    check(!source(g, "wildTask").enabled, "伤势低于30点不能报名悬赏");
     g.player.health = 100; g.player.location = "yifeng"; g.player.arts.progress.wins = 3;
     check(source(g, "oldblade").enabled, "旧剑归途显示真实所在地与胜场前置");
     g.bonds.stories["oldblade"] = g.year;

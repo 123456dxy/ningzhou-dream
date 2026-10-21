@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#edf2df">
+  <meta name="description" content="宁州一梦独立筑基沙盘：搭建经脉闭环，亲眼看真气流转。">
+  <title>真气回路 · 宁州一梦</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="masthead">
+      <span class="brand-seal" aria-hidden="true">宁</span>
+      <div class="brand-copy"><p class="eyebrow">宁州一梦 · 筑基试境</p><h1>真气回路</h1><p class="subtitle">① 点穴改脉　② 只读试运　③ 正式运行一圈</p></div>
+      <a class="comparison-link" href="http://127.0.0.1:53238/" target="_blank" rel="noopener">五行凝练对照 ↗</a>
+    </header>
+    <div class="workspace">
+      <section class="board-panel" aria-label="经脉棋盘">
+        <div class="board-heading"><div><span class="eyebrow">以脉为路，以气为引</span><h2>周天灵台</h2></div><span class="phase-badge" id="phase-badge">连接洞府中</span></div>
+        <div class="status-strip" id="status-strip" aria-live="polite"></div>
+        <div class="board-wrap"><div class="board" id="board" role="grid" aria-label="五乘五经脉回路"></div></div>
+        <div class="board-legend"><span><i class="legend-mark fixed"></i>关窍固定</span><span><i class="legend-mark edited"></i>本圈草稿</span><span><i class="legend-mark preview"></i>试运不结算</span><span><i class="legend-mark actual"></i>正式真气</span></div>
+        <div class="trace-bar" id="trace-bar" role="status">现成基础回路已通。点一格，试着换一种走法。</div>
+      </section>
+      <aside class="side-panel" aria-label="本圈改造与结算">
+        <details class="preparation" id="preparation"><summary>入关准备 <span id="preparation-summary">独立沙盘</span></summary><div class="preparation-content">
+          <label>筑基丹 <span class="stepper"><button data-pill-step="-1" aria-label="减少筑基丹">−</button><output id="pill-count">0</output><button data-pill-step="1" aria-label="增加筑基丹">＋</button></span></label>
+          <label class="check-field"><input type="checkbox" id="core">灵核供能</label>
+          <label>天赋<select id="talent"><option value="none">凡身 · 无特殊天赋</option><option value="daoBody">先天道体</option><option value="steady">道心坚毅</option></select></label>
+          <p class="form-note" id="preparation-hint">准备效果由洞府规则给出，调整后重新入关生效。</p><button class="secondary-button" id="restart">按此准备 · 重新入关</button>
+        </div></details>
+        <section class="editor" aria-labelledby="editor-heading">
+          <div class="section-heading"><h2 id="editor-heading">选择一处经脉</h2><span id="edit-count">首圈自由改造</span></div>
+          <p class="selection-note" id="selection-note">点棋盘上的经脉格，再旋转或更换形状。</p>
+          <div class="tool-grid"><button data-tool="rotate">顺转 ↻</button><button data-tool="straight">直脉 ━</button><button data-tool="corner">弯脉 ┗</button><button data-tool="empty">拆除此格</button></div>
+          <label class="piece-label">功能件<select id="piece-select" disabled><option value="">不装功能件</option></select></label>
+          <p class="piece-hint" id="piece-hint"></p>
+          <div class="draft-tools"><button id="undo-draft">撤回草稿</button><button id="clear-board">清空可编辑格</button></div>
+        </section>
+        <section class="quote-panel" id="quote-panel" aria-live="polite"><span class="eyebrow">本圈试运</span><p>改造后先试运，查看路线、代价与每穴结果。</p></section>
+        <div class="action-stack"><button class="trial-button" id="trial">只读试运一圈</button><button class="primary-button" id="run" disabled>先试运，再正式运行</button><div class="settlement-actions"><button class="secondary-button" id="seal">凝基定型</button><button class="danger-button" id="withdraw">收功离关</button></div></div>
+        <details class="history"><summary>修行手记 <span id="history-count">0</span> · 规则</summary><div class="history-content"><ol id="history-list"></ol><div id="rules-hint"></div></div></details>
+      </aside>
+    </div>
+    <footer class="site-footer">独立内存沙盘，不读取玩家角色。只读试运不推进时间、不结算收益；正式运行后自动停在改造态。</footer>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="modal-backdrop is-hidden" id="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><p class="eyebrow" id="modal-kicker">道基将定</p><h2 id="modal-title">确认本次选择</h2><div id="modal-body"></div><div class="modal-actions"><button class="secondary-button" id="modal-close">返回查看</button><button class="primary-button" id="modal-confirm">确认</button></div></section></div>
+</body>
+</html>

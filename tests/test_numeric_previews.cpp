@@ -84,8 +84,9 @@ void runNumericPreviewTests() {
         "焰火诀显示直接伤害、叠加灼烧量、每回合伤害与三回合持续");
     const auto poison = battleReferencePreview(g.player, *battleSpell("corrode"));
     check(poison.statuses.size() == 1 && poison.statuses[0].id == "poison" &&
-        poison.statuses[0].turns == 3 && poison.statuses[0].perTurn > 0 && poison.statuses[0].cap == BATTLE_POISON_CAP,
-        "施毒显示真实层数、伤害、时限与上限");
+        poison.statuses[0].turns == 1 && poison.statuses[0].perTurn > 0 && poison.statuses[0].cap == BATTLE_POISON_CAP &&
+        poison.text.find("本场持续") != string::npos,
+        "施毒显示真实层数、伤害、本场持续及上限");
     const auto redraw = battleReferencePreview(g.player, *battleSpell("refresh"));
     check(redraw.draw >= 5 && battlePreviewConditions(g.player, *battleSpell("refresh")).find("4张") != string::npos,
           "换念预览明确以其余四张手牌为参考，不假定真实抽牌结果");

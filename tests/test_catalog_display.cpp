@@ -3,6 +3,7 @@
 #include "core/sim.h"
 #include "core/save.h"
 #include "core/arts.h"
+#include "core/combat/battle_scaling.h"
 #include "data/reference_tables.h"
 #include <algorithm>
 #include <array>
@@ -81,12 +82,12 @@ void runCatalogDisplayTests() {
     mfCheckCultivationPillCatalog();
     nz::CreateOptions options; options.seed=20261012; options.traitsExplicit=true;
     auto game=nz::createGame(options); game.npcs.clear(); game.pending.reset(); game.job.reset();
-    game.player.location="wuling"; game.player.health=100;
+    game.player.location="wuling"; game.player.health=mfPlayerHealthMaximum(game.player);
     const auto before=nz::saveToJson(game);
     nz::json::Value state(nz::json::Object{}); nz::api::view::appendEconomyState(game,state);
     const auto pill=catalogRow(state["pillCatalog"],"5001");
     const auto* recipe=nz::findRecipe("5001");
-    check(recipe && pill["catalogEffect"].asString().find(std::to_string(std::min(100,recipe->value)))!=string::npos,
+    check(recipe && pill["catalogEffect"].asString().find(std::to_string(recipe->value))!=string::npos,
           "满健康时目录仍显示完整恢复量");
     check(pill["effect"].asString().find("+0")!=string::npos,"服用详情继续显示当前实际增量零");
     const auto market=catalogRow(state["market"],"5001");
@@ -101,10 +102,22 @@ void runCatalogDisplayTests() {
     check(nz::saveToJson(game)==before,"查询效果与品阶不修改时间随机数库存或存档");
     for(const auto& definition:nz::data::RecipeDef_TABLE()) if(definition.kind=="apt") {
         game.player.apt=nz::APT_MAX; game.player.arts.aptPills=10;
+        game.player.arts.potions[definition.id]=1;
         state=nz::json::Value(nz::json::Object{}); nz::api::view::appendEconomyState(game,state);
         const auto row=catalogRow(state["pillCatalog"],definition.id);
-        check(!row["catalogEffect"].asString().empty() && row["catalogEffect"].asString().find("资质 +0")==string::npos,"属性已封顶不把丹药目录能力截断成零");
-        check(row["effectValue"].asNumber()==0,"完整目录说明不改变实际服药封顶规则");
+        check(!row["catalogEffect"].asString().empty() && row["catalogEffect"].asString().find("资质 +0")==string::npos,"属性超过旧软上限时丹药目录仍显示完整能力");
+        checkNear(row["effectValue"].asNumber(),definition.value,"旧资质总量与本世额度不再截断当前服丹预览");
+        check(artUsePill(game,definition.id).empty() && game.player.apt==nz::APT_MAX+definition.value,
+              "资质丹实际服用超过旧软上限且与目录预览一致");
+        game.player.arts.potions[definition.id]=1;
+        game.player.arts.used[definition.id]=artPillUseInfo(game.player,definition).toleranceLimit;
+        state=nz::json::Value(nz::json::Object{}); nz::api::view::appendEconomyState(game,state);
+        const auto Limited=catalogRow(state["pillCatalog"],definition.id);
+        const auto LimitedBefore=saveToJson(game);
+        check(!Limited["enabled"].asBool() && Limited["reason"].asString().find("耐药")!=string::npos,
+              "完整目录说明保留本丹耐药次数的真实拒绝条件");
+        check(!artUsePill(game,definition.id).empty() && saveToJson(game)==LimitedBefore,
+              "耐药已满拒绝服丹且不改变资源时钟或库存");
         break;
     }
 }

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
+#include "core/content/beast_portraits.h"
 #include "core/crafting/material_supply.h"
 #include "core/interface/views.h"
 #include "core/npc_learning.h"
@@ -18,7 +20,6 @@ Game combatFixture() {
     Game game;
     game.seed = game.rng = 20261012;
     game.player.stage = 12;
-    game.player.health = 100;
     ensureArts(game);
     game.player.arts.main.clear();
     game.player.arts.aux.clear();
@@ -26,6 +27,7 @@ Game combatFixture() {
     game.player.arts.equipped.clear();
     game.player.arts.nodes.clear();
     game.player.arts.spells = {"sword", "gather"};
+    game.player.health = mfPlayerHealthMaximum(game.player);
     EnemySpec enemy;
     enemy.name = "灵力语义回归";
     enemy.stage = 12;
@@ -33,6 +35,7 @@ Game combatFixture() {
     battleStart(game, enemy);
     Battle& battle = *game.player.arts.battle;
     battle.enemyHp = battle.enemyMax = 1000000;
+    battle.BeastActions.clear();
     battle.intentKind = "guard";
     battle.intentRaw = 0;
     return game;
@@ -155,7 +158,10 @@ void runCombatFixTests() {
         battle.enemySect = "lihuo";
         checkStr(api::view::battle(game)["enemyPortrait"].asString(), npcPortrait(npc), "真实 NPC 肖像优先使用名册实体，兼容旧战斗缺失属性");
         battle.enemyBeast = true;
-        checkStr(api::view::battle(game)["enemyPortrait"].asString(), beastPortrait(battle.enemyStage), "妖兽斗法肖像仍按妖兽境界选择");
+        checkStr(api::view::battle(game)["enemyPortrait"].asString(),
+                 Appearance::mfBeastPortraitPath(battle.enemyDao.empty() ? battle.style : battle.enemyDao,
+                                               battle.enemyStage),
+                 "妖兽斗法肖像按真实风格与妖兽境界选择");
     }
 
     std::printf("\n-- 年度炼器保留真实配料来源 --\n");

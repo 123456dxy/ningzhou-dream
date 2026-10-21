@@ -1,5 +1,6 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/persistence/forge_codec.h"
 #include "core/persistence/json_helpers.h"
 #include "core/arts.h"
 #include "core/artifact.h"
@@ -50,25 +51,7 @@ Value artsToJson(const Arts& arts) {
     artsObject.set("materials", mapToJson(arts.materials));
     {
         json::Array gearArray;
-        for (const auto& gear : arts.gear) {
-            Value gearObject(json::Object{});
-            gearObject.set("id", str(gear.id));
-            gearObject.set("name", str(gear.name));
-            gearObject.set("slot", str(gear.slot));
-            gearObject.set("element", str(gear.element));
-            gearObject.set("polarity", str(gear.polarity));
-            gearObject.set("grade", num(gear.grade));
-            gearObject.set("bonus", num(gear.bonus));
-            gearObject.set("inscribed", Value(gear.inscribed));
-            gearObject.set("price", num(gear.price));
-            gearObject.set("craftCost", num(gear.craftCost));
-            gearObject.set("crafted", Value(gear.crafted));
-            gearObject.set("shape", str(gear.crafted && gear.shape.empty() ? artifactShape(gear) : gear.shape));
-            json::Array dims;
-            for (int dimension : gear.dimensions) dims.push_back(num(dimension));
-            gearObject.set("dimensions", Value(std::move(dims)));
-            gearArray.push_back(std::move(gearObject));
-        }
+        for (const auto& Item : arts.gear) gearArray.push_back(mfGearToJson(Item));
         artsObject.set("gear", Value(std::move(gearArray)));
     }
     artsObject.set("equipped", strMapToJson(arts.equipped));
@@ -76,10 +59,16 @@ Value artsToJson(const Arts& arts) {
     artsObject.set("mind", num(arts.mind));
     artsObject.set("speed", num(arts.speed));
     artsObject.set("hpBonus", num(arts.hpBonus));
+    artsObject.set("baseHealthBonus", num(arts.BaseHealthBonus));
+    artsObject.set("foundationHealthBonus", num(arts.FoundationHealthBonus));
+    artsObject.set("lifeboundSpell", str(arts.LifeboundSpell));
+    artsObject.set("lifeboundKind", str(arts.LifeboundKind));
     artsObject.set("aptPills", num(arts.aptPills));
     artsObject.set("breakBuff", str(arts.breakBuff));
+    artsObject.set("breakthroughPillStage", num(arts.BreakthroughPillStage));
     artsObject.set("combatBuff", num(arts.combatBuff));
     artsObject.set("combatPrep", mapToJson(arts.combatPrep));
+    artsObject.set("combatPillDoseCount", num(arts.CombatPillDoseCount));
     artsObject.set("repel", num(arts.repel));
     {
         Value progressObject(json::Object{});
@@ -121,35 +110,23 @@ void artsFromJson(const Value& artsObject, Arts& arts) {
     arts.durability = artsObject["durability"].asInt(40);
     arts.materials = jsonToMap<int>(artsObject["materials"]);
     arts.gear.clear();
-    for (const auto& gearObject : artsObject["gear"].asArray()) {
-        Gear gear;
-        gear.id = gearObject["id"].asString();
-        gear.name = gearObject["name"].asString();
-        gear.slot = gearObject["slot"].asString();
-        gear.element = gearObject["element"].asString();
-        gear.polarity = gearObject["polarity"].asString("天阳");
-        gear.grade = gearObject["grade"].asInt(1);
-        gear.bonus = gearObject["bonus"].asNumber();
-        gear.inscribed = gearObject["inscribed"].asBool();
-        gear.price = gearObject["price"].asInt();
-        gear.craftCost = gearObject["craftCost"].asInt();
-        gear.crafted = gearObject["crafted"].asBool(gear.id.rfind("forge-", 0) == 0 ||
-            (gear.id.rfind("gear-", 0) == 0 && gear.craftCost > 0));
-        gear.shape = gearObject["shape"].asString();
-        if (gear.crafted && gear.shape.empty()) gear.shape = artifactShape(gear);
-        for (const auto& dimension : gearObject["dimensions"].asArray())
-            gear.dimensions.push_back(dimension.asInt());
-        arts.gear.push_back(gear);
-    }
+    for (const auto& Input : artsObject["gear"].asArray()) arts.gear.push_back(mfGearFromJson(Input));
     arts.equipped = jsonToStrMap(artsObject["equipped"]);
     arts.heart = artsObject["heart"].asInt();
     arts.mind = artsObject["mind"].asInt();
     arts.speed = artsObject["speed"].asInt();
     arts.hpBonus = artsObject["hpBonus"].asInt();
+    arts.BaseHealthBonus = artsObject["baseHealthBonus"].asInt();
+    arts.FoundationHealthBonus = artsObject["foundationHealthBonus"].asInt();
+    arts.LifeboundSpell = artsObject["lifeboundSpell"].asString();
+    arts.LifeboundKind = artsObject["lifeboundKind"].asString();
     arts.aptPills = artsObject["aptPills"].asInt();
     arts.breakBuff = artsObject["breakBuff"].asString();
+    arts.BreakthroughPillStage = artsObject["breakthroughPillStage"].asInt(-1);
     arts.combatBuff = artsObject["combatBuff"].asNumber();
     arts.combatPrep = jsonToMap<double>(artsObject["combatPrep"]);
+    arts.CombatPillDoseCount = artsObject["combatPillDoseCount"].asInt(
+        static_cast<int>(std::min<std::size_t>(3, arts.combatPrep.size())));
     arts.repel = artsObject["repel"].asInt();
     const Value& progressObject = artsObject["progress"];
     arts.progress.brew = progressObject["brew"].asInt();

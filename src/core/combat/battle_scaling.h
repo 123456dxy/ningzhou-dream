@@ -2,6 +2,36 @@
 
 namespace nz {
 
+struct Player;
+struct Npc;
+struct Game;
+
+inline constexpr int HealthGateMinimum = 30;
+inline constexpr double HealthMonthlyRecoverFraction = 0.03;
+inline constexpr double HealthRestRecoverFraction = 0.10;
+inline constexpr double NpcEncounterHealthMultiplier = 1.45;
+inline constexpr double HealthFlatBasis = 110.0;
+inline constexpr double HealthPowerMultiplier = 2.4;
+
+// 用途：查询同一权威气血公式；基础丹药/筑基奖励先加战力基数，再经2.4、功法和体魄乘区。
+// 参数：ActorScale为正有限遭遇倍率，玩家1、普通NPC1.45；返回：气血点数，不改变状态/RNG。
+[[nodiscard]] int mfHealthMaximum(const Player& PlayerState, double ActorScale = 1.0);
+[[nodiscard]] int mfHealthMaximumFromPower(int BasePower, double BaseHealthBonus,
+    double HpMultiplier, int Body, double ActorScale = 1.0);
+[[nodiscard]] int mfPlayerHealthMaximum(const Player& PlayerState);
+[[nodiscard]] int mfNpcHealthMaximum(const Npc& PersonState);
+// 用途：在兼容百分比边界与绝对气血间转换；0保留死亡，百分比钳位0..100，不改变状态。
+[[nodiscard]] int mfHealthPercentAmount(int Maximum, int Percent);
+[[nodiscard]] int mfHealthFromPercent(int Percent, int Maximum);
+[[nodiscard]] int mfHealthToPercent(int Current, int Maximum);
+// 用途：纯计算封顶恢复和月/疗养恢复量；不复活0气血，不消耗余数、时间或RNG。
+[[nodiscard]] int mfRecoveredHealth(int Current, int Maximum, int Amount);
+[[nodiscard]] int mfMonthlyHealthRecovery(int Maximum);
+[[nodiscard]] int mfRestExtraHealthRecovery(int Maximum);
+// 用途：真实日历动作恢复当前气血，普通斗法中更新战斗值；留影和死亡状态不恢复。
+// 返回：本次实际恢复点数；无IO/RNG，调用方负责日历与保存边界。
+int mfRecoverPlayerHealth(Game& State, int Amount);
+
 inline constexpr double BattleDamagePowerMultiplier = 0.3;
 inline constexpr double BattleDamageFlatBasis = 18.0;
 inline constexpr double PoisonTickBasisCoefficient = 0.045;

@@ -7,11 +7,51 @@ JS 版模块导出的 JSON），所以 C++ 版和 JS 版的数据一定一致，
 用法：先 `node tools/dump-data.mjs > tools/data-dump.json`，再运行本脚本。
 """
 from pathlib import Path
+import argparse
 import json
 
 ROOT = Path(__file__).resolve().parent.parent
 DUMP = ROOT / 'tools' / 'data-dump.json'
 OUT = ROOT / 'data'
+OVERRIDES = OUT / 'reference_overrides.json'
+
+
+def apply_overrides(dump, society, path):
+    """本地规则只改生成输入；未知表、ID、字段及重复目标均拒绝。"""
+    document = json.loads(path.read_text(encoding='utf-8'))
+    if set(document) != {'schemaVersion', 'changes'} or document['schemaVersion'] != 1 or not isinstance(document['changes'], list):
+        raise ValueError('本地数据覆盖文件结构或版本无效')
+    seen = set()
+    for change in document['changes']:
+        if not isinstance(change, dict) or set(change) not in ({'table', 'id', 'set'}, {'table', 'id', 'remove'}):
+            raise ValueError('覆盖项必须是table/id/set或table/id/remove')
+        table, identifier = change['table'], change['id']
+        if not isinstance(table, str) or not isinstance(identifier, str) or not identifier:
+            raise ValueError('覆盖表名与ID必须是非空字符串')
+        target = society.get(table, dump.get(table))
+        if not isinstance(target, list):
+            raise ValueError(f'未知或不支持覆盖的数据表: {table}')
+        key = (table, identifier)
+        if key in seen:
+            raise ValueError(f'重复覆盖目标: {table}/{identifier}')
+        seen.add(key)
+        matches = [row for row in target if isinstance(row, dict) and row.get('id') == identifier]
+        if len(matches) != 1:
+            raise ValueError(f'覆盖目标不存在或原表ID重复: {table}/{identifier}')
+        row = matches[0]
+        if 'remove' in change:
+            if change['remove'] is not True:
+                raise ValueError('remove只接受true')
+            target.remove(row)
+        else:
+            updates = change['set']
+            if not isinstance(updates, dict) or not updates or 'id' in updates or set(updates) - set(row):
+                raise ValueError(f'覆盖含未知字段或试图修改稳定ID: {table}/{identifier}')
+            for field, value in updates.items():
+                original = row[field]
+                if original is not None and type(value) is not type(original):
+                    raise ValueError(f'覆盖字段类型不一致: {table}/{identifier}/{field}')
+            row.update(updates)
 
 
 def cpp_str(s) -> str:
@@ -104,17 +144,18 @@ using std::vector;
 '''
 
 
-def main():
+def main(output_path=None, check_only=False, overrides_path=None):
     dump = json.loads(DUMP.read_text(encoding='utf-8'))
     # 支线与悬赏单独从一个 dump 文件读取
     soc_path = ROOT / 'tools' / 'society-dump.json'
     soc = json.loads(soc_path.read_text(encoding='utf-8'))
+    apply_overrides(dump, soc, overrides_path or OVERRIDES)
     OUT.mkdir(parents=True, exist_ok=True)
 
     parts = []
 
     # ---------- 药材 ----------
-    herbs = Struct('HerbDef', '药材（JS 版 ART_HERBS，157 种）')
+    herbs = Struct('HerbDef', f'药材（JS 版 ART_HERBS，{len(dump["herbs"])} 种）')
     (herbs.field('id', 'string').field('name', 'string').field('grade', 'int')
           .field('temperature', 'int').field('main', 'string')
           .field('secondary', 'string').field('guide', 'string')
@@ -132,7 +173,7 @@ def main():
 
     # ---------- 丹方 ----------
     recipes = Struct('RecipeDef',
-                     '丹方（JS 版 ART_RECIPES，126 张）。ingredients 保存为 "药材id:数量;..." 字符串')
+                     f'丹方（JS 版 ART_RECIPES，{len(dump["recipes"])} 张）。ingredients 保存为 "药材id:数量;..." 字符串')
     (recipes.field('id', 'string').field('name', 'string').field('grade', 'int')
             .field('tolerance', 'int').field('sourceEffect', 'string')
             .field('kind', 'string').field('value', 'int')
@@ -381,8 +422,14 @@ def main():
     parts.append(wild.render())
 
     body = HEADER + '\n\n'.join(parts) + '\n\n} // namespace nz::data\n'
-    target = OUT / 'reference_tables.h'
-    target.write_text(body, encoding='utf-8')
+    target = Path(output_path) if output_path else OUT / 'reference_tables.h'
+    encoded = body.replace('\n', '\r\n').encode('utf-8')
+    if check_only:
+        if target.read_bytes() != encoded:
+            raise SystemExit(f'生成表与输入不一致: {target}')
+        print(f'逐字节一致: {target}')
+        return
+    target.write_text(body, encoding='utf-8', newline='\r\n')
     print(f'已写出 {target}')
     for st in (herbs, recipes, furnaces, manuals, spells, guides, materials,
                shapes, quests, achs, base_manuals, base_spells, talents,
@@ -392,4 +439,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--overrides', type=Path)
+    parser.add_argument('--check', action='store_true')
+    arguments = parser.parse_args()
+    main(arguments.output, arguments.check, arguments.overrides)

@@ -1,3 +1,4 @@
+import { renderLifeboundSlot } from '../../arts.mjs';
 import { esc, fmt, action, card, empty, tag, tabs, numericPreview, uiButton, legacyLink } from '../ui.mjs';
 
 // data.nodes = /arts/nodes, data.spells = /arts/spells. Refresh both after mutations.
@@ -8,7 +9,7 @@ const note = text => text ? `<p class="meta">${esc(text)}</p>` : '';
 const blocked = state => Boolean(state.ended || state.pending || state.battle || state.job || state.dungeons?.run);
 const refId = value => typeof value === 'string' ? value : value?.id;
 const artsTabs = [['loadout', '当前搭配'], ['manuals', '功法'], ['spells', '神通'], ['daos', '悟道'], ['cave', '洞府']];
-const kindLabel = value => ({ attack: '攻击', sword: '剑术', human: '剑术', fire: '灼烧', heal: '治疗', shield: '护盾', guard: '防御', mana: '聚气', float: '聚气', drain: '穿盾', charge: '蓄势', water: '蓄水', poison: '施毒', soul: '震荡', wave: '水势爆发', heavy: '重势爆发', poisonBurst: '毒伤爆发', soulBurst: '震荡爆发', bodyBurst: '体道爆发', fireBurst: '引爆', steal: '夺灵', store: '蓄灵', flow: '聚气', burst: '夺灵', draw: '抽牌', foresee: '预谋', exhaust: '本场移除', redraw: '换手', empower: '增伤', ward: '减伤' }[value] || '神通');
+const kindLabel = value => ({ attack: '攻击', sword: '剑术', human: '剑术', fire: '灼烧', heal: '治疗', poisonSiphon: '借毒治疗', shield: '护盾', guard: '防御', mana: '聚气', float: '聚气', drain: '穿盾', charge: '蓄势', water: '蓄水', poison: '施毒', soul: '震荡', wave: '水势爆发', heavy: '重势爆发', poisonBurst: '毒伤爆发', soulBurst: '震荡爆发', bodyBurst: '体道爆发', fireBurst: '引爆', steal: '夺灵', store: '蓄灵', flow: '聚气', burst: '夺灵', draw: '抽牌', drawTo: '补牌', foresee: '预谋', exhaust: '本场移除', redraw: '换手', empower: '增伤', ward: '减伤' }[value] || '神通');
 
 const queryOf = value => String(value || '').trim().toLocaleLowerCase();
 const matches = (query, ...values) => !query || values.filter(Boolean).join(' ').toLocaleLowerCase().includes(query);
@@ -145,13 +146,13 @@ function spellView(state, ui, data) {
     detail = `<section class="player-detail" data-selected-spell="${esc(item.id)}"><div class="player-title"><strong>${esc(item.name)}</strong>${tag(equipped ? '已携带' : learned ? '已学会' : '未学会')}</div>`
       + `<p class="player-context">${esc(item.dao)}道 · ${esc(kindLabel(item.kind))} · 灵力 ${count(item.actualCost ?? item.cost)}${item.cooldown ? ` · 冷却 ${count(item.cooldown)}` : ''}</p>`
       + `<p class="player-effect">${esc(item.preview?.text || item.description || '暂无效果说明。')}</p>${requirements || '<p class="player-risk">无需学习费用，可调整携带状态。</p>'}`
-      + `<p class="player-condition">${esc(sourceReason || (learned ? item.reason || (equipped ? '已占用一个神通槽。' : '携带后占用一个神通槽。') : '需先获取传承来源。'))}</p>` + `<div class="player-actions">${continuation(state) || perform}</div>` + outcome(ui, item.id, ['arts/spell', 'library/spell', 'npc-learn'])
+      + `<p class="player-condition">${esc(sourceReason || (learned ? item.reason || (equipped ? '已占用一个神通槽。' : '携带后占用一个神通槽。') : '需先获取传承来源。'))}</p>` + `<div class="player-actions">${continuation(state) || perform}${learned ? action(item.isLifebound ? "当前本命" : "设为本命", "arts/lifebound", {spellId:item.id}, {disabled:item.isLifebound || item.canSetLifebound !== true || blocked(state),title:item.lifeboundReason || ""}) : ""}</div>` + outcome(ui, item.id, ['arts/spell', 'library/spell', 'npc-learn'])
       + `<details data-disclosure-key="spell-${esc(item.id)}"><summary>完整规则与学习来源</summary>${sources.length > 1 ? selectControl('spell-source', '学习来源', sources.map(source => [source.key, source.label]), source.key) : ''}${note(item.stageName ? `所需境界：${item.stageName}` : '')}${note(item.description)}${numericPreview(item.preview)}</details></section>`;
   }
-  return card('', controls + context + detail
+  return `<div class="spell-config-layout"><div class="spell-config-main">` + card('', controls + context + detail
     + `<details class="player-filter" data-disclosure-key="spell-search"><summary>搜索 / 当前完整牌组</summary>${searchField('spell-search', ui.spellSearch, '查找神通')}${selectControl('spell-dao', '按大道', [['all', '全部'], ...daos.map(dao => [dao, dao + '道'])], dao)}`
     + note('已携带：' + list(arts.spellList).map(item => item.name).join('、'))
-    + note('固定招式：' + spells.filter(isFixed).map(item => item.name).join('、')) + '</details>', 'player-workspace');
+    + note('固定招式：' + spells.filter(isFixed).map(item => item.name).join('、')) + '</details>', 'player-workspace') + `</div><aside class="spell-equipped-sidebar">${renderLifeboundSlot(state,{mobile:true})}<h3>已携带神通 · ${carried.length} / ${fmt(arts.spellSlots ?? 4)}</h3><div class="spell-equipped-scroll" data-ui-scroll="equipped-spells">${list(arts.spellList).map(spell => `<article data-ui-anchor="equipped-${esc(spell.id)}"><strong>${esc(spell.name)}</strong><p>${esc(spell.description || '')}</p>${action('卸下神通','arts/spell',{id:spell.id},{disabled:blocked(state)})}</article>`).join('') || '<p>尚未携带额外神通。</p>'}</div></aside></div>`;
 }
 
 function daoView(state, ui, data) {

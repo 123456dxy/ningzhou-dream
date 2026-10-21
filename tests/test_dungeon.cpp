@@ -9,6 +9,7 @@
 #include "core/dungeon.h"
 #include "core/exploration/dungeon_events.h"
 #include "core/exploration/dungeon_reward_rules.h"
+#include "core/content/forge_content.h"
 #include "core/json.h"
 #include "core/save.h"
 #include "core/sim.h"
@@ -210,6 +211,12 @@ void runDungeonTests() {
             SawHighGradeMaterial = SawHighGradeMaterial || (herb && herb->grade == EntryGrade && herb->grade > 2 && count > 0);
         }
         for (const auto& [id, count] : g.dungeons.run->materials) {
+            const auto* Part = content::mfFindForgeMaterial(id);
+            if (Part && Part->Source == content::ForgeMaterialSource::BeastDrop) {
+                FitsEntryPools = FitsEntryPools && count > 0 && Part->Material.grade <= EntryGrade;
+                SawHighGradeMaterial = SawHighGradeMaterial || (Part->Material.grade == EntryGrade && EntryGrade > 2 && count > 0);
+                continue;
+            }
             const auto item = std::find_if(data::MaterialDef_TABLE().begin(), data::MaterialDef_TABLE().end(), [&](const auto& def) { return def.id == id; });
             FitsEntryPools = FitsEntryPools && item != data::MaterialDef_TABLE().end() && count > 0 &&
                 std::any_of(MaterialPool.begin(), MaterialPool.end(), [&](const auto* Allowed) { return Allowed->id == id; });
@@ -556,7 +563,7 @@ void runDungeonTests() {
             return card != Camp.dungeons.run->deck.end() && (card->spell == "strike" || card->spell == "defend");
         }), "营地不能删除必带普通攻击或普通防御");
         if (remove != Camp.dungeons.run->rewards.end()) {
-            const string id = remove->id, CardUid = remove->spell; const int count = Camp.dungeons.run->deck.size();
+            const string id = remove->id, CardUid = remove->spell; const int count = static_cast<int>(Camp.dungeons.run->deck.size());
             check(dungeonClaim(Camp, id).empty(), "营地确认删除一张额外神通");
             checkEq(Camp.dungeons.run->deck.size(), count - 1, "临时牌组实际移除所选的一张牌");
             check(std::none_of(Camp.dungeons.run->deck.begin(), Camp.dungeons.run->deck.end(),

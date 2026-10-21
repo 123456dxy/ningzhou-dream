@@ -8,9 +8,17 @@
 <Filter Include="Web UI\v2\views"><UniqueIdentifier>{6E1D632B-309B-5624-B750-D5DDA57AD2B3}</UniqueIdentifier></Filter>
 </ItemGroup><ItemGroup>
 <ClCompile Include="..\src\battle_lab_main.cpp"><Filter>Entry</Filter></ClCompile>
+<None Include="..\web\alchemy.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\alchemy.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\app.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\artifact-illustrations.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\artifact-illustrations.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\artifact-redraw.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\artifact-status.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\artifacts.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\arts.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\ascension-tournament.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\ascension-tournament.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\assets\manuals\manifest.mjs"><Filter>Web UI\assets\manuals</Filter></None>
 <None Include="..\web\battle-lab.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\battle-lab.html"><Filter>Web UI</Filter></None>
@@ -29,12 +37,15 @@
 <None Include="..\web\cave-ui.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\compact-arts.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\craft-pricing.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\dungeon-card-preferences.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\dungeons-ui.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\dungeons.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\economy.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\elemental-generation.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\enhance.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\feedback.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\forge.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\forge.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\friend-filters.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\friends.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\index.html"><Filter>Web UI</Filter></None>
@@ -47,8 +58,11 @@
 <None Include="..\web\map.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\mobile.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\mobile.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\music-controls.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\music-controls.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\numeric-preview.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\nz-mode.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\pill-batch.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\portraits.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\quantity-controls.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\renown.mjs"><Filter>Web UI</Filter></None>
@@ -58,9 +72,12 @@
 <None Include="..\web\shell.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\styles.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\task-panel.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\tianji-steward.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\tianji-steward.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\tianji.css"><Filter>Web UI</Filter></None>
 <None Include="..\web\tianji.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\tide-panel.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\ui-position.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\v2\api.mjs"><Filter>Web UI\v2</Filter></None>
 <None Include="..\web\v2\app.mjs"><Filter>Web UI\v2</Filter></None>
 <None Include="..\web\v2\battle-mobile.css"><Filter>Web UI\v2</Filter></None>
@@ -84,5 +101,8 @@
 <None Include="..\web\v2\views\social.mjs"><Filter>Web UI\v2\views</Filter></None>
 <None Include="..\web\v2\views\tianji.mjs"><Filter>Web UI\v2\views</Filter></None>
 <None Include="..\web\v2.html"><Filter>Web UI</Filter></None>
+<None Include="..\web\weather-music.mjs"><Filter>Web UI</Filter></None>
 <None Include="..\web\workshop.mjs"><Filter>Web UI</Filter></None>
+<None Include="..\web\zhuji.css"><Filter>Web UI</Filter></None>
+<None Include="..\web\zhuji.mjs"><Filter>Web UI</Filter></None>
 </ItemGroup></Project>

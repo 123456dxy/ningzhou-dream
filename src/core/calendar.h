@@ -7,8 +7,8 @@
 #include "core/model.h"
 
 namespace nz {
-inline constexpr int BasePillPoisonDecayPerYear = 2;
-inline constexpr int PillPoisonDaoDecayBonusPerYear = 4;
+inline constexpr int BasePillPoisonDecayPerYear = 5;
+inline constexpr int PillPoisonDaoDecayBonusPerYear = 0; // 保留旧公开常量名，丹道不再额外自然排毒。
 
 // 日历上的一个位置
 struct CalDate {
@@ -43,7 +43,7 @@ string calendarLabel(const Game& g);
 // 返回值：本次应付整数份数，并保留未取整余量。
 int calendarTake(Game& g, const string& key, double amount);
 // 同一自然化毒速率供每日结算与只读展示使用（每年360天）。
-// 用途：读取功法天赋加成后的年度排毒量。
+// 用途：读取统一的年度自然排毒量，不受功法或天赋改变。
 // 参与流程：日历推进与月年边界结算。
 // 使用方式：传入const Player& player，按本模块入口调用。
 // 返回值：说明所述数值结果；不额外消耗资源。

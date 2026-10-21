@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "core/arts.h"
+#include "core/battle.h"
 #include "data/reference_tables.h"
 
 namespace nz {
@@ -97,8 +98,7 @@ string RewardReceipt::changes(const Game& game) const {
     }
     for (const auto& id : now.arts.knownSpells) {
         if (std::find(player.arts.knownSpells.begin(), player.arts.knownSpells.end(), id) != player.arts.knownSpells.end()) continue;
-        for (const auto& spell : data::SpellDef_TABLE())
-            if (spell.id == id) parts.push_back("学会神通「" + spell.name + "」");
+        if (const auto* Spell = battleSpell(id)) parts.push_back("学会神通「" + Spell->name + "」");
     }
     for (const auto& gear : now.arts.gear) {
         const auto existing = std::find_if(player.arts.gear.begin(), player.arts.gear.end(), [&](const Gear& previous) { return previous.id == gear.id; });

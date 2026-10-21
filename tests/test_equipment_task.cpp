@@ -1,8 +1,7 @@
 // 两个已修 bug 的回归自测。
 //
-// 1) 初始进入游戏没有自动装备神通
-//    —— ensureArts 只在新档时写 spells，旧档/空列表时不会补；
-//       而且「携带/卸下神通」的入口（artInstant 的 spell 分支）根本没实现。
+// 1) 真实新建角色按当前初装自动携带四个神通；
+//    携带/卸下、槽位上限和生成牌组必须保持一致，主动卸空的旧档不补牌。
 // 2) 主城接取战斗任务无效果
 //    —— monthComplete 没有把营生类工作转交 ecoComplete，
 //       猎妖委托不开打、差事不发工钱、委托不交工。
@@ -47,15 +46,16 @@ void runEquipmentAndTaskTests() {
     // ------------------------------------------------------------
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         checkEq(static_cast<long long>(g.player.arts.spells.size()), 4,
                 "开局自动装备 4 个神通");
         check(!carried(g.player.arts, "strike"), "固定普通攻击不占额外神通名额");
-        check(carried(g.player.arts, "skim"), "开局带明心咒抽牌");
-        check(carried(g.player.arts, "sword"), "开局带御剑诀");
+        check(carried(g.player.arts, "gold"), "开局带金芒刺直伤");
+        check(carried(g.player.arts, "fire"), "开局带焰火诀灼烧");
         check(carried(g.player.arts, "water"), "开局带水灵盾");
-        check(carried(g.player.arts, "wood"), "开局带回春术");
+        check(carried(g.player.arts, "gather"), "开局带聚气回灵");
 
-        // 四个携带神通各进牌组两张（外加灵击/守势各两张）
+        // 四个携带神通各进牌组两张，外加普攻/防御各五张。
         EnemySpec e;
         e.name = "回归靶子";
         e.stage = 0;
@@ -63,7 +63,7 @@ void runEquipmentAndTaskTests() {
         const Battle& b = *g.player.arts.battle;
         checkEq(static_cast<long long>(b.deck.size()), 18,
                 "开局牌组 18 张（4 神通×2 + 普攻5 + 防御5）");
-        // 普通攻击/防御各固定两张；额外神通不再重复基础卡。
+        // 额外神通不重复固定基础卡。
         for (const auto& id : g.player.arts.spells) {
             int n = 0;
             for (const auto& c : b.deck)
@@ -77,6 +77,7 @@ void runEquipmentAndTaskTests() {
     // 主动卸空额外神通应保留，固定基础牌仍然可用。
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.arts.spells.clear();
         const std::string text = saveToJson(g);
 
@@ -92,22 +93,23 @@ void runEquipmentAndTaskTests() {
     // 「携带 / 卸下神通」这个动作此前完全不存在，现在应当可用
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.stage = 0;   // 炼气期拥有四个额外神通格子
 
         // 卸下一个
-        const ActionError off = artInstant(g, "spell", "wood");
+        const ActionError off = artInstant(g, "spell", "gold");
         check(off.ok, "可以卸下已携带的神通");
-        check(!carried(g.player.arts, "wood"), "wood 已被卸下");
+        check(!carried(g.player.arts, "gold"), "gold 已被卸下");
         checkEq(static_cast<long long>(g.player.arts.spells.size()), 3,
                 "卸下后剩 3 个神通");
 
         // 再装回来
-        const ActionError on = artInstant(g, "spell", "wood");
+        const ActionError on = artInstant(g, "spell", "gold");
         check(on.ok, "可以把神通装回");
-        check(carried(g.player.arts, "wood"), "wood 已重新携带");
+        check(carried(g.player.arts, "gold"), "gold 已重新携带");
 
         // 上限四个：已经有 4 个，再加第 5 个应被拒绝
-        const ActionError over = artInstant(g, "spell", "gold");
+        const ActionError over = artInstant(g, "spell", "wood");
         check(!over.ok, "超过四个神通会被拒绝");
         check(!over.error.empty(), "超过当前境界名额时给出提示");
 
@@ -116,9 +118,8 @@ void runEquipmentAndTaskTests() {
         check(!bad.ok, "不存在的神通不能携带");
 
         // 换了神通后，牌组应当跟着变
-        g.player.arts.knownSpells.push_back("gold");
-        artInstant(g, "spell", "wood");          // 卸下
-        artInstant(g, "spell", "gold");          // 换上金芒刺
+        check(artInstant(g, "spell", "gold").ok, "换装前卸下金芒刺");
+        check(artInstant(g, "spell", "wood").ok, "换上已经领悟的回春术");
         EnemySpec e;
         e.name = "回归靶子";
         e.stage = 0;
@@ -128,8 +129,8 @@ void runEquipmentAndTaskTests() {
             if (c.spell == "gold") ++gold;
             if (c.spell == "wood") ++wood;
         }
-        checkEq(gold, 2, "换上的金芒刺进牌组 2 张");
-        checkEq(wood, 0, "卸下的回春术不再进牌组");
+        checkEq(wood, 2, "换上的回春术进牌组 2 张");
+        checkEq(gold, 0, "卸下的金芒刺不再进牌组");
     }
 
     // ------------------------------------------------------------
@@ -137,6 +138,7 @@ void runEquipmentAndTaskTests() {
     // ------------------------------------------------------------
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";     // 武陵城（主城）
         g.player.stones = 500;
         g.player.health = 100;
@@ -180,6 +182,7 @@ void runEquipmentAndTaskTests() {
     // ------------------------------------------------------------
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.stones = 500;
 
@@ -201,6 +204,7 @@ void runEquipmentAndTaskTests() {
     // ------------------------------------------------------------
     {
         Game g = createGame(CreateOptions{});
+        g.pending.reset();
         g.player.location = "wuling";
         g.player.stones = 500;
 

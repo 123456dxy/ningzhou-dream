@@ -175,13 +175,13 @@ void mfRunDungeonSweepTests() {
         check(State.dungeons.run && State.dungeons.run->rewards.size() == 1, "最终奖励选择保留原一项，不捏造传承");
     }
     {
-        Game State = mfSweepFixture(3, 3);
+        Game State = mfSweepFixture(6, 6);
         State.player.traits = {"greenBottle"}; State.player.arts.GreenBottleGrade = 3;
         State.player.cave = State.player.location = "wuling"; State.player.caveTier = 2;
         check(mfOpenBottleMaterialDungeon(State, 4).empty(), "共用原子提交后专属灵材秘境仍正常进入");
         if (State.dungeons.run) {
             const string SiteId = State.dungeons.run->siteId;
-            checkEq(State.dungeons.sites.back().stage, State.player.stage, "瓶秘境难度仍同步当前人物，不产生低阶扫荡入口");
+            checkEq(State.dungeons.sites.back().stage, 6, "四阶瓶灵材秘境固定金丹初期，不产生低阶扫荡入口");
             mfCheckSweepRejected(State, SiteId, "当前同境专属秘境已经进入");
         }
     }

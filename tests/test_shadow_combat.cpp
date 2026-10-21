@@ -59,7 +59,7 @@ void runShadowCombatTests() {
     Battle& b = *g.player.arts.battle;
     check(b.shadowPlayer && b.enemyCards.enabled && b.kind == "tianji", "影录使用独立真人战斗入口");
     checkEq(b.enemyMax, reference.max, "真人影录气血与玩家完全同公式，无NPC1.45倍率");
-    checkEq(b.enemyHp, reference.hp, "影录初始气血保留快照状态");
+    checkEq(b.enemyHp, reference.max, "影录使用冻结构筑并以满气血开局");
     checkEq(b.enemySpeed, battleSpeed(q), "永久遁速与装备悟道正确进入影录");
     check(b.shadowPlayer->traits == q.traits && b.shadowPlayer->arts.manuals == q.arts.manuals &&
           b.shadowPlayer->arts.aux == q.arts.aux && b.shadowPlayer->arts.nodes == q.arts.nodes &&
@@ -116,10 +116,12 @@ void runShadowCombatTests() {
     armored.arts.gear = {armor}; armored.arts.equipped["armor"] = armor.id;
     Game guarded = shadowFight(p, armored), unguarded = shadowFight(p, shadowFixture("普通"));
     auto& gb = *guarded.player.arts.battle; auto& ub = *unguarded.player.arts.battle;
+    check(gb.enemyShield > ub.enemyShield, "影子对手的护甲通过每轮护盾生效");
+    checkEq(gb.enemyMax, ub.enemyMax, "影子对手装备护甲不再改变气血上限");
     gb.enemyShield = ub.enemyShield = 0;
     const Preview guardedHit = battlePreview(p, gb, "gold"), plainHit = battlePreview(p, ub, "gold");
     check(guardedHit.damage < plainHit.damage, "敌方真实悟道减伤参与玩家攻击预览与结算");
-    checkEq(gb.enemyMax, battleReferenceState(armored).max, "敌方防具气血效果与玩家同公式");
+    checkEq(gb.enemyMax, battleReferenceState(armored).max, "影子与玩家使用同一权威气血上限");
 
     // 24-action draw loop, including replaying a UID after a shuffle.
     Player draw = shadowFixture("运筹"); draw.arts.nodes = {"5-4"};
@@ -166,12 +168,12 @@ void runShadowCombatTests() {
     Game cleanse = shadowFight(p, cleanser);
     auto& cb = *cleanse.player.arts.battle;
     // 已经形成并保存的23点毒伤属于状态快照；调整伤害基底不应重新放大/缩小它，仍测试精确清掉2点。
-    cb.poison = 3; cb.poisonTurns = 3; cb.poisonDamage = 23;
+    cb.poison = 3; cb.poisonTurns = 1; cb.poisonDamage = 23;
     cb.enemyHp = cb.enemyMax / 2; cb.hand.clear();
     shadowHand(cb, "wood");
     battleTurn(cleanse, "end");
     checkEq(cb.poisonDamage, 21, "影录治疗清毒精确扣2点毒伤，不向下取整成整层");
-    checkEq(cb.poison, 3, "清毒未清空时保留毒层用于毒爆，与玩家相同");
+    checkEq(cb.poison, 3, "清毒未清空时保留持续毒层，与玩家相同");
     check(shadowRoundTrip(cleanse, loaded) && loaded.player.arts.battle->poisonDamage == 21,
           "精确毒伤持久化后不恢复未清毒的伤害");
     const int afterHeal = cb.enemyHp;

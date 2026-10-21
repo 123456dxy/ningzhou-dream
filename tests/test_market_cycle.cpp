@@ -84,13 +84,13 @@ void mfRunMarketCycleTests() {
     }
     {
         Game State = mfMarketCycleGame(); State.player.arts.nodes.clear();
-        checkNear(calendarDetoxPerYear(State.player), 2, "普通角色基础每年化解丹毒2点");
+        checkNear(calendarDetoxPerYear(State.player), 5, "普通角色基础每年化解丹毒5点");
         State.player.arts.poison = 10; State.clock.carry.erase("detox");
         for (int Day = 0; Day < 360; ++Day) {
             const int Decay = calendarTake(State, "detox", calendarDetoxPerYear(State.player) / 360.0);
             State.player.arts.poison = std::max(0, State.player.arts.poison - Decay);
         }
-        checkEq(State.player.arts.poison, 8, "真实小数累积360日正好消散2点");
+        checkEq(State.player.arts.poison, 5, "真实小数累积360日正好消散5点");
     }
 }
 } // namespace nztest

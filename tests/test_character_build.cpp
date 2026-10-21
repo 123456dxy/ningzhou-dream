@@ -92,8 +92,8 @@ void mfRunPortraitCatalogTests() {
         try { static_cast<void>(resolveCreateOptions(Input)); } catch (const std::invalid_argument&) { Rejected = true; }
         check(Rejected, "新增和既有立绘一律拒绝跨性别提交");
     }
-    checkEq(MaleCount, 14, "男性创建列表包含既有十三张及玄道专属");
-    checkEq(FemaleCount, 14, "女性创建列表包含既有十三张及玄道专属");
+    checkEq(MaleCount, 15, "男性创建列表同时包含玄道剑意与剑阵两版");
+    checkEq(FemaleCount, 15, "女性创建列表同时包含玄道剑意与剑阵两版");
     if (std::filesystem::is_directory(AssetDirectory)) {
         for (const auto& Entry : std::filesystem::directory_iterator(AssetDirectory)) {
             const string FileName = Entry.path().filename().string();
@@ -109,6 +109,17 @@ void mfRunPortraitCatalogTests() {
         Player Selected; Selected.gender = Gender;
         Selected.portraitId = Gender == "女" ? "xuandao-female-v1" : "xuandao-male-v1";
         checkStr(playerPortrait(Selected), Expected, "玩家选中玄道外观后人物卡与战斗取同一专属图");
+        const string EffectsId = "xuandao-" + string(Gender == "女" ? "female" : "male") + "-effects-v1";
+        const string EffectsPath = "/assets/portraits/sect-xuandao-" + string(Gender == "女" ? "female" : "male") + "-effects-v1.webp";
+        const auto* EffectsPortrait = findPlayerPortrait(EffectsId);
+        check(EffectsPortrait != nullptr, "玄道高特效男女立绘均注册独立白名单ID");
+        if (EffectsPortrait) {
+            checkStr(EffectsPortrait->name, "玄道·五行剑阵", "高特效版在创建列表以剑阵名称区分");
+            checkStr(EffectsPortrait->src, EffectsPath, "高特效版使用独立资源路径");
+            check(string(EffectsPortrait->src) != Expected, "高特效版不覆盖既有低特效资源");
+        }
+        Selected.portraitId = EffectsId;
+        checkStr(playerPortrait(Selected), EffectsPath, "高特效外观在人物卡与战斗使用同一专属图");
     }
 }
 
@@ -141,7 +152,7 @@ void runCharacterBuildTests() {
     CreateOptions baselineOptions; baselineOptions.seed = 734;
     baselineOptions.traitsExplicit = baselineOptions.allocationExplicit = true;
     const Game baseline = createGame(baselineOptions);
-    // Expected deltas come from the 44 public talent contracts, not from buildCharacter.
+    // Expected deltas come from the 45 public talent contracts, not from buildCharacter.
     // apt, luck, insight, sword marker, alchemy, body, lifespan, stones, herbs.
     const map<string, vector<int>> initialDeltas = {
         {"sword", {6,0,0,16,0,0,0,0,0}}, {"herb", {0,0,0,0,20,0,0,0,4}},
@@ -161,6 +172,7 @@ void runCharacterBuildTests() {
         {"wanderer", {0,3,5,0,0,0,0,0,0}}, {"hard", {0,0,4,0,0,2,0,0,0}},
         {"mortal", {-12,0,0,0,0,0,0,0,0}}, {"immortal", {0,0,10,0,0,0,0,0,0}},
         {"dragonBlood", {0,0,0,0,0,1,0,0,0}},
+        {"artifactHeir", {0,0,0,0,0,0,0,0,0}},
     };
     const auto attributes = [](const Player& player) {
         return vector<int>{player.apt, player.luck, player.insight, player.sword, player.alchemy,

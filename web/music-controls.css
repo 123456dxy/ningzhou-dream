@@ -1,0 +1,71 @@
+/* Shared by the classic and mobile clients. Scope every rule to music UI. */
+.music-open-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 7px 9px;
+  border: 1px solid var(--line, #d6dccd);
+  border-radius: 8px;
+  background: var(--surface, #fffdf5);
+  color: var(--ink, #243c35);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.music-open-button [data-music-indicator] { width: 5px; height: 5px; border-radius: 50%; background: #a6ad9f; }
+.music-open-button[data-music-state="playing"] [data-music-indicator] { background: #37795a; }
+.music-open-button[data-music-state="error"] [data-music-indicator] { background: #a34232; }
+.music-open-button[data-music-state="loading"] [data-music-indicator],
+.music-open-button[data-music-state="waiting"] [data-music-indicator] { background: #a18347; }
+.music-settings-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 0; margin: 10px 0; border-top: 1px solid var(--line, #d6dccd); border-bottom: 1px solid var(--line, #d6dccd); }
+.music-settings-entry > div { min-width: 0; }
+.music-settings-entry strong { font-size: 15px; }
+.music-settings-entry p { margin: 4px 0 0; font-size: 13px; color: var(--muted, #657368); overflow-wrap: anywhere; }
+#music-dialog { width: min(440px, calc(100% - 24px)); max-width: calc(100% - 24px); max-height: calc(100dvh - 24px); padding: 0; margin: auto; border: 1px solid var(--line, #d6dccd); border-radius: 16px; background: var(--surface, #fffdf5); color: var(--ink, #243c35); overflow: auto; overscroll-behavior: contain; }
+#music-dialog::backdrop { background: #172a2570; backdrop-filter: blur(3px); }
+#music-dialog .music-dialog-inner { padding: 24px; min-width: 0; }
+#music-dialog .music-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+#music-dialog .music-dialog-heading h2 { margin: 3px 0 0; font: 24px/1.4 "Songti SC", "SimSun", serif; letter-spacing: .05em; }
+#music-dialog .music-eyebrow { margin: 0; color: var(--muted, #657368); font-size: 12px; letter-spacing: .1em; }
+#music-dialog button { min-height: 44px; font: inherit; font-size: 14px; padding: 8px 12px; border: 1px solid var(--line, #d6dccd); border-radius: 8px; background: var(--surface, #fffdf5); color: var(--ink, #243c35); }
+#music-dialog .music-close-button { flex-shrink: 0; }
+#music-dialog .music-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; cursor: pointer; }
+#music-dialog .music-toggle > span { display: flex; flex-direction: column; gap: 4px; }
+#music-dialog .music-toggle strong { font-size: 16px; }
+#music-dialog .music-toggle small { color: var(--muted, #657368); font-size: 12px; }
+#music-dialog [data-music-enabled] { appearance: none; -webkit-appearance: none; position: relative; flex: 0 0 48px; width: 48px; min-height: 28px; height: 28px; margin: 8px 0; padding: 0; border: 1px solid #a5b1a0; border-radius: 18px; background: #dbe1d4; cursor: pointer; }
+#music-dialog [data-music-enabled]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fffdf5; box-shadow: 0 1px 3px #253f3526; transition: transform .16s; }
+#music-dialog [data-music-enabled]:checked { background: #356d52; border-color: #356d52; }
+#music-dialog [data-music-enabled]:checked::after { transform: translateX(20px); }
+#music-dialog .music-now-playing { padding: 16px; margin: 16px 0 18px; border: 1px solid var(--line, #d6dccd); border-radius: 10px; background: #edf1e6; overflow-wrap: anywhere; }
+#music-dialog .music-weather { margin: 0 0 8px; color: #617364; font-size: 12px; }
+#music-dialog [data-music-title] { display: block; font: 20px/1.5 "Songti SC", "SimSun", serif; }
+#music-dialog .music-selection { margin: 5px 0 0; color: #63715d; font-size: 12px; }
+#music-dialog .music-status { margin: 12px 0 0; font-size: 13px; }
+#music-dialog .music-error { margin: 8px 0 0; color: #a34232; font-size: 13px; }
+#music-dialog .music-retry-button { margin-top: 12px; }
+#music-dialog .music-field { display: flex; flex-direction: column; gap: 9px; margin: 18px 0 0; font-size: 14px; }
+#music-dialog .music-field select { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; padding: 10px 8px; border: 1px solid var(--line, #d6dccd); border-radius: 8px; background: var(--surface, #fffdf5); color: var(--ink, #243c35); font: inherit; }
+#music-dialog .music-volume-label { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#music-dialog [data-music-volume-label] { color: #57735c; font-variant-numeric: tabular-nums; }
+#music-dialog [data-music-volume] { width: 100%; min-width: 0; min-height: 44px; margin: 0; padding: 0; accent-color: #356d52; cursor: pointer; }
+#music-dialog .music-help { margin: 15px 0 0; color: var(--muted, #657368); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+#music-dialog [hidden] { display: none !important; }
+#music-dialog button:focus-visible, #music-dialog input:focus-visible, #music-dialog select:focus-visible, .music-open-button:focus-visible { outline: 3px solid #b99555; outline-offset: 3px; }
+.music-login-entry { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+@media (max-width: 690px) {
+  .nz-mobile-ready .toolbar:not(.nz-tools-open) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .nz-mobile-ready .toolbar:not(.nz-tools-open) > button.music-open-button[data-music-open] { display: inline-flex; }
+}
+@media (max-width: 400px) {
+  #music-dialog .music-dialog-inner { padding: 18px 16px; }
+  .topbar-inner > .music-open-button { min-width: 48px; padding-inline: 6px; gap: 4px; font-size: 12px; }
+  .topbar-inner > .music-open-button > span[aria-hidden] { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #music-dialog [data-music-enabled]::after { transition: none; }
+}

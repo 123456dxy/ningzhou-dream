@@ -1,3 +1,8 @@
+import { captureUiPosition, restoreUiPosition } from './ui-position.mjs';
+import { bindPillBatchControls } from './pill-batch.mjs';
+import { renderAlchemy } from './alchemy.mjs';
+import { renderAscensionTournament } from './ascension-tournament.mjs';
+import { renderTianjiSteward, mountTianjiSteward } from './tianji-steward.mjs';
 // 宁州一梦 · C++ 版前端
 //
 // 设计原则（针对"体验糟糕"的反馈重写过）：
@@ -11,6 +16,8 @@
 'use strict';
 
 import { createBuildPanel } from './build-panel.mjs';
+import { mfCreateMusicControls, mfRenderMusicSettingsEntry } from './music-controls.mjs';
+import { mfRenderZhuji, mfBindZhuji, mfResetZhuji } from './zhuji.mjs';
 import { effectPurpose, renderArtsDetails } from './compact-arts.mjs';
 import { createTianji, renderTianjiReminder } from './tianji.mjs';
 import { ensureLogin } from './login.mjs';
@@ -30,8 +37,12 @@ import { renderAtlas, selectedTravelMode, travelFeedback, isTravelJob } from './
 import { renderLocationArt } from './location-art.mjs';
 import { renderPortrait, battleImpacts, animateBattleImpacts } from './portraits.mjs';
 import { renderDungeons } from './dungeons.mjs';
+import { loadDungeonCardRewardPreference, saveDungeonCardRewardPreference } from './dungeon-card-preferences.mjs';
 import { caveSupplyAccess, renderCaveUpgrade, renderCaveSupplyLimits } from './cave-ui.mjs';
 import { renderEquippedArtifacts, renderBattleArtifacts, renderForgePreview } from './artifacts.mjs';
+import { hasNewForge, forgeRequest, normalizeForgeSelection, editForgeSelection, renderForgeWorkshop } from './forge.mjs';
+import { isArtifactRedraw, artifactRedrawSnapshot, artifactRedrawIsCurrent, toggleArtifactRedraw, artifactRedrawRequest, renderArtifactRedraw } from './artifact-redraw.mjs';
+import { isArtifactStatus, artifactStatusSnapshot, artifactStatusIsCurrent, artifactStatusRequest, renderArtifactStatus } from './artifact-status.mjs';
 import { renderInventoryPanel } from './inventory-panel.mjs';
 import { renderTaskPanel } from './task-panel.mjs';
 import { renderCavePage, cavePlantCountLimit, cavePlantCount } from './cave-panel.mjs';
@@ -47,7 +58,9 @@ import {
   renderTidePanel, renderBondActions,
 } from './friends.mjs';
 
+const musicControls = mfCreateMusicControls();
 let S = null;            // 游戏状态（来自 C++）
+let stewardDispose = null, stewardKind = 'potion';
 let tab = tabFromHash();   // 当前页签
 let selectedNpc = null;  // 选中的人
 let friendBag = null;    // 选中的人的可换物品（/api/npc-bag 结果）
@@ -64,6 +77,7 @@ let mapPanFocus = false;
 let subTab = {};
 const legacyHashParts = location.hash.slice(1).split(/[/?]/);
 if (['forge', 'brew', 'kit'].includes(legacyHashParts[0])) subTab.workshop = legacyHashParts[0];
+if (legacyHashParts[0] === 'workshop' && ['forge', 'brew', 'kit'].includes(legacyHashParts[1])) subTab.workshop = legacyHashParts[1];
 if (legacyHashParts[0] === 'market' && ['brew', 'kit'].includes(legacyHashParts[1])) subTab.workshop = legacyHashParts[1];
 if (legacyHashParts[0] === 'economy' && legacyHashParts[1] === 'forge') subTab.workshop = 'forge';
 // 用途：读取当前子页。
@@ -112,10 +126,13 @@ let forgeSelection = {};
 let forgePreview = null;
 let forgePreviewSerial = 0;
 let forgePreviewLoading = null;
+let forgeView = { slot: null, filters: { owned: true } };
 let artBuildFilter = 'all';
 let artBuildTier = 'initial';
 let spellDaoFilter = 'all';
 let removalSelection = null;
+let artifactRedrawSelection = null;
+let artifactStatusSelection = null;
 let dungeonView = 'sites';
 let dungeonIntelKind = 'all';
 let dungeonIntelSearch = '';
@@ -318,6 +335,7 @@ async function call(path, body) {
     if (data.report) lastReport = data.report;
     if (data.state) {
       const wasReady = S?.breakthrough?.ready, wasStage = S?.player?.stage;
+      if (['new', 'load', 'import', 'checkpoint/restore'].includes(path)) { mfResetZhuji(); renderedUiScope = ''; spellData = null; }
       S = data.state;
       // 秘境离境跨年遇事会保留剩余耗时；按后端恢复指引显示已有的继续推进入口。
       if (data.targetTab === 'chronicle' && (path.startsWith('dungeon/') || path === 'battle/turn')
@@ -407,7 +425,7 @@ function breakthroughBlock() {
   const bt = S.breakthrough, p = S.player;
   if (!bt.ready) return '修为尚未圆满';
   if (p.stones < bt.cost) return `灵石不足（需 ${bt.cost}，有 ${p.stones}）`;
-  if (p.health < 35) return `气血不足（需 35，现 ${p.health}）`;
+  if (p.health < 30) return `气血不足（需 30，现 ${p.health}）`;
   return '';
 }
 
@@ -451,7 +469,7 @@ function renderSidebar() {
   + stat('灵石', fmt(p.stones), '枚')
   + (S.battle
       ? stat('斗法气血', Math.max(0, S.battle.hp), `/ ${S.battle.max}`, 'health')
-      : stat('气血', p.health, '/ 100', 'health'))
+      : stat('气血', p.health, `/ ${p.healthMax ?? '—'}`, 'health'))
   + stat('遁速', p.escapeSpeed ?? '—', '赶路 / 先手 / 脱身')
   + `</div><button class="wide-btn" data-action="goto-tab" data-tab="inventory">行囊与人物面板 →</button>`;
 
@@ -472,7 +490,7 @@ function renderSidebar() {
   + `</div>`
   + (S.breakthrough?.ready
       ? `<button class="bt-cta" data-action="goto-breakthrough">叩关突破 →`
-        + `<small>${escape(breakthroughBlock() || '目标「' + S.breakthrough.next + '」· 成功率 ' + Math.round(S.breakthrough.chance * 100) + '%')}</small></button>`
+        + `<small>${escape(breakthroughBlock() || (p.stage === 2 ? '自选五行凝练或周天冲穴' : '目标「' + S.breakthrough.next + '」· 成功率 ' + Math.round(S.breakthrough.chance * 100) + '%'))}</small></button>`
       : '')
   + `</div>`;
 
@@ -560,7 +578,10 @@ function viewChronicle() {
     : `<div class="empty">这一世的动作会记在这里。</div>`;
 
   const btBlock = breakthroughBlock();
-  const btPanel = `<div id="bt-panel">` + panel('突破境界 · 闭关叩关', `${pct(bt.chance, 0)} 成功率`,
+  const zhujiResult = S.zhuji?.status === 'success' ? `<div data-zhuji-host>${mfRenderZhuji(S.zhuji)}</div>` : '';
+  const btPanel = (p.stage === 2)
+    ? `<div id="bt-panel"><div data-zhuji-host>${mfRenderZhuji(S.zhuji)}</div></div>`
+    : `<div id="bt-panel">` + panel('突破境界 · 闭关叩关', `${pct(bt.chance, 0)} 成功率`,
     `<div style="padding:14px 22px 18px">`
   + `<div class="detail-list" style="border-top:0;padding-top:0">`
   + `<div><label>目标</label><strong>${escape(bt.next)}</strong></div>`
@@ -574,7 +595,7 @@ function viewChronicle() {
   + `<button data-action="save">保存</button>`
   + (window.__NZ_LOCAL__ ? '' : `<button data-action="export-save">导出行卷</button>`)
   + `<button data-action="import-save">导回行卷</button>`
-  + `</div></div>`) + `</div>`;
+  + `</div></div>`) + `</div>` + zhujiResult;
 
   const feedPanel = asideBlock('当前动作',
     `<div class="action-feed">${feedHTML}</div>`);
@@ -708,6 +729,7 @@ function showTravelResult(result, to) {
 let artsReady = false;
 let artsNodes = [];       // 十二大道的节点定义（异步拉一次）
 let spellsReady = false;
+let spellsLoadError = '';
 let spellData = null;     // 神通全表（携带 / 卸下用）
 let spellsRevision = 0;
 
@@ -834,16 +856,18 @@ function viewArts() {
         if (tab === 'arts') render();
         return;
       }
-      spellData = d;
+      if (Array.isArray(d?.spells) && d.spells.length) { spellData = d; spellsLoadError = ''; }
+      else spellsLoadError = d?.error || '神通目录读取失败，已保留当前显示。';
       spellsReady = true;
       spellsLoading = null;
       if (tab === 'arts') render();
     });
   }
   const selectedBuild = (artBuildTier === 'advanced' ? S.advancedBuilds || [] : S.artBuilds || []).find(b => b.id === artBuildFilter);
-  const picker = spellsReady
+  const pickerBody = spellData
     ? renderSpellPicker(spellData, S, { dao: spellDaoFilter, spells: selectedBuild?.spells?.map(s => typeof s === 'string' ? s : s.id) })
     : `<div class="empty">正在读取神通表……</div>`;
+  const picker = (spellsLoadError ? `<p role="alert">${escape(spellsLoadError)} <button type="button" data-action="retry-spells">重新读取</button></p>` : '') + pickerBody;
   const slots = a.spellSlots ?? spellData?.max ?? 4;
   const mandatoryIds = (a.mandatorySpells || []).map(s => typeof s === 'string' ? s : s.id);
   const extraCount = (a.spells || []).filter(id => !mandatoryIds.includes(id)).length;
@@ -862,12 +886,12 @@ function viewArts() {
   if (sub === 'daos') return top + layout(panel('十二大道', `已点亮 ${a.nodes.length} / 60`, body), renderArtsAside(S));
   if (sub === 'builds') return top + panel('流派组合', '看触发条件，搭配功法、神通与道法', `<div style="padding:14px 22px 18px">${builds || '<div class="empty">暂无组合建议。</div>'}</div>`);
   if (sub === 'spells') return top
-    + layout(panel('神通总览', `点击携带或卸下 · ${slots} 个额外槽`, `<div style="padding:14px 22px 18px">`
+    + `<div class="chronicle-layout">` + panel('神通总览', `点击携带或卸下 · ${slots} 个额外槽`, `<div style="padding:14px 22px 18px">`
       + `<div class="spell-filters"><label>大道 <select data-spell-dao>${['all', '金', '木', '水', '火', '土', '神', '体', '剑', '气', '阵'].map(dao => `<option value="${dao}" ${dao === spellDaoFilter ? 'selected' : ''}>${dao === 'all' ? '全部大道' : `${dao}道`}</option>`).join('')}</select></label>`
       + `<button data-action="goto-art-builds">查看流派组合${selectedBuild ? `：${escape(selectedBuild.name)}` : ''}</button>`
-      + (selectedBuild ? `<button data-action="clear-build-filter">显示全部神通</button>` : '') + `</div>${picker}</div>`),
-        asideBlock('已携带神通', spells)
-        + hintBox(['普通攻击与防御固定常备，各五张，不占额外槽。', `额外槽当前 ${slots} 个，每种神通进入牌组两张。`, '换神通后下一场斗法生效。']));
+      + (selectedBuild ? `<button data-action="clear-build-filter">显示全部神通</button>` : '') + `</div>${picker}</div>`)
+      + `<aside class="plan-panel spell-equipped-sidebar"><h3>已携带神通</h3><p class="intro">额外槽 ${extraCount} / ${slots}</p><div class="spell-equipped-scroll" data-ui-scroll="equipped-spells">${spells}</div>`
+      + hintBox(['普通攻击与防御固定常备，各五张，不占额外槽。', `额外槽当前 ${slots} 个，每种神通进入牌组两张。`, '换神通后下一场斗法生效。']) + `</aside></div>`;
   return top + layout(panel('已修功法', '选择主修、辅修或继续修习', `<div style="padding:14px 22px 18px">${manuals}</div>`), renderArtsAside(S))
     + panel('已得功法抄本', '事件、请教或兑换获得的抄本，修习后才能设置主辅修',
       `<div style="padding:14px 22px 18px">${manualSourceRows((S.manualSources || []).filter(m => m.owned && !(S.arts.manuals?.[m.id] > 0)), 'learn') || '<div class="empty">暂无待修习的功法抄本。</div>'}</div>`);
@@ -1009,7 +1033,7 @@ function viewSociety() {
         ? `<p class="panel-note">体魄已过软上限（${S.player.bodyHp.softCap} 点），再加每点只 +2%，封顶 +${Math.round(S.player.bodyHp.cap * 100)}%。</p>`
         : ''}` : '')
       + `<div class="detail-list" style="border-top:0">
-        <div><label>寿元上限</label><strong>${S.player.lifespan} 岁${S.player.lifeBonus ? `（天赋 ${S.player.lifeBonus > 0 ? '+' : ''}${S.player.lifeBonus}）` : ''}</strong></div>
+        <div><label>寿元上限</label><strong>${S.player.lifespan} 岁${S.player.lifeBonus ? `（额外 ${S.player.lifeBonus > 0 ? '+' : ''}${S.player.lifeBonus}）` : ''}</strong></div>
         <div><label>最高境界</label><strong>${escape(S.player.realmName)}${S.player.highestStage > S.player.stage ? `（曾至第 ${S.player.highestStage + 1} 境）` : ''}</strong></div>
       </div>`
       + (S.notorietyNote ? `<p class="panel-note">${escape(S.notorietyNote)}</p>` : ''))
@@ -1286,6 +1310,11 @@ function viewEconomy() {
 // 返回值：炼器子页 HTML；不改成功率、产出、时间和材料消耗。
 function viewForgeWorkshop() {
   const p = S.player;
+  if (!forgeReady && !forgeOpts.materials?.length) return panel('铸炼法器', '读取材料与成器规则',
+    '<div class="forge-loading" role="status"><p>正在读取炼器材料与成品预览…</p><button data-action="forge-retry">重新读取</button></div>');
+  if (hasNewForge(forgeOpts)) return panel('铸炼法器', '十份投料 · 自选主效果',
+    (S.job ? `<div class="forge-job-banner">${renderEconomy(S, [], { materials: [], shapes: [] }).job}</div>` : '')
+    + renderForgeWorkshop(S, forgeOpts, forgeSelection, forgePreview, { view: forgeView }));
   const r = renderEconomy(S, ecoOpts, forgeOpts, forgeSelection, forgePreview);
 
   const aside =
@@ -1294,7 +1323,7 @@ function viewForgeWorkshop() {
   + `<div class="detail-list" style="border-top:0;padding-top:0">`
   + `<div><label>灵石</label><strong>${fmt(p.stones)}</strong></div>`
   + `<div><label>宗门贡献</label><strong>${S.contribution ?? 0}</strong></div>`
-  + `<div><label>气血</label><strong>${p.health} / 100</strong></div>`
+  + `<div><label>气血</label><strong>${p.health} / ${p.healthMax ?? '—'}</strong></div>`
   + `</div>`
   + hintBox(['猎妖与演武需要气血充足。',
              '商会委托每月同类最多三件，做满三件有额外授业。',
@@ -1335,6 +1364,8 @@ async function refreshEconomy() {
         const definitions = await loadForgeOptions();
         if (revision !== economyRevision) return;
         forgeOpts = definitions;
+        if (hasNewForge(definitions)) forgeSelection = normalizeForgeSelection(forgeSelection, definitions);
+        else {
         const defaults = { main: 'iron', aux: 'jade', core: 'wood', shape: definitions.shapes?.[0]?.id };
         if (S.job?.type === 'forge') {
           const [main, aux, core, shape] = (S.job.to || '').split('|');
@@ -1344,6 +1375,7 @@ async function refreshEconomy() {
           const options = key === 'shape' ? definitions.shapes : definitions.materials;
           if (!(options || []).some(option => option.id === forgeSelection[key]))
             forgeSelection[key] = (options || []).find(option => option.id === defaults[key])?.id || options?.[0]?.id || '';
+        }
         }
         forgeReady = true;
         if (economyNeeds().forge) await refreshForgePreview(false);
@@ -1372,7 +1404,7 @@ function refreshEconomyView() {
 // 调用方式：配方选择变化或目录刷新后调用。
 // 返回值：Promise；更新forgePreview，无显式返回值。
 async function refreshForgePreview(redraw = true) {
-  const selection = JSON.stringify(forgeSelection), revision = economyRevision;
+  const selection = JSON.stringify(hasNewForge(forgeOpts) ? forgeRequest(forgeSelection) : forgeSelection), revision = economyRevision;
   if (forgePreviewLoading?.revision === revision && forgePreviewLoading.selection === selection)
     return forgePreviewLoading.promise;
   const serial = ++forgePreviewSerial;
@@ -1387,6 +1419,12 @@ async function refreshForgePreview(redraw = true) {
       return result;
     }).catch(error => ({ info: { valid: false, enabled: false, reason: `${error.message || '配方推演暂未加载。'}请重新选择配料重试。` } }));
     if (serial !== forgePreviewSerial || revision !== economyRevision) return;
+    if (hasNewForge(forgeOpts) && response.info?.availableEffects?.length
+        && !response.info.availableEffects.some(item => item.id === forgeSelection.effect)) {
+      forgeSelection.effect = response.info.availableEffects[0].id;
+      await refreshForgePreview(false);
+      return;
+    }
     forgePreview = response;
   })().finally(() => { if (forgePreviewLoading?.promise === loading) forgePreviewLoading = null; });
   forgePreviewLoading = { promise: loading, revision, selection };
@@ -1413,9 +1451,12 @@ function viewMarket() {
   }
 
   // ---- 坊市买卖 ----
-  const KINDS = [['herb', '药材'], ['material', '炼器材料'], ['potion', '丹药'], ['book', '功法 / 书坊'], ['stock', '突破物品'], ['tide', '进入兽潮坊市']];
+  const KINDS = [['herb', '药材'], ['material', '炼器材料'], ['potion', '丹药'], ['book', '功法 / 书坊'], ['stock', '突破物品'], ['steward', '天机阁执事'], ['tide', '进入兽潮坊市']];
   const tabs = KINDS.map(([k, name]) =>
     `<button class="${shopKind === k ? 'active' : ''}" data-shop="${k}" ${k === 'tide' && S.tide?.market?.open !== true ? 'disabled title="战后坊市尚未开放或已关闭"' : ''}>${name}</button>`).join('');
+  if (tab === 'market' && shopKind === 'steward')
+    return heading('天机阁', '当面购买高阶材料与突破丹，固定价格。', S.inCity ? '城中分号' : '需前往城市')
+      + `<div class="shop-tabs">${tabs}</div>` + renderTianjiSteward(S.tianjiSteward, { kind: stewardKind });
 
   if (tab === 'market' && shopKind === 'tide') {
     return heading('兽潮坊市', '妖潮平定后三十天开放，供应三至五阶药材与炼器材料；按本期排名价支付灵石。', S.tide?.market?.open ? '已开放' : '未开放')
@@ -1461,7 +1502,7 @@ function viewMarket() {
   const stock = S.inCity ? `<div style="padding:12px 22px 4px">
     <div class="shop-row">
       <div><div class="item-name">灵核</div>
-      <div class="item-sub">大境界突破消耗 1 枚，成功率 +10% · 坊市存 ${S.world.coreStock ?? '待查'}</div></div>
+      <div class="item-sub">筑基周天：一次失败恢复本穴冲击次数；五行凝练：第四轮额外随机4气。其他大境界按突破预览 · 坊市存 ${S.world.coreStock ?? '待查'}</div></div>
       <div class="price">${S.coreBuyPrice ?? 0} 灵石</div>
       <div class="qty">已有 ${p.cores ?? 0}</div>
       <button class="buy" data-action="trade-stock" data-kind="cores" data-buy="1" ${p.stones >= S.coreBuyPrice && S.world.coreStock !== 0 ? '' : 'disabled'}>买入</button>
@@ -1470,7 +1511,7 @@ function viewMarket() {
     </div>
     <div class="shop-row">
       <div><div class="item-name">凝元丹</div>
-      <div class="item-sub">大境界突破消耗 1 枚，成功率 +18% · 坊市存 ${S.world.pillStock ?? '待查'}</div></div>
+      <div class="item-sub">筑基：每枚增加随机2点五行灵气，或15点初始真气；其他大境界按突破预览 · 坊市存 ${S.world.pillStock ?? '待查'}</div></div>
       <div class="price">${S.pillBuyPrice ?? 0} 灵石</div>
       <div class="qty">已有 ${p.pills ?? 0}</div>
       <button class="buy" data-action="trade-stock" data-kind="pills" data-buy="1" ${p.stones >= S.pillBuyPrice && S.world.pillStock !== 0 ? '' : 'disabled'}>买入</button>
@@ -1483,25 +1524,8 @@ function viewMarket() {
   const recipeGrades = [...new Set(recipeCatalog.map(o => Number(o.grade)).filter(grade => Number.isInteger(grade) && grade > 0))].sort((a, b) => a - b);
   const recipes = recipeCatalog.filter(o => (brewGrade === 'all' || Number(o.grade) === Number(brewGrade))
     && (!brewSearch || `${o.name} ${o.desc} ${o.reason}`.includes(brewSearch.trim())));
-  const quotedRecipes = recipes.map(o => ({ ...o, batchQuote: brewRequirements(S, o, brewBatch) }));
   if (!recipes.some(recipe => recipe.id === brewSupplyRecipeId)) brewSupplyRecipeId = recipes[0]?.id || '';
-  const brew = quotedRecipes.filter(o => o.batchQuote.enabled);
-  const brewCards = quotedRecipes.map(o =>
-    `<article class="craft-card${o.batchQuote.enabled ? '' : ' card-disabled'}">`
-  + `<div class="craft-top"><strong>${escape(o.name)}</strong>`
-  + `<span class="rate ${o.chance < 0.4 ? 'low' : ''}">成丹 ${pct(o.chance)}</span></div>`
-  + `<div class="craft-cost">开炉 ${o.stoneCost} 灵石 · ${o.days} 天</div>`
-  + `<div class="craft-cost">整批 ${brewBatch} 炉：${o.batchQuote.cost} 灵石 · ${o.batchQuote.days} 天 · 每炉成丹 ${o.output} 枚</div>`
-  + renderBrewIncome(o)
-  + renderPillEffect(S, o.id, { catalog: true })
-  + (o.batchQuote.rows.length ? `<p class="craft-materials">${o.batchQuote.rows.map(item => `${escape(item.name)}：需 ${item.required}，有 ${item.owned}${item.missing ? `，缺 ${item.missing}` : ''}`).join('；')}</p>` : '')
-  + (o.batchQuote.reason ? `<p class="card-why">${escape(o.batchQuote.reason)}</p>` : '')
-    + `<button class="primary" data-action="craft" data-id="${o.id}" ${o.batchQuote.enabled ? '' : 'disabled'}>开炉炼丹</button></article>`).join('')
-    || `<div class="empty">材料或灵石不足，暂时无法开炉。</div>`;
-
-  const blocked = quotedRecipes.filter(o => !o.batchQuote.enabled);
-  const blockedList = blocked.map(o =>
-    `<div class="feed-item bad">${escape(o.name)}：${escape(o.batchQuote.reason)}</div>`).join('');
+  const brew = recipes.filter(recipe => recipe.batchQuotes?.[brewBatch]?.enabled);
 
   // ---- 丹药（服用 / 出售）----
   const potionRows = Object.entries(a.potions || {}).filter(([, n]) => n > 0).map(([id, n]) => {
@@ -1562,19 +1586,11 @@ function viewMarket() {
   if (sub === 'forge') return mHead + mTabs + viewForgeWorkshop();
 
   if (sub === 'brew') {
-    return mHead + mTabs
-      + layout(panel('开炉炼丹', `${brewGrade === 'all' ? '全部品阶' : brewGrade + ' 阶'} · ${recipes.length} 张丹方`, `<div style="padding:14px 22px 18px">
-          <div class="recipe-controls"><label>品阶 <select data-brew-grade><option value="all" ${brewGrade === 'all' ? 'selected' : ''}>全部品阶</option>${recipeGrades.map(grade => `<option value="${grade}" ${String(grade) === brewGrade ? 'selected' : ''}>${grade} 阶</option>`).join('')}</select></label><label>查丹方 <input data-brew-search type="search" placeholder="丹方名称、效果或药材" value="${escape(brewSearch)}"></label>
-          <label>开炉次数 <select data-brew-batch>${[1, 3, 5, 10].map(n => `<option value="${n}" ${n === brewBatch ? 'selected' : ''}>${n} 炉</option>`).join('')}</select></label></div>
-          <p class="panel-note">下方灵石、耗时为每炉投入；批量炼制会逐炉扣料，遇事暂停。</p>
-          <div class="recipe-controls"><label>一键补料丹方 <select data-brew-supply-recipe>${recipes.map(recipe => `<option value="${escape(recipe.id)}" ${recipe.id === brewSupplyRecipeId ? 'selected' : ''}>${escape(recipe.name)}</option>`).join('')}</select></label></div>
-          ${renderCraftSupply(craftSupplyQuote?.key === JSON.stringify({ kind: 'brew', id: brewSupplyRecipeId, batch: brewBatch }) ? craftSupplyQuote.quote : null, { kind: 'brew', id: brewSupplyRecipeId, batch: brewBatch })}
-          <div class="craft-grid">${brewCards}</div>`
-          + (blockedList ? `<details class="blocked-recipes"><summary>暂不可炼 ${blocked.length} 张 · 查看缺料与条件</summary>${blockedList}</details>` : '')
-          + `</div>`),
-        asideBlock('丹药行囊', potionRows)
-          + (S.job?.type === 'brew' ? asideBlock('正在炼制', `<p>${escape(S.job.name)} · 尚余 ${S.job.remaining} 天</p>${renderPillEffect(S, S.job.to)}`) : '')
-          + hintBox([S.job ? `${S.job.name}尚余 ${S.job.remaining} 天，请在岁月纪事推进。` : '没有进行中的安排。']));
+    return mHead + mTabs + renderAlchemy(S, {
+      recipes, grades: recipeGrades, grade: brewGrade, search: brewSearch,
+      batch: brewBatch, selectedId: brewSupplyRecipeId,
+      supplyHTML: renderCraftSupply(craftSupplyQuote?.key === JSON.stringify({ kind: 'brew', id: brewSupplyRecipeId, batch: brewBatch }) ? craftSupplyQuote.quote : null, { kind: 'brew', id: brewSupplyRecipeId, batch: brewBatch }),
+    });
   }
   if (sub === 'kit') {
     return mHead + mTabs
@@ -1613,9 +1629,9 @@ function viewBattle() {
 
   const enemyBadges = [];
   if (b.enemyShield > 0) enemyBadges.push(`盾 ${b.enemyShield}`);
-  if (b.poison > 0) enemyBadges.push(`中毒 ${b.poison} 层${b.poisonTurns ? ` · 剩 ${b.poisonTurns} 回合` : ''}`);
+  if (b.poison > 0) enemyBadges.push(`中毒 ${b.poison} 层 · 本场持续`);
   if (b.burn > 0) enemyBadges.push(`灼烧：每回合 ${b.burn} 点${b.burnTurns ? ` · 剩 ${b.burnTurns} 回合` : ''}`);
-  if (b.soul > 0) enemyBadges.push(`震荡 ${b.soul} / 6 层 · 神识爆发消耗`);
+  if (b.soul > 0) enemyBadges.push(`震荡 ${b.soul} / ${b.resourceCaps?.soul ?? '—'} 层 · 神识爆发消耗`);
 
   // 用途：生成一侧战斗人物区。
   // 流程：按敌我选择立绘、气血、护盾、遁速与状态标签。
@@ -1649,6 +1665,7 @@ function viewBattle() {
                     ${playable ? '' : 'disabled'}>
       <div class="card-top"><span class="card-energy">${c.cost}</span>`
   + `<strong>${escape(c.name)}</strong>`
+  + (c.innate || c.retain ? `<span class="card-school">本命 · ${c.innate ? '固有' : '保留'}</span>` : '')
   + `<span class="card-kind">${escape(cardKind(c))}</span></div>`
   + `<span class="card-school">${escape(c.dao)}系</span>`
   + (generationHint ? `<span class="elemental-generation-badge">${generationHint}</span>` : '')
@@ -1740,6 +1757,8 @@ function removalOptions(card) {
 // 返回值：无返回值。
 function closeRemoval() {
   removalSelection = null;
+  artifactRedrawSelection = null;
+  artifactStatusSelection = null;
   const dlg = $('#battle-target-modal');
   if (dlg?.open) dlg.close();
 }
@@ -1749,6 +1768,24 @@ function closeRemoval() {
 // 调用方式：主渲染或目标选择变化后调用。
 // 返回值：无返回值；更新或关闭目标dialog。
 function renderRemoval() {
+  if (artifactStatusSelection) {
+    const battle = S?.battle, ability = battle?.artifacts?.find(item => item.id === artifactStatusSelection.id);
+    if (!artifactStatusIsCurrent(battle, artifactStatusSelection.snapshot)) { closeRemoval(); return; }
+    const dlg = $('#battle-target-modal');
+    dlg.innerHTML = `<div class="modal-inner removal-dialog"><div class="modal-heading"><div><div class="eyebrow">选择一种状态</div><h2>${escape(ability.name)}</h2></div></div>`
+      + renderArtifactStatus(battle, ability, artifactStatusSelection.selected, { busy: requestBusy }) + '</div>';
+    if (!dlg.open) dlg.showModal();
+    return;
+  }
+  if (artifactRedrawSelection) {
+    const battle = S?.battle, ability = battle?.artifacts?.find(item => item.id === artifactRedrawSelection.id);
+    if (!ability?.playable || !artifactRedrawIsCurrent(battle, artifactRedrawSelection.snapshot)) { closeRemoval(); return; }
+    const dlg = $('#battle-target-modal');
+    dlg.innerHTML = `<div class="modal-inner removal-dialog"><div class="modal-heading"><div><div class="eyebrow">法宝换牌</div><h2>${escape(ability.name)}</h2></div></div>`
+      + renderArtifactRedraw(battle, ability, artifactRedrawSelection.selected, { busy: requestBusy }) + '</div>';
+    if (!dlg.open) dlg.showModal();
+    return;
+  }
   if (!removalSelection) return;
   const card = S?.battle?.hand?.find(c => c.uid === removalSelection.uid);
   const options = card ? removalOptions(card) : [];
@@ -1903,6 +1940,7 @@ async function openSettings() {
   const nextAuto = Number.isFinite(cp?.nextAutoDay) ? `第 ${Math.floor(cp.nextAutoDay / 360) + 1} 年 ${Math.floor(cp.nextAutoDay % 360 / 30) + 1} 月 ${cp.nextAutoDay % 30 + 1} 日` : '每满十年';
   dlg.innerHTML = `<div class="modal-inner"><div class="modal-heading"><h2>存档与行卷</h2>`
     + `<button class="close-modal" data-action="close-settings" aria-label="关闭">×</button></div>`
+    + mfRenderMusicSettingsEntry()
     + `<p class="panel-note">快速保存写入存档位 1；这里可选择其他位置。保存会覆盖该位置，读取会替换当前这一世。</p>`
     + (cp ? `<div class="checkpoint-status"><strong>十年自动存档</strong><p>开局保存基准点，此后每满十年写入自动位。意外死亡后可选择回档；寿尽按这一世的结局正常结算。</p><small>下次自动保存：${escape(nextAuto)} · 已恢复 ${cp.restores || 0} 次</small></div>` : '')
     + d.slots.map(s => `<div class="save-slot${s.automatic ? ' automatic' : ''}"><div><strong>${s.automatic ? '十年自动存档' : `存档位 ${s.slot}`}</strong>`
@@ -1912,6 +1950,7 @@ async function openSettings() {
     + `<div class="settings-row">${window.__NZ_LOCAL__ ? '' : `<button data-action="export-save" ${S ? '' : 'disabled'}>导出行卷</button>`}`
     + `<button data-action="import-save">导回行卷</button></div></div>`;
   if (!dlg.open) dlg.showModal();
+  musicControls.refreshControls();
 }
 
 // 用途：打开支线阅读和分支。
@@ -1982,8 +2021,18 @@ async function refreshSects() {
 // 流程：优先处理结局、秘境与战斗，再渲染页签，绑定局部事件与纪事高度观察。
 // 调用方式：导航、API响应和本地筛选变化时无参调用。
 // 返回值：无返回值；更新DOM。
+let renderedUiScope = '';
+function currentUiScope() {
+  return `${S?.player?.name || ''}:${S?.zhuji?.lifeId || ''}:${tab}:${subTab[tab] || ''}:${!!S?.battle}:${!!S?.pending}:${!!S?.dungeons?.run}`;
+}
 function render() {
+  stewardDispose?.(); stewardDispose = null;
+  const nextUiScope = currentUiScope();
+  const uiPosition = renderedUiScope === nextUiScope ? captureUiPosition($('#workspace'), nextUiScope) : null;
+  renderedUiScope = nextUiScope;
+  musicControls.setWeather(S?.world?.weather);
   if (!S) return;
+  document.body.classList.toggle('zhuji-active', S.zhuji?.status === 'active' && !S.ended);
   synchronizeServiceNavigation();
   tianji.setVisible(tab === 'tianji' && !S.battle && !S.dungeons?.run && !S.ended);
   const oldViewport = document.querySelector('[data-map-viewport]');
@@ -2006,6 +2055,8 @@ function render() {
     if (routeViewport && focusNode) routeViewport.scrollTop = Math.max(0, focusNode.offsetTop - routeViewport.clientHeight * .65);
   } else if (S.battle) {
     $('#workspace').innerHTML = viewBattle();
+  } else if (S.zhuji?.status === 'active') {
+    $('#workspace').innerHTML = `<div data-zhuji-host>${mfRenderZhuji(S.zhuji)}</div>`;
   } else {
     const views = {
       chronicle: viewChronicle, map: viewMap, cave: viewCave, arts: viewArts,
@@ -2015,6 +2066,8 @@ function render() {
       dungeon: () => renderDungeons(S, { mode: dungeonView, intelKind: dungeonIntelKind, intelSearch: dungeonIntelSearch, intelGrade: dungeonIntelGrade }),
     };
     $('#workspace').innerHTML = (views[tab] || viewChronicle)();
+    if (tab === 'chronicle' && S.player.stage < 3 && S.player.age < 40)
+      $('#workspace').insertAdjacentHTML('afterbegin', renderAscensionTournament(S));
     const viewport = document.querySelector('[data-map-viewport]');
     if (viewport) {
       if (mapScroll && mapScroll.zoom === viewport.dataset.zoom && !mapPanFocus) {
@@ -2048,6 +2101,42 @@ function render() {
   }
   if (serviceIntent) $('#workspace').insertAdjacentHTML('afterbegin', renderServiceJourney(S, serviceIntent));
   if (checkpointNotice) $('#workspace').insertAdjacentHTML('afterbegin', `<div class="checkpoint-restored" role="alert"><div><strong>已恢复最近存档</strong><p>${escape(checkpointNotice)}</p></div><button class="subtle" data-action="checkpoint-dismiss">知道了</button></div>`);
+  const ZhujiHost = document.querySelector('[data-zhuji-host]');
+  if (ZhujiHost) mfBindZhuji(ZhujiHost, {
+    scope: () => `classic:${S?.zhuji?.lifeId || S?.player?.name || ''}`,
+    request: async Body => {
+      const Data = Body ? await call('zhuji', Body) : await fetch('/api/zhuji', { cache: 'no-store' }).then(Response => Response.json());
+      if (!Data || Data.error || Data.ok === false) throw new Error(Data?.error || '连接未确认，请刷新当前筑基进度。');
+      return Data;
+    },
+    onState: State => { if (S !== State) { S = State; render(); } },
+    isBusy: () => requestBusy,
+    setBusy: Busy => document.body.setAttribute('aria-busy', String(Busy)),
+  });
+  restoreUiPosition($('#workspace'), uiPosition, currentUiScope());
+  stewardDispose = mountTianjiSteward($('#workspace'), {
+    request: async (Path, Body) => {
+      if (Path.endsWith('/buy')) {
+        const Result = await call('tianji-shop/buy', Body);
+        if (!Result || Result.error || Result.ok === false) throw new Error(Result?.error || '交易未确认。');
+        return Result;
+      }
+      const Response = await fetch(Path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Body) });
+      const Result = await Response.json();
+      if (!Response.ok || Result.error || Result.ok === false) throw new Error(Result.error || '报价读取失败。');
+      return Result;
+    },
+    onKindChange: Kind => { stewardKind = Kind; render(); },
+  });
+  bindPillBatchControls($('#workspace'), {
+    scope: currentUiScope,
+    requestQuote: async Body => {
+      const Response = await fetch('/api/pills/use-quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Body) });
+      const Data = await Response.json(); if (!Response.ok || Data.error) throw new Error(Data.error || '服丹报价失败。'); return Data;
+    },
+    onUse: Body => call('pills/use', Body),
+    isBusy: () => requestBusy,
+  });
   renderPending();
   renderRemoval();
   chronicleResizeObserver?.disconnect();
@@ -2291,6 +2380,8 @@ document.addEventListener('click', async e => {
   const id = btn.dataset.id;
 
   switch (a) {
+    case 'alchemy-select':
+      brewSupplyRecipeId = id; craftSupplyQuote = null; render(); return;
     case 'service-navigation-refresh':
       await call('state', {});
       break;
@@ -2354,7 +2445,54 @@ document.addEventListener('click', async e => {
     case 'artifact-play': {
       const ability = S?.battle?.artifacts?.find(ability => ability.id === id);
       if (!ability?.playable) break;
+      if (isArtifactStatus(ability)) {
+        removalSelection = null;
+        artifactRedrawSelection = null;
+        artifactStatusSelection = { id, selected: null, snapshot: artifactStatusSnapshot(S.battle, ability) };
+        renderRemoval();
+        break;
+      }
+      if (isArtifactRedraw(ability)) {
+        removalSelection = null;
+        artifactStatusSelection = null;
+        artifactRedrawSelection = { id, selected: [], snapshot: artifactRedrawSnapshot(S.battle) };
+        renderRemoval();
+        break;
+      }
       await call('battle/turn', { id });
+      break;
+    }
+    case 'artifact-status-select': {
+      if (!artifactStatusSelection) break;
+      const battle = S?.battle, ability = battle?.artifacts?.find(item => item.id === artifactStatusSelection.id);
+      if (!artifactStatusIsCurrent(battle, artifactStatusSelection.snapshot)) { closeRemoval(); break; }
+      if (ability.targets?.some(item => item.id === id)) artifactStatusSelection.selected = id;
+      renderRemoval(); break;
+    }
+    case 'artifact-status-cancel': closeRemoval(); break;
+    case 'artifact-status-confirm': {
+      const ability = S?.battle?.artifacts?.find(item => item.id === artifactStatusSelection?.id);
+      const body = artifactStatusRequest(S?.battle, ability, artifactStatusSelection?.selected, artifactStatusSelection?.snapshot, { busy: requestBusy });
+      if (!body) { closeRemoval(); toast('状态已变化，请重新选择。', 'warn'); break; }
+      closeRemoval();
+      const result = await call('battle/turn', body);
+      if (result?.error || !result) await call('state', {});
+      break;
+    }
+    case 'artifact-redraw-toggle': {
+      const ability = S?.battle?.artifacts?.find(item => item.id === artifactRedrawSelection?.id);
+      if (!artifactRedrawSelection || !ability) break;
+      artifactRedrawSelection.selected = toggleArtifactRedraw(S.battle, ability, artifactRedrawSelection.selected, id);
+      renderRemoval(); break;
+    }
+    case 'artifact-redraw-cancel': closeRemoval(); break;
+    case 'artifact-redraw-confirm': {
+      const ability = S?.battle?.artifacts?.find(item => item.id === artifactRedrawSelection?.id);
+      const body = artifactRedrawRequest(S?.battle, ability, artifactRedrawSelection?.selected, artifactRedrawSelection?.snapshot);
+      if (!body) { closeRemoval(); toast('手牌已变化，请重新选择。', 'warn'); break; }
+      closeRemoval();
+      const result = await call('battle/turn', body);
+      if (result?.error) await call('state', {});
       break;
     }
     case 'goto-equipment':
@@ -2373,7 +2511,7 @@ document.addEventListener('click', async e => {
       tab = 'map'; setSub('map', 'atlas'); mapFocus = id; mapPanFocus = true; render();
       break;
     case 'dungeon-enter':
-      await call('dungeon/enter', { id });
+      await call('dungeon/enter', { id, cardRewardPreference: loadDungeonCardRewardPreference() });
       break;
     case 'dungeon-sweep':
       await call('dungeon/sweep', { id });
@@ -2544,7 +2682,7 @@ document.addEventListener('click', async e => {
       await call('cave/green-bottle/upgrade', { expectedGrade: Number(btn.dataset.bottleGrade) });
       break;
     case 'green-bottle-dungeon': {
-      const result = await call('cave/green-bottle/dungeon', { grade: Number(btn.dataset.materialGrade), expectedGrade: Number(btn.dataset.bottleGrade) });
+      const result = await call('cave/green-bottle/dungeon', { grade: Number(btn.dataset.materialGrade), expectedGrade: Number(btn.dataset.bottleGrade), cardRewardPreference: loadDungeonCardRewardPreference() });
       if (result && !result.error && result.ok !== false) { tab = 'dungeon'; dungeonView = 'sites'; render(); }
       break;
     }
@@ -2568,6 +2706,18 @@ document.addEventListener('click', async e => {
       break;
     case 'learn':
       await call('arts/learn', { id });
+      break;
+    case 'ascension-tournament':
+      await call('ascension-tournament/enter', {});
+      break;
+    case 'retry-spells':
+      invalidateSpells(); spellsReady = false; spellsLoading = null; render();
+      break;
+    case 'lifebound':
+      await call('arts/lifebound', { spellId: id });
+      break;
+    case 'goto-lifebound':
+      tab = 'arts'; subTab.arts = 'spells'; render();
       break;
     case 'spell':
       await call('arts/spell', { id });
@@ -2677,6 +2827,25 @@ document.addEventListener('click', async e => {
       // 返回值：当前选中材料或器型标识。
       const g = k => document.querySelector(`[data-forge="${k}"]`)?.value || '';
       await call('forge', { main: g('main'), aux: g('aux'), core: g('core'), shape: g('shape') });
+      break;
+    }
+    case 'forge-slot': forgeView.slot = Number(id); render(); break;
+    case 'forge-retry': await refreshEconomyView(); break;
+    case 'forge-picker-close': forgeView.slot = null; render(); break;
+    case 'forge-owned': forgeView.filters.owned = !forgeView.filters.owned; forgeView.page = 0; render(); break;
+    case 'forge-page': forgeView.page = Number(id); render(); break;
+    case 'forge-add': case 'forge-fill': case 'forge-remove': case 'forge-clear': {
+      forgeSelection = editForgeSelection(forgeSelection, forgeOpts, a.slice(6), id, forgeView.slot);
+      if (a === 'forge-add' || a === 'forge-fill') {
+        const empty = forgeSelection.materials.indexOf(''); forgeView.slot = empty < 0 ? null : empty;
+      }
+      await refreshForgePreview(); break;
+    }
+    case 'forge-run-v2': {
+      if (forgePreview?.info?.enabled !== true || !forgePreview.info.quoteToken || requestBusy) break;
+      const result = await call('forge', forgeRequest(forgeSelection, forgePreview.info));
+      if (result?.state) forgeView.slot = null;
+      else if (result?.error) await call('state', {});
       break;
     }
     case 'goto-breakthrough': {
@@ -2977,6 +3146,15 @@ function applyQuantityDraft(input) {
 // 返回值：Promise；无显式返回值。
 document.addEventListener('change', async e => {
   if (requestBusy) return;
+  if (e.target.matches('[data-dungeon-card-mode]')) {
+    const previous = loadDungeonCardRewardPreference();
+    saveDungeonCardRewardPreference({ mode: e.target.value, daos: e.target.value === 'selected' ? previous.daos : [] });
+    render(); return;
+  }
+  if (e.target.matches('[data-dungeon-card-dao]')) {
+    saveDungeonCardRewardPreference({ mode: 'selected', daos: e.target.checked ? [e.target.value] : [] });
+    render(); return;
+  }
   if (applyQuantityDraft(e.target)) return;
   if (e.target.matches('[data-friend-filter]')) {
     friendFilters = normalizeFriendFilters({ ...friendFilters, [e.target.dataset.friendFilter]: e.target.value });
@@ -3011,6 +3189,13 @@ document.addEventListener('change', async e => {
     forgeSelection[e.target.dataset.forge] = e.target.value;
     craftSupplyQuote = null;
     await refreshForgePreview();
+  }
+  if (e.target.matches('[data-forge-field]')) {
+    forgeSelection = editForgeSelection(forgeSelection, forgeOpts, e.target.dataset.field, e.target.value);
+    await refreshForgePreview(); return;
+  }
+  if (e.target.matches('[data-forge-filter]')) {
+    forgeView.filters[e.target.dataset.field] = e.target.value; forgeView.page = 0; render(); return;
   }
   if (e.target.matches('[data-spell-dao]')) { spellDaoFilter = e.target.value; render(); }
   if (e.target.matches('[data-art-build-filter]')) { artBuildFilter = e.target.value; spellDaoFilter = 'all'; render(); }
@@ -3091,7 +3276,7 @@ document.addEventListener('keydown', e => {
 
 $('#modal').addEventListener('cancel', e => { if (S?.pending) e.preventDefault(); });
 $('#battle-target-modal').addEventListener('cancel', closeRemoval);
-$('#battle-target-modal').addEventListener('close', () => { removalSelection = null; });
+$('#battle-target-modal').addEventListener('close', () => { removalSelection = null; artifactRedrawSelection = null; artifactStatusSelection = null; });
 
 // ------------------------------------------------------------
 // 启动

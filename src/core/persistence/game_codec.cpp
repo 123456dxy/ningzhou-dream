@@ -1,5 +1,6 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/persistence/forge_codec.h"
 #include "core/persistence/json_helpers.h"
 #include "core/crafting/market_cycle.h"
 
@@ -10,6 +11,7 @@ Value gameToJson(const Game& game) {
     root.set("format", str(SAVE_FORMAT));
     root.set("version", num(game.version));
     root.set("combatRulesVersion", num(5));
+    root.set("healthRulesVersion", num(2));
     root.set("cultivationUnitScale", num(CultivationUnits::Scale));
     root.set("rng", num(static_cast<double>(game.rng)));
     root.set("seed", num(static_cast<double>(game.seed)));
@@ -182,6 +184,7 @@ Value gameToJson(const Game& game) {
         recordObject.set("breakthroughMajor", Value(job.breakthroughMajor));
         recordObject.set("breakthroughChance", num(job.breakthroughChance));
         recordObject.set("breakthroughFailureLoss", num(job.breakthroughFailureLoss));
+        if (job.ForgeProduct) recordObject.set("forgeProduct", mfGearToJson(*job.ForgeProduct));
         root.set("job", std::move(recordObject));
     }
 
@@ -212,6 +215,8 @@ Value gameToJson(const Game& game) {
             adventureObject.set("stage", num(context.stage));
             adventureObject.set("fee", num(context.fee));
             adventureObject.set("grade", num(context.grade));
+            adventureObject.set("gearTemplateId", str(context.GearTemplateId));
+            adventureObject.set("rewardVersion", num(context.RewardVersion));
             adventureObject.set("book", str(context.book));
             adventureObject.set("npcId", str(context.npcId));
             adventureObject.set("style", str(context.style));
@@ -371,6 +376,7 @@ Game gameFromJson(const Value& root) {
     if (root["job"].isObject()) {
         const Value& recordObject = root["job"];
         Job job;
+        if (recordObject["forgeProduct"].isObject()) job.ForgeProduct = mfGearFromJson(recordObject["forgeProduct"]);
         job.actionType = recordObject["actionType"].asString();
         job.name = recordObject["name"].asString();
         job.plan = recordObject["plan"].asString();
@@ -433,6 +439,8 @@ Game gameFromJson(const Value& root) {
             context.stage = adventureObject["stage"].asInt();
             context.fee = adventureObject["fee"].asInt();
             context.grade = adventureObject["grade"].asInt(1);
+            context.GearTemplateId = adventureObject["gearTemplateId"].asString();
+            context.RewardVersion = adventureObject["rewardVersion"].asInt();
             context.book = adventureObject["book"].asString();
             context.npcId = adventureObject["npcId"].asString();
             context.style = adventureObject["style"].asString();

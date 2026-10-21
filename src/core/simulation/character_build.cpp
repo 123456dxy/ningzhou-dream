@@ -34,6 +34,8 @@ const vector<PlayerPortraitDef>& playerPortraits() {
         {"npc-rogue-male-v1", "散修·云游侠客", "男", "/assets/portraits/npc-rogue-male-v1.webp"},
         {"xuandao-female-v1", "玄道·五行剑意", "女", "/assets/portraits/sect-xuandao-female-v1.webp"},
         {"xuandao-male-v1", "玄道·五行剑意", "男", "/assets/portraits/sect-xuandao-male-v1.webp"},
+        {"xuandao-female-effects-v1", "玄道·五行剑阵", "女", "/assets/portraits/sect-xuandao-female-effects-v1.webp"},
+        {"xuandao-male-effects-v1", "玄道·五行剑阵", "男", "/assets/portraits/sect-xuandao-male-effects-v1.webp"},
     };
     return portraits;
 }

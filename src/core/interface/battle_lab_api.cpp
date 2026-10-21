@@ -253,7 +253,7 @@ json::Value mfStateView(const Session& LabSession) {
         PlayerView.set("name", PlayerState.name);
         PlayerView.set("portrait", playerPortrait(PlayerState));
         PlayerView.set("realmName", realmName(PlayerState.stage));
-        PlayerView.set("hp", Active ? Active->hp : jsRound(Reference.max * PlayerState.health / 100.0));
+        PlayerView.set("hp", Active ? Active->hp : Reference.hp);
         PlayerView.set("max", Active ? Active->max : Reference.max);
     }
     View.set("player", std::move(PlayerView));

@@ -5,6 +5,7 @@
 
 #include "core/sim.h"
 #include "core/source_limits.h"
+#include "core/crafting/forging_product.h"
 
 namespace nz {
 
@@ -84,6 +85,19 @@ void talentBirth(Game& game) {
         player.arts.manuals["bull"] = std::max(1, player.arts.manuals["bull"]);
         if (std::find(player.arts.knownSpells.begin(), player.arts.knownSpells.end(), "gather") ==
             player.arts.knownSpells.end()) player.arts.knownSpells.push_back("gather");
+    }
+    if (hasTalent(player, "artifactHeir")) {
+        for (const char* TemplateId : {"damage_sword", "turn_shield_pearl"}) {
+            auto Product = crafting::mfCreateGearFromTemplate(TemplateId, 2, "talent");
+            if (!Product || player.arts.gear.size() >= 40) continue;
+            Product->id = "talent-artifact-" + std::to_string(game.economy.seq++);
+            const string Slot = Product->slot;
+            const string GearId = Product->id;
+            player.arts.gear.push_back(std::move(*Product));
+            if (!player.arts.equipped.contains(Slot) || player.arts.equipped.at(Slot).empty())
+                player.arts.equipped[Slot] = GearId;
+        }
+        logEvent(game, "self", "护道遗宝伴你入世：破阵灵剑与绵护灵珠已入行囊，可在既有法器槽中使用。", true);
     }
     game.flags["talentBirth"] = 1;
 }

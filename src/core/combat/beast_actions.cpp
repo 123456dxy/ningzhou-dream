@@ -178,7 +178,7 @@ PhaseResult mfExecuteActions(const Player& Defender, Battle& State, bool WriteLo
             State.enemyHp += Gain; Result.Heal += Gain;
         }
         if (State.hp > 0) {
-            if (Action.PoisonDamage) { State.playerPoison = std::max(State.playerPoison, Action.PoisonDamage); State.playerPoisonTurns = 3; }
+            if (Action.PoisonDamage) { State.playerPoison = std::max(State.playerPoison, Action.PoisonDamage); State.playerPoisonTurns = 1; }
             if (Action.BurnDamage) { State.enemyCards.burn = std::min(BATTLE_BURN_CAP, State.enemyCards.burn + Action.BurnDamage); State.enemyCards.burnTurns = 3; }
             if (Action.WeakenLayers) State.enemyWeaken = std::min(2, State.enemyWeaken + Action.WeakenLayers);
             if (Action.ChargeGain) State.enemyCards.charge = std::min(MaximumCharge, State.enemyCards.charge + Action.ChargeGain);

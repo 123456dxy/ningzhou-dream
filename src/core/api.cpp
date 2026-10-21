@@ -6,7 +6,16 @@
 // 设计原则：这一层只做「翻译」，不写任何规则。
 // 所有数值都来自 core，保证和自测覆盖的是同一套代码。
 #include "core/api.h"
+#include "core/interface/forge_api.h"
+#include "core/interface/zhuji_api.h"
 #include "core/interface/green_bottle_api.h"
+#include "core/interface/dungeon_entry.h"
+#include "core/interface/pill_batch_api.h"
+#include "core/interface/alchemy_api.h"
+#include "core/interface/steward_api.h"
+#include "core/interface/ascension_api.h"
+#include "core/exploration/ascension_tournament.h"
+#include "core/progression/lifebound_rules.h"
 #include "core/character_build.h"
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
@@ -417,6 +426,8 @@ AdvanceReport advanceEx(Game& gameState, int days, bool autoStop) {
         if (r.ended) { rep.stopReason = "ended"; break; }
         if (r.pending) { rep.stopReason = "event"; break; }
         if (gameState.player.arts.battle.has_value()) { rep.stopReason = "battle"; break; }
+        // 筑基准备完成后交还玩法操作权，不把长推进的余下天数转为普通计划。
+        if (gameState.player.Zhuji && gameState.player.Zhuji->Status == ZhujiStatus::Active) break;
         // 新兽潮窗口只有60天；遇事暂停不能在一次长推进里直接跳过整场活动。
         if (autoStop && gameState.tide.active && gameState.tide.eventId!=previousTideEvent) {
             rep.stopReason = "event"; break;
@@ -535,6 +546,54 @@ http::Response handle(const http::Request& req) {
     }
     if (route == RouteId::ExportGame && !started())
         return jsonError("当前没有可导出的角色存档。");
+
+    if (route == RouteId::PillBatchQuote) {
+        string RecipeId; int Count = 0;
+        const auto Error = mfReadPillBatchRequest(in, RecipeId, Count);
+        if (!Error.empty()) return jsonError(Error);
+        return jsonOk(mfPillBatchQuoteView(gameState, RecipeId, Count));
+    }
+    if (route == RouteId::PillBatchUse) {
+        const auto Error = mfExecutePillBatch(gameState, in);
+        if (!Error.empty()) return jsonError(Error);
+        return jsonOk(okWithState(gameState));
+    }
+    if (route == RouteId::AlchemyQuote) {
+        Value Output(json::Object{});
+        const auto Error = mfReadAlchemyQuote(gameState, in, Output);
+        return Error.empty() ? jsonOk(Output) : jsonError(Error);
+    }
+    if (route == RouteId::TianjiShop) {
+        Value Output(json::Object{}); Output.set("ok", true);
+        Output.set("tianjiSteward", view::mfTianjiStewardView(gameState));
+        return jsonOk(Output);
+    }
+    if (route == RouteId::TianjiShopQuote) {
+        Value Quote(json::Object{});
+        const auto Error = mfReadTianjiPurchaseQuote(gameState, in, Quote);
+        if (!Error.empty()) return jsonError(Error);
+        Value Output(json::Object{}); Output.set("ok", true); Output.set("quote", std::move(Quote));
+        return jsonOk(Output);
+    }
+    if (route == RouteId::TianjiShopBuy) {
+        const auto Error = mfExecuteTianjiStewardPurchase(gameState, in);
+        return Error.empty() ? jsonOk(okWithState(gameState)) : jsonError(Error);
+    }
+    if (route == RouteId::AscensionTournament) {
+        Value Output(json::Object{}); Output.set("ascensionTournament", view::mfAscensionTournamentView(gameState));
+        return jsonOk(Output);
+    }
+    if (route == RouteId::AscensionTournamentEnter) {
+        if (!in.asObject().empty()) return jsonError("大会报名不接受附加参数。");
+        string Error;
+        if (!mfEnterAscensionTournament(gameState, &Error)) return jsonError(Error);
+        return jsonOk(okWithState(gameState));
+    }
+    if (route == RouteId::ArtsLifebound) {
+        if (in.asObject().size() != 1 || !in["spellId"].isString()) return jsonError("请选择唯一的本命神通spellId。");
+        const auto Error = mfSetLifeboundSpell(gameState, in["spellId"].asString());
+        return Error.empty() ? jsonOk(okWithState(gameState)) : jsonError(Error);
+    }
 
     // ---- 新游戏 ----
     if (route == RouteId::NewGame) {
@@ -701,7 +760,24 @@ http::Response handle(const http::Request& req) {
     }
 
     // ---- 突破 ----
+    if (route == RouteId::Zhuji) {
+        if (req.method == "GET" || in.asObject().empty()) {
+            Value Result(json::Object{});
+            Result.set("zhuji", view::mfZhujiView(gameState));
+            return jsonOk(Result);
+        }
+        Value Result(json::Object{});
+        const std::string Error = mfExecuteZhujiCommand(gameState, in, Result);
+        if (!Error.empty()) return jsonError(Error);
+        if (in["kind"].asString() == "quote") return jsonOk(Result);
+        if (Result["started"].asBool()) advance(gameState, 90);
+        Value Response = okWithState(gameState);
+        Response.set("zhuji", view::mfZhujiView(gameState));
+        Response.set("replayed", Result["replayed"].asBool());
+        return jsonOk(Response);
+    }
     if (route == RouteId::Breakthrough) {
+        if (gameState.player.stage == 2) return jsonError("筑基前请选择五行凝练或周天冲穴。");
         const BreakthroughInfo info = breakthroughInfo(gameState);
         const string blocked = breakthroughReason(gameState, info);
         if (!blocked.empty()) return jsonError(blocked);
@@ -712,7 +788,10 @@ http::Response handle(const http::Request& req) {
         if (info.major) {
             if (gameState.player.pills > 0) gameState.player.pills--;
             if (gameState.player.cores > 0) gameState.player.cores--;
-            gameState.player.arts.breakBuff.clear();
+            if (gameState.player.arts.BreakthroughPillStage == gameState.player.stage) {
+                gameState.player.arts.breakBuff.clear();
+                gameState.player.arts.BreakthroughPillStage = -1;
+            }
         }
         Job j;
         j.actionType = "breakthrough";
@@ -748,7 +827,9 @@ http::Response handle(const http::Request& req) {
             }
             if (!found) return jsonError("没有这个选项。");
         }
-        if (gameState.pending->type == "adventure") {
+        if (gameState.pending->type == AscensionTournamentBattleKind) {
+            mfChooseAscensionTournament(gameState, id);
+        } else if (gameState.pending->type == "adventure") {
             adventureChoose(gameState, id);
         } else {
             Player& player = gameState.player;
@@ -760,7 +841,7 @@ http::Response handle(const http::Request& req) {
                              "你接受金虹剑派的邀请，记下山门所在。前往山门通过入门考核后，方可正式拜师。",
                              true);
                 } else if (id == "study") {
-                    player.insight = std::min(INSIGHT_MAX, player.insight + 8);
+                    player.insight = std::min(std::max(INSIGHT_MAX, player.insight), player.insight + 8);
                     logEvent(gameState, "self", "你向五宗使者请教，记下各自的修炼门径。");
                 } else if (id == "free") {
                     player.stones += 20;
@@ -785,7 +866,7 @@ http::Response handle(const http::Request& req) {
                     logEvent(gameState, "self",
                              "你采走 " + std::to_string(found) + " 份灵药，避开了禁制。");
                 } else if (id == "leave") {
-                    player.insight = std::min(INSIGHT_MAX, player.insight + 5);
+                    player.insight = std::min(std::max(INSIGHT_MAX, player.insight), player.insight + 5);
                     logEvent(gameState, "self", "你记下方位与阵纹，留待日后再访。");
                 }
             }
@@ -806,7 +887,7 @@ http::Response handle(const http::Request& req) {
                 if (Key != "id") return jsonError("扫荡请求包含未知参数。");
             error = mfSweepDungeon(gameState, in["id"].asString());
         }
-        else if (route == RouteId::DungeonEnter) error = dungeonEnter(gameState,strOf(in,"id"));
+        else if (route == RouteId::DungeonEnter) error = mfExecuteDungeonEnter(gameState,in);
         else if (route == RouteId::DungeonChoose) error = dungeonChoose(gameState,strOf(in,"id"));
         else if (route == RouteId::DungeonClaim) error = dungeonClaim(gameState,strOf(in,"id"));
         else if (route == RouteId::DungeonLeave) error = dungeonLeave(gameState);
@@ -822,9 +903,18 @@ http::Response handle(const http::Request& req) {
     if (route == RouteId::BattleTurn) {
         if (!gameState.player.arts.battle.has_value())
             return jsonError("当前没有斗法。");
+        const string StatusError = mfValidateArtifactStatusSelection(gameState.player, *gameState.player.arts.battle, in);
+        if (!StatusError.empty()) return jsonError(StatusError);
         const std::string id = strOf(in, "id");
         const int restores = gameState.checkpoint.restores;
-        const TurnResult r = battleTurn(gameState, id, strOf(in, "target"));
+        vector<string> Targets;
+        const bool HasTargets = in.asObject().contains("targets");
+        if (HasTargets) {
+            const string Error = mfValidateArtifactTargets(*gameState.player.arts.battle, in, Targets);
+            if (!Error.empty()) return jsonError(Error);
+        }
+        const TurnResult r = HasTargets ? battleTurn(gameState, id, strOf(in, "target"), Targets) :
+            battleTurn(gameState, id, strOf(in, "target"));
         if (!r.ok) return jsonError(r.error);
         // 奖励结算已收口在 core 的 battleFinish 里，
         // 所以这里不需要再做什么 —— 见 battle.cpp 的说明。
@@ -1009,6 +1099,10 @@ http::Response handle(const http::Request& req) {
                 gameState.player.arts.spells.size() < static_cast<size_t>(battleSpellSlots(gameState.player))));
             so.set("canUnequip", Value(!mandatory && carried));
             so.set("unlocked", Value(gameState.player.stage >= sp.stage));
+            const auto Lifebound = mfQuoteLifeboundSpell(gameState, sp.id);
+            so.set("isLifebound", Lifebound.IsCurrent);
+            so.set("canSetLifebound", Lifebound.Enabled);
+            so.set("lifeboundReason", Lifebound.Reason);
             std::string reason;
             if (mandatory) reason = "普通招式固定携带，不占额外神通名额。";
             else if (!carried && gameState.player.stage < sp.stage) reason = "需达到" + realmName(sp.stage) + "。";
@@ -1507,6 +1601,9 @@ http::Response handle(const http::Request& req) {
         return jsonOk(o);
     }
 
+    if (route == RouteId::ForgePreview && (in.asObject().contains("version") || in.asObject().contains("materials")))
+        return jsonOk(mfForgePreviewView(gameState, in));
+
     if (route == RouteId::ForgePreview) {
         const string main = strOf(in, "main"), aux = strOf(in, "aux"), core = strOf(in, "core"), shape = strOf(in, "shape", "sword");
         const ForgeInfo forge = artForgeInfo(gameState.player, main, aux, core, shape);
@@ -1565,6 +1662,14 @@ http::Response handle(const http::Request& req) {
     }
 
     // ---- 炼器（要选主料/辅料/灵核/器型）----
+    if (route == RouteId::Forge && (in.asObject().contains("version") || in.asObject().contains("materials"))) {
+        int DurationDays = 0;
+        const string Error = mfBeginForgeRequest(gameState, in, DurationDays);
+        if (!Error.empty()) return jsonError(Error);
+        advance(gameState, DurationDays);
+        return jsonOk(okWithState(gameState));
+    }
+
     if (route == RouteId::Forge) {
         const std::string mainId = strOf(in, "main");
         const std::string auxId = strOf(in, "aux");
@@ -1582,40 +1687,7 @@ http::Response handle(const http::Request& req) {
     }
 
     // ---- 炼器可选项（材料 / 器型）----
-    if (route == RouteId::ForgeOptions) {
-        Value o(json::Object{});
-        o.set("ok", Value(true));
-        {
-            json::Array arr;
-            for (const auto& mt : data::MaterialDef_TABLE()) {
-                Value mo(json::Object{});
-                mo.set("id", str(mt.id));
-                mo.set("name", str(mt.name));
-                mo.set("grade", num(mt.grade));
-                mo.set("element", str(mt.element));
-                mo.set("polarity", str(mt.polarity));
-                auto it = gameState.player.arts.materials.find(mt.id);
-                mo.set("owned", num(it == gameState.player.arts.materials.end() ? 0 : it->second));
-                mo.set("price", num(mt.price));
-                mo.set("buyable", Value(ordinaryMaterialError(gameState.player,mt.grade).empty()));
-                mo.set("source", str(mt.grade <= 2 ? "普通坊市、野外采矿" : "天机阁定向材料秘境，通关保底十份"));
-                arr.push_back(std::move(mo));
-            }
-            o.set("materials", Value(std::move(arr)));
-        }
-        {
-            json::Array arr;
-            for (const auto& sh : data::ShapeDef_TABLE()) {
-                Value so(json::Object{});
-                so.set("id", str(sh.id));
-                so.set("name", str(sh.name));
-                so.set("slot", str(sh.slot));
-                arr.push_back(std::move(so));
-            }
-            o.set("shapes", Value(std::move(arr)));
-        }
-        return jsonOk(o);
-    }
+    if (route == RouteId::ForgeOptions) return jsonOk(mfForgeOptionsView(gameState));
 
     // ---- 机缘（12 项限时机缘）----
     if (route == RouteId::Quest) {

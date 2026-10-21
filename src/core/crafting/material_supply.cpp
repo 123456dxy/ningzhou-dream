@@ -1,4 +1,5 @@
 #include "core/crafting/material_supply.h"
+#include "core/content/forge_content.h"
 #include "core/arts.h"
 #include "core/economy.h"
 #include "core/play.h"
@@ -101,7 +102,25 @@ SalvageQuote salvageQuote(const Game& g, const string& id) {
     for(const auto& [slot,equipped]:g.player.arts.equipped) if(equipped==id) q.reason="请先卸下装备再分解。";
     if(!gear->crafted && q.reason.empty()) q.reason="此法器没有自炼配料记录，可在坊市出售。";
     bool recorded=false; int sourceTotal=0;
-    for(const auto& material:data::MaterialDef_TABLE()) {
+    if (gear->ForgeVersion == 2) {
+        recorded = true;
+        for (const auto& [MaterialId, Count] : gear->SourceMaterials) {
+            const auto* Material = content::mfFindForgeMaterial(MaterialId);
+            if (!Material || Count < 1 || Count > 10) {
+                q.reason = "原始配料记录无效。";
+                continue;
+            }
+            sourceTotal += Count;
+            if (Count / 2 == 0) continue;
+            MaterialRow Row;
+            Row.kind = "material";
+            Row.id = MaterialId;
+            Row.name = Material->Material.name;
+            Row.required = Count / 2;
+            Row.owned = held(g.player.arts.materials, MaterialId);
+            q.materials.push_back(std::move(Row));
+        }
+    } else for(const auto& material:data::MaterialDef_TABLE()) {
         const int count=held(g.flags,sourceKey(id,material.id)); if(count<=0) continue; recorded=true; sourceTotal+=count;
         if(count>10) { q.reason="原始配料记录无效。"; continue; }
         if(count/2>0) { MaterialRow row; row.kind="material"; row.id=material.id; row.name=material.name; row.required=count/2; row.owned=held(g.player.arts.materials,material.id); q.materials.push_back(row); }

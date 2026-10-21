@@ -321,12 +321,13 @@ struct PillUseInfo {
 };
 // 用途：公开服药计划的实际效果和可用条件。
 // 参与流程：服药页面的数值与门槛预览。
-// 使用方式：传角色和丹方，只读计算不复制整个角色或消耗 RNG。
+// 使用方式：传角色和丹方；ActorScale为内部规则系数，玩家1、普通NPC1.45，不接收HTTP输入。
+// NPC临时health须先换成该系数下的绝对点数；只读计算不复制整个角色或消耗RNG。
 // 返回值：PillUseInfo，含实际变化、耐药和拒绝原因。
-PillUseInfo artPillUseInfo(const Player& p, const data::RecipeDef& r);
-// 应用同一服丹计划，不写日志；NPC 使用临时角色视图复用耐药、丹毒与属性上限。
+PillUseInfo artPillUseInfo(const Player& p, const data::RecipeDef& r, double ActorScale = 1.0);
+// 应用同一服丹计划，不写日志；NPC传ActorScale=1.45，以临时绝对气血复用耐药、丹毒与属性结算。
 // 成功为空，失败不改变角色；调用方负责记录动作日志。
-string artApplyPill(Player& player, const string& id);
+string artApplyPill(Player& player, const string& id, double ActorScale = 1.0);
 // 空字符串表示成功；失败不修改任何资源，成功保留原有服药日志。
 // 用途：验证并应用同一服药计划。
 // 参与流程：场外服药动作入口。

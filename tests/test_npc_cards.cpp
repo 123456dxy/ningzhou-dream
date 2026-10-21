@@ -20,12 +20,13 @@ Game npcFight(const string& sect = "xinghe", const string& dao = "水", int stag
     g.pending.reset(); g.npcs.clear();
     g.player.stage = g.player.highestStage = stage;
     g.player.lifespan = realmOf(stage).life + g.player.lifeBonus;
-    g.player.body = 0; g.player.health = 100;
+    g.player.body = 0;
     g.player.arts.main.clear(); g.player.arts.aux.clear();
     g.player.arts.manuals.clear(); g.player.arts.nodes.clear();
     g.player.arts.equipped.clear(); g.player.arts.speed = 200;
     g.player.arts.spells = {"sword", "wood", "skim"};
     ensureArts(g);
+    g.player.health = mfPlayerHealthMaximum(g.player);
     Npc npc;
     npc.id = "card-opponent"; npc.name = "门派试炼";
     npc.sect = sect; npc.dao = dao; npc.stage = stage;
@@ -83,7 +84,7 @@ void runNpcCardTests() {
         checkEq(b.enemyCards.hand.size(), 5, "NPC起手真实抽五张");
         checkStr(b.intentKind, "cards", "NPC意图由真实手牌连招形成");
         check(!b.enemyCards.planned.empty() && partitioned(b.enemyCards), "计划来自合法手牌且四牌堆守恒");
-        checkStr(b.enemyCards.main, "rainform", "炼气星河弟子实际主修可学的化雨诀");
+        checkStr(b.enemyCards.main, "wave", "炼气星河弟子实际使用水道本轮推荐主修");
         bool legal = true;
         for (const auto& card : b.enemyCards.deck) {
             const auto* sp = battleSpell(card.spell);
@@ -104,7 +105,10 @@ void runNpcCardTests() {
         const uint32_t rng = g.rng;
         const string before = saveToJson(g);
         const EnemyPreview preview = battleEnemyPreview(g);
-        checkEq(preview.spells.size(), 2, "意图预览识别实际水势连招");
+        check(preview.spells.size() > 2 && preview.spells.size() <= static_cast<std::size_t>(mfBattleEnemyActionLimit(g, b)),
+              "水势前缀真实补牌后继续合法新牌，完整意图不超过原行动上限");
+        check(preview.spells.size() >= 2 && preview.spells[0] == "waterSeal" && preview.spells[1] == "wavehit",
+              "动态续招仍先执行指定的水印与浪击前缀");
         check(preview.damage > 0 && preview.description.find(battleSpell("wavehit")->name) != string::npos,
               "NPC预览展示实际水势神通文案与伤害");
         check(saveToJson(g) == before && g.rng == rng, "NPC预览不改变随机数、资源或牌堆");
@@ -120,19 +124,21 @@ void runNpcCardTests() {
         Game g = npcFight("zhushan", "木"); Battle& b = *g.player.arts.battle;
         enemyHand(b, {"corrode"});
         battleTurn(g, "end");
-        check(b.playerPoison > 0 && b.playerPoisonTurns == 3 && b.enemyCards.poison >= 3,
+        check(b.playerPoison > 0 && b.playerPoisonTurns == 1 && b.enemyCards.poison >= 3,
               "NPC腐蚀神通真的对玩家施毒");
         const int hp = b.hp;
         enemyHand(b, {}); battleTurn(g, "end");
-        check(b.hp < hp && b.playerPoisonTurns == 2, "NPC毒伤随后真实结算并减少持续回合");
-        enemyHand(b, {"poisonBurst"});
+        check(b.hp < hp && b.playerPoisonTurns == 1, "NPC毒伤随后真实结算并保留本场活跃标记");
+        b.enemyHp = b.enemyMax / 2;
+        enemyHand(b, {"poisonSiphon"});
         const EnemyPreview burst = battleEnemyPreview(g);
-        check(burst.damage > 0, "NPC毒爆预览使用已积攒毒层");
-        const int burstHp = b.hp;
+        check(burst.heal > 0, "NPC借毒治疗预览使用已积攒毒层");
+        const int burstHp = b.hp, EnemyHp = b.enemyHp;
         battleTurn(g, "end");
-        checkEq(burstHp - b.hp, burst.damage, "NPC毒爆预览包含跳毒、毒增长后的真实爆发");
-        checkEq(b.enemyCards.poison, 0, "NPC毒爆实际消耗全部毒层");
-        checkEq(b.playerPoisonTurns, 0, "毒爆后玩家不再保留旧毒持续伤害");
+        checkEq(burstHp - b.hp, burst.damage, "NPC借毒动作仅含正常跳毒，不附带直伤");
+        checkEq(b.enemyHp - EnemyHp, burst.heal, "NPC借毒真实回血和预览一致");
+        check(b.enemyCards.poison > 0, "NPC借毒实际保留毒层");
+        checkEq(b.playerPoisonTurns, 1, "借毒后玩家仍保留本场毒持续伤害");
     }
     {
         Game g = npcFight("lihuo", "火"); Battle& b = *g.player.arts.battle;
@@ -176,14 +182,16 @@ void runNpcCardTests() {
             checkEq(loaded.player.arts.battle->enemyCards.poison, 9, "存档读回保留高于六层的NPC毒");
             checkEq(loaded.player.arts.battle->playerPoison, b.playerPoison, "存档读回保留实际玩家毒伤");
         }
-        for (int remaining = 2; remaining >= 0; --remaining) {
+        const int PoisonDamage = b.playerPoison;
+        for (int Turn = 0; Turn < 5; ++Turn) {
             enemyHand(b, {}); const int hp = b.hp; const auto preview = battleEnemyPreview(g);
-            battleTurn(g, "end");
+            check(battleTurn(g, "end").ok, "NPC持续毒伤通过真实结束回合结算");
             checkEq(hp - b.hp, preview.damage, "NPC持续毒伤的完整回合损失与预览一致");
-            checkEq(b.playerPoisonTurns, remaining, "NPC毒按三回合自然到期");
+            checkEq(hp - b.hp, PoisonDamage, "没有后续施毒或出牌时NPC九层毒仍真实跳伤");
+            checkEq(b.playerPoisonTurns, 1, "NPC毒跨过旧三回合期限仍保留本场活跃标记");
         }
-        checkEq(b.playerPoison, 0, "NPC毒到期清除玩家毒伤");
-        checkEq(b.enemyCards.poison, 0, "NPC毒到期清除敌方存储毒层");
+        checkEq(b.playerPoison, PoisonDamage, "NPC无木功法时本场毒伤持续且不额外增长");
+        checkEq(b.enemyCards.poison, 9, "NPC无木功法时本场持续保留九层毒");
     }
     {
         Game g = npcFight("zhushan", "木"); Battle& b = *g.player.arts.battle;
@@ -221,7 +229,7 @@ void runNpcCardTests() {
         const Battle& slow = *g.player.arts.battle;
         check(!slow.playerFirst && slow.hp < slow.max, "敌方遁速更快时实际抢先攻击");
         const int wounded = slow.hp;
-        battleTurn(g, "escape"); g.player.health = 100; g.player.arts.speed = 200;
+        battleTurn(g, "escape"); g.player.health = mfPlayerHealthMaximum(g.player); g.player.arts.speed = 200;
         battleStart(g, enemy);
         check(g.player.arts.battle->playerFirst && g.player.arts.battle->hp == g.player.arts.battle->max,
               "玩家遁速更快时先手且开局未受攻击");

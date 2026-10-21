@@ -1,4 +1,9 @@
+import { renderArtifactIllustration } from '../../artifact-illustrations.mjs';
+import { renderPillBatchControls } from '../../pill-batch.mjs';
+import { renderAlchemyQuote } from '../../alchemy.mjs';
+import { renderTianjiSteward } from '../../tianji-steward.mjs';
 import { esc, fmt, action, card, empty, tag, tabs, numericPreview, uiButton, legacyLink } from '../ui.mjs';
+import { hasNewForge, renderForgeWorkshop, forgeInscriptionName } from '../../forge.mjs';
 
 // Pure views: all quantities and eligibility come from the latest server state.
 // data: economy (/eco-options), forge (/forge-options), forgePreview (/forge-preview).
@@ -66,12 +71,12 @@ function bagView(state, ui, data) {
   const category = groups.some(group => group.id === requested) ? requested : 'all';
   const all = groups.flatMap(group => group.items.map(item => ({ ...item, category: group.id, key: `${group.id}:${item.id}` })));
   let options = all.filter(item => (category === 'all' || item.category === category) && matchText(query, item.name, item.description, item.id));
-  const selectedKey = ui.inventoryItem || (['use-pill','sell'].includes(ui.playerActionResult?.path) && ui.playerActionResult?.itemId ? `potions:${ui.playerActionResult.itemId}` : '');
+  const selectedKey = ui.inventoryItem || (['use-pill','pills/use','sell'].includes(ui.playerActionResult?.path) && ui.playerActionResult?.itemId ? `potions:${ui.playerActionResult.itemId}` : '');
   let selected = options.find(item => item.key === selectedKey);
   if (!selected && selectedKey.startsWith('potions:')) {
     const id = selectedKey.slice('potions:'.length);
     const pill = pillCatalog.find(item => item.id === id);
-    if (pill && Number(pill.owned) === 0 && ui.playerActionResult?.itemId === id && ['use-pill', 'sell'].includes(ui.playerActionResult?.path)) {
+    if (pill && Number(pill.owned) === 0 && ui.playerActionResult?.itemId === id && ['use-pill', 'pills/use', 'sell'].includes(ui.playerActionResult?.path)) {
       selected = { ...pill, id, key: selectedKey, category: 'potions', amount: 0, description: pill.effect, useEnabled: false, useReason: pill.reason, hasUseInfo: true };
       options = [selected, ...options];
     }
@@ -88,7 +93,7 @@ function bagView(state, ui, data) {
   const risk = isPill ? `<p class="player-risk">${item.poisonAfter == null ? '服后丹毒未提供' : `服后丹毒 ${count(item.poisonAfter)}`} · ${item.toleranceUnlimited ? '不限耐药次数' : item.toleranceRemaining == null ? '耐药次数未提供' : `耐药剩余 ${count(item.toleranceRemaining)} 次`}</p>` : '<p class="player-risk">用途：按当前持有数量使用。</p>';
   let primary = '', secondary = '';
   if (isPill) {
-    primary = action('服用一枚', 'use-pill', { id: item.id }, { className: 'primary', disabled: unavailable(state) || item.useEnabled === false || Number(item.amount) <= 0, title: item.useReason || '' });
+    primary = renderPillBatchControls(item.id);
     secondary = `<details data-disclosure-key="pill-${esc(item.id)}"><summary>服用记录与出售</summary>${note(item.usage)}<p class="meta">已服 ${count(item.used ?? arts.used?.[item.id])} 次${item.sellPrice == null ? '' : ` · 出售 ${count(item.sellPrice)} 灵石 / 枚`}</p>`
       + action(state.inCity ? '出售一枚' : '城中可售', 'sell', { kind: 'potion', id: item.id }, { disabled: !state.inCity || unavailable(state) || Number(item.amount) <= 0 }) + '</details>';
   } else if (item.category === 'herbs') primary = uiButton('查看炼丹需求', 'inventory-tab', 'brew', 'primary');
@@ -97,7 +102,7 @@ function bagView(state, ui, data) {
   const detail = `<section class="player-detail" data-selected-item="${esc(item.key)}"><div class="player-title"><strong>${esc(item.name)}</strong>${tag(`持有 ${fmt(item.amount)}`)}</div>`
     + `<p class="player-effect">${esc(effect)}</p>${risk}`
     + `<p class="player-condition${isPill ? ' player-caution' : ''}">${esc(item.useReason || (isPill ? '即使实际增益为 0，服用也消耗 1 枚并结算丹毒。' : '可查看用途与所需条件。'))}</p><div class="player-actions">${continuation(state) || primary}</div>`
-    + outcome(ui, item.id, ['use-pill', 'sell']) + `<details><summary>完整效果与说明</summary>${note(effect)}${isPill ? note('即使实际增益为 0，服用仍消耗一枚丹药，并按服后丹毒结算。') : ''}</details>` + secondary
+    + outcome(ui, item.id, ['use-pill', 'pills/use', 'sell']) + `<details><summary>完整效果与说明</summary>${note(effect)}${isPill ? note('即使实际增益为 0，服用仍消耗一枚丹药，并按服后丹毒结算。') : ''}</details>` + secondary
     + (item.source ? `<details><summary>获取来源</summary>${note(item.source)}</details>` : '') + '</section>';
   return card('', controls + detail + `<details class="player-filter" data-disclosure-key="bag-search"><summary>查找其他物品 · ${options.length} 项</summary>${searchField('inventory-search', ui.inventorySearch, '搜索')}`
     + `<div class="player-picker">${options.map(candidate => uiButton(`${candidate.name} ×${candidate.amount}`, 'inventory-item', candidate.key, candidate.key === item.key ? 'selected' : '')).join('')}</div></details>`, 'player-workspace');
@@ -124,16 +129,18 @@ function gearView(state, ui) {
   const cost = inscription?.costStones ?? inscription?.cost;
   const sale = quotes.sell, salvage = quotes.salvage;
   const delta = item.passive?.delta;
+  const isNewForge = Number(item.forgeVersion || 0) >= 2;
   const signed = value => `${Number(value) > 0 ? '+' : ''}${fmt(Number(value) || 0)}`;
   const passive = item.passive;
   const primary = passive?.primaryValue == null ? '核心数值待查' : `${passive.primaryStat} +${fmt(passive.primaryValue)}${slot === 'accessory' ? '点' : '个百分点'}`;
   const currentPrimary = equipped?.passive?.primaryValue == null ? equipped ? '核心数值待查' : '未装备' : `+${fmt(equipped.passive.primaryValue)}`;
-  const comparison = delta ? `<p class="player-effect player-gear-effect">${esc(primary)}（当前 ${esc(currentPrimary)}）<br>换装：气血 ${esc(signed(delta.hpMax))} · 回灵 ${esc(signed(delta.manaRegen))} · 攻击 ${esc(signed(delta.attackPct))} 个百分点</p>` : `<p class="player-effect player-gear-effect">${esc(item.passive?.text || '当前服务未提供替换对比。')}</p>`;
+  const comparison = isNewForge ? `<p class="player-effect player-gear-effect">${esc(item.effectText || item.ability?.description || item.passive?.text || '成器效果待读取。')}</p>`
+    : delta ? `<p class="player-effect player-gear-effect">${esc(primary)}（当前 ${esc(currentPrimary)}）<br>换装：气血 ${esc(signed(delta.hpMax))} · 每回合盾 ${esc(signed(delta.roundShieldPct))} 个百分点 · 回灵 ${esc(signed(delta.manaRegen))} · 攻击 ${esc(signed(delta.attackPct))} 个百分点</p>` : `<p class="player-effect player-gear-effect">${esc(item.passive?.text || '当前服务未提供替换对比。')}</p>`;
   const controlsHTML = `<div class="player-actions">${continuation(state) || action(item.equipped ? '卸下' : '装备此法器', item.equipped ? 'gear/unequip' : 'equip', { id: item.id }, { className: 'primary', disabled: unavailable(state) || equipQuote?.enabled !== true, title: equipQuote?.reason || '' })}`
-    + (!item.inscribed ? action(cost == null ? '铭刻 · 待报价' : `铭刻 ${fmt(cost)} 灵石`, 'gear/inscribe', { id: item.id }, { disabled: unavailable(state) || cost == null || inscription?.enabled !== true, title: inscription?.reason || '' }) : action('已铭刻', 'gear/inscribe', { id: item.id }, { disabled: true })) + '</div>';
-  return card('', controls + current + `<section class="player-detail" data-selected-gear="${esc(item.id)}"><div class="player-title"><strong>${esc(item.name)}</strong>${tag(item.equipped ? '已装备' : '待装备')}</div>`
+    + (isNewForge ? '' : !item.inscribed ? action(cost == null ? '铭刻 · 待报价' : `铭刻 ${fmt(cost)} 灵石`, 'gear/inscribe', { id: item.id }, { disabled: unavailable(state) || cost == null || inscription?.enabled !== true, title: inscription?.reason || '' }) : action('已铭刻', 'gear/inscribe', { id: item.id }, { disabled: true })) + '</div>';
+  return card('', controls + current + `<section class="player-detail" data-selected-gear="${esc(item.id)}">${renderArtifactIllustration(item,{compact:true})}<div class="player-title"><strong>${esc(item.name)}</strong>${tag(item.equipped ? '已装备' : '待装备')}</div>`
     + `<p class="player-context">${count(item.grade)} 阶${item.inscribed ? ' · 已铭刻' : ''} · 持有 ${count(state.player?.stones)} 灵石</p>` + comparison
-    + `<p class="player-condition">${esc(equipQuote?.reason || (!item.inscribed ? inscription?.reason || (cost == null ? '铭刻费用待服务端报价。' : `铭刻需 ${fmt(cost)} 灵石。`) : '当前法器已铭刻。'))}</p>` + (cost == null ? legacyLink('在经典界面查看铭刻') : '') + controlsHTML
+    + `<p class="player-condition">${esc(equipQuote?.reason || (isNewForge ? `${forgeInscriptionName(item.inscription)} · 主效果与灵纹已在成器时确定。` : !item.inscribed ? inscription?.reason || (cost == null ? '铭刻费用待服务端报价。' : `铭刻需 ${fmt(cost)} 灵石。`) : '当前法器已铭刻。'))}</p>` + (!isNewForge && cost == null ? legacyLink('在经典界面查看铭刻') : '') + controlsHTML
     + outcome(ui, item.id, ['equip', 'gear', 'sell'])
     + `<details data-disclosure-key="gear-${esc(item.id)}"><summary>完整属性与法宝神通</summary>${note(item.passive?.text)}${abilityView(item.ability)}</details>`
     + `<details data-disclosure-key="gear-dispose-${esc(item.id)}"><summary>出售 / 分解</summary>${note('会永久移除此法器，提交前再次确认。')}<div class="player-actions">`
@@ -157,8 +164,10 @@ function furnaceView(state, ui) {
 
 function marketView(state, ui) {
   if (!state.inCity) return empty('此地没有坊市。前往城池后即可买卖。');
-  const kinds = [['potion', '丹药'], ['herb', '药材'], ['material', '材料'], ['gear', '法器']];
+  const kinds = [['potion', '丹药'], ['herb', '药材'], ['material', '材料'], ['steward', '天机阁执事']];
   const kind = kinds.some(([key]) => key === ui.marketKind) ? ui.marketKind : 'potion';
+  if (kind === 'steward') return `<div class="player-controls">${selectControl('market-kind-tab', '类别', kinds, kind)}</div>`
+    + renderTianjiSteward(state.tianjiSteward, { kind: ui.stewardKind || 'potion' });
   const availability = ui.marketAvailability === 'all' ? 'all' : 'affordable';
   const query = String(ui.marketSearch || '').trim().toLocaleLowerCase();
   const stones = Number(state.player?.stones) || 0;
@@ -194,28 +203,36 @@ function marketView(state, ui) {
     + `<details class="card"><summary>突破物品与功法书坊</summary>${stocks}${bookshop}</details>`;
 }
 
-function brewView(state, ui) {
+function brewView(state, ui, data) {
   const batch = [1, 3, 5, 10].includes(Number(ui.brewBatch)) ? Number(ui.brewBatch) : 1;
   const query = String(ui.brewSearch || '').trim().toLocaleLowerCase();
   const recipes = list(state.brewOptions).filter(item => matchText(query, item.name, item.desc, item.reason));
   const item = recipes.find(item => item.id === (ui.recipeId || (ui.playerActionResult?.path === 'craft' ? ui.playerActionResult.itemId : ''))) || recipes[0];
   const controls = `<div class="player-controls">${selectControl('brew-batch', '炉数', [1,3,5,10].map(value => [value, value + ' 炉']), batch)}${selectControl('brew-select', '丹方', recipes.length ? recipes.map(item => [item.id, `${item.name}${item.enabled ? ' · 可炼' : ''}`]) : [['', '暂无丹方']], item?.id || '')}</div>`;
   if (!item) return card('', controls + empty('没有符合条件的丹方。') + searchField('brew-search', ui.brewSearch, '搜索丹方'), 'player-workspace');
-  return card('', controls + `<section class="player-detail" data-selected-recipe="${esc(item.id)}"><div class="player-title"><strong>${esc(item.name)}</strong>${tag(`成丹 ${fmt(Number(item.chance || 0) * 100)}%`)}</div>`
-    + `<p class="player-context">每炉 ${count(item.stoneCost)} 灵石 · ${count(item.days)} 天 · 成功产出 ${Number.isFinite(item.output) ? count(item.output) + ' 枚' : '待报价'}</p>`
-    + `<p class="player-context">收购 ${Number.isFinite(item.sellPrice) ? fmt(item.sellPrice) + ' 灵石/枚' : '待报价'} · 每炉期望毛收入 ${Number.isFinite(item.expectedSaleIncome) ? fmt(item.expectedSaleIncome) + ' 灵石' : '待报价'}</p>`
-    + `<p class="player-effect">${esc(item.desc || '药效说明尚未提供。')}</p>`
-    + `<p class="player-risk">期望不是保底，未扣材料与炉费；出售受本月收购资金限制。现有 ${count(state.player?.stones)} 灵石。</p>`
-    + `<p class="player-condition">${esc(item.reason || (item.enabled ? '当前这一炉材料与条件齐备。' : '当前无法炼制。'))}</p>`
-    + `<div class="player-actions">${continuation(state) || action(`炼制 ${batch} 炉`, 'craft', { kind: 'brew', id: item.id, batch }, { className: 'primary', disabled: item.enabled !== true || unavailable(state), title: item.reason || '' })}</div>`
-    + outcome(ui, item.id, ['craft'])
-    + `<details><summary>材料报价与完整药效</summary>${note('服务端未提供完整材料的所需 / 持有数量，也未提供整批总费用。以上为每炉报价；批量逐炉校验与结算。')}${legacyLink('在经典界面查看完整炼丹功能')}${note(item.desc)}</details></section>`
+  const quote = item.batchQuotes?.[batch];
+  const supplyKey = JSON.stringify({kind:'brew',id:item.id,batch});
+  const supply = data.alchemySupply?.key === supplyKey ? data.alchemySupply.quote : null;
+  const supplyCost = supply?.totalCost ?? supply?.cost;
+  const supplyHTML = `<details data-disclosure-key="alchemy-supply"><summary>一键补料 · 与开炉费分列</summary>`
+    + (supply ? (supply.rows || supply.materials || []).map(row => note(`${row.name}：需 ${row.required} / 有 ${row.owned} / 缺 ${row.missing ?? row.buyCount ?? 0}`)).join('') + note(supply.reason || supply.error) + note(Number.isFinite(supplyCost) ? `补料费用 ${supplyCost} 灵石` : '') : note('先核对当前丹方、本批炉数与当地货源。'))
+    + uiButton(supply ? '刷新补料报价' : '查看补料报价','alchemy-supply-quote',supplyKey)
+    + (supply?.enabled && Number.isFinite(supplyCost) ? action('确认购买缺料','craft/materials/buy',{kind:'brew',id:item.id,batch,expectedCost:supplyCost},{disabled:unavailable(state)}) : '') + '</details>';
+  return card('', controls + `<section class="player-detail" data-selected-recipe="${esc(item.id)}"><div class="player-title"><strong>${esc(item.name)}</strong>${tag(`${item.grade} 阶`)}</div>`
+    + `<p class="player-effect">${esc(item.catalogEffect || item.baseEffect || item.desc || '药效说明尚未提供。')}</p>`
+    + note(item.usage) + `<p class="player-risk">服用丹毒 ${count(item.poison)} 点；按逐枚耐药规则服用。</p>`
+    + renderAlchemyQuote(quote)
+    + `<p class="player-context">开炉时一次投入整批材料与费用。完成时逐炉判定实际成丹；期望产量不保证成丹或出售收入，失败炉次投入不返还。</p>`
+    + `<div class="player-actions">${continuation(state) || action(`开炉 ${batch} 炉`, 'craft', { kind: 'brew', id: item.id, batch }, { className: 'primary', disabled: quote?.enabled !== true || unavailable(state), title: quote?.reason || '' })}</div>`
+    + outcome(ui, item.id, ['craft','craft/materials/buy']) + supplyHTML + '</section>'
     + `<details data-disclosure-key="brew-search"><summary>查找其他丹方 · ${recipes.length} 张</summary>${searchField('brew-search', ui.brewSearch, '名称或缺少的材料')}</details>`, 'player-workspace');
 }
 
 function forgeView(state, ui, data) {
   const materials = list(data.forge?.materials), shapes = list(data.forge?.shapes);
   if (!materials.length || !shapes.length) return empty(data.forge?.error || '正在读取炼器材料与器型…');
+  if (hasNewForge(data.forge)) return renderForgeWorkshop(state, data.forge, ui.forge, data.forgePreview,
+    { mode: 'mobile', view: ui.forgeView || { filters: { owned: true } }, continuation: continuation(state) }) + outcome(ui, null, ['forge']);
   const selected = ui.forge || {};
   const inputs = [['main', '主料'], ['aux', '辅料'], ['core', '灵核'], ['shape', '器型']].map(([key, label]) => {
     const options = key === 'shape' ? shapes : materials;
@@ -259,7 +276,7 @@ export function renderInventory(state = {}, ui = {}, data = {}) {
     const requestedWorkshop = ['brew', 'forge', 'furnace'].includes(ui.inventoryTab) ? ui.inventoryTab : ui.workshopTab;
     const selected = ['brew', 'forge', 'furnace'].includes(requestedWorkshop) ? requestedWorkshop : 'brew';
     return tabs('workshop', [['brew', '炼丹'], ['forge', '炼器'], ['furnace', '丹炉维护']], selected)
-      + (selected === 'forge' ? forgeView(state, ui, data) : selected === 'furnace' ? furnaceView(state, ui) : brewView(state, ui));
+      + (selected === 'forge' ? forgeView(state, ui, data) : selected === 'furnace' ? furnaceView(state, ui) : brewView(state, ui, data));
   };
   const renderers = { bag: () => bagView(state, ui, data), gear: () => gearView(state, ui), market: () => marketView(state, ui), workshop, jobs: () => jobsView(state, data) };
   return `<section class="stack player-page" aria-label="行囊与工坊"><div class="player-page-heading"><h1 class="section-title">行囊</h1>${tag(`${fmt(state.player?.stones || 0)} 灵石`)}</div>`

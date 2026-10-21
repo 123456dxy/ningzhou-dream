@@ -2,6 +2,7 @@
 #include "core/api.h"
 #include "core/arts.h"
 #include "core/checkpoint.h"
+#include "core/combat/battle_scaling.h"
 #include "core/save.h"
 #include "core/sim.h"
 #include "core/tide.h"
@@ -18,6 +19,8 @@ Game apiTideFixture(int stage = 9) {
     game.npcs.clear(); game.pending.reset(); game.job.reset(); game.player.arts.battle.reset();
     game.checkpoint=AutoCheckpoint{};
     game.player.stage=game.player.highestStage=stage; game.player.lifespan=5000;
+    // 入场合同测试使用所选境界的满血角色，避免炼气开局残留气血在高阶敌人先手时立即结束一世。
+    game.player.health=mfPlayerHealthMaximum(game.player);
     game.player.location="wuling"; game.player.stones=100000;
     game.tide=BeastTide{}; game.tide.active=true;
     tide::ensureTide(game);
@@ -127,6 +130,7 @@ void runTideApiTests() {
         const auto response=tideRequest("tide/fight",battlefieldBody(json::Value(battlefield)));
         checkEq(response.status,200,"合法战场"+std::to_string(battlefield)+"能通过真实接口入场");
         check(session.g.player.arts.battle && session.g.player.arts.battle->kind=="tide" &&
+              session.g.player.arts.battle->enemyBeast &&
               session.g.player.arts.battle->tideBattlefield==battlefield &&
               session.g.player.arts.battle->enemyStage>=battlefield*3 &&
               session.g.player.arts.battle->enemyStage<=battlefield*3+2,"入场生成所选境界的真实妖兽和来源账本");

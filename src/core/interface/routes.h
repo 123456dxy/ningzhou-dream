@@ -24,6 +24,7 @@ enum class RouteId {
     Bond,
     BookBuy,
     Breakthrough,
+    Zhuji,
     BuildCheck,
     BuildOptions,
     Buy,
@@ -102,6 +103,15 @@ enum class RouteId {
     UsePill,
     Wild,
     DungeonSweep,
+    ArtsLifebound,
+    PillBatchQuote,
+    PillBatchUse,
+    AlchemyQuote,
+    TianjiShop,
+    TianjiShopQuote,
+    TianjiShopBuy,
+    AscensionTournament,
+    AscensionTournamentEnter,
 };
 struct RouteInfo {
     RouteId id;

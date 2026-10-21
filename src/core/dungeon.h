@@ -58,6 +58,8 @@ bool dungeonNodeAvailable(const DungeonRun& run, const string& nodeId);
 // 使用方式：传 site ID，内部校验后复制奖励和构建临时牌组/路线。
 // 返回值：成功为空并建立 run/入场标记；失败为原因。
 string dungeonEnter(Game& g, const string& siteId);
+// 用途：验证并冻结本次临时卡奖励偏好；流程：秘境目录进入；用法：传入口和偏好，非法偏好在初始化/入场前拒绝；返回：错误或空，永久奖励和携带牌不变。
+string mfEnterDungeonWithCardRewards(Game& State, const string& SiteId, const DungeonCardRewardPreference& Preference);
 // 用途：按入口大境界与真实入场资格报价一键扫荡；流程：目录按钮和实际命令共用。
 // 使用：传现有site ID，不生成入口、时间或RNG；返回：资格/原因及离境结算的一天耗时。
 DungeonSweepQuote mfQuoteDungeonSweep(const Game& State, const string& SiteId);
@@ -66,6 +68,8 @@ DungeonSweepQuote mfQuoteDungeonSweep(const Game& State, const string& SiteId);
 string mfSweepDungeon(Game& State, const string& SiteId);
 // 用途：按已验证瓶阶创建并进入一次专属灵材秘境；流程：green_bottle命令；返回：错误或空，真实爬塔/结算，无额外门票和人物境界锁。
 string mfOpenBottleMaterialDungeon(Game& State, int MaterialGrade);
+// 用途：以同一入场偏好开启瓶境；流程：洞府专属材料秘境；用法：传材料品阶和临时卡偏好；返回：错误或空，非法偏好不会生成入口或改变状态。
+string mfOpenBottleMaterialDungeon(Game& State, int MaterialGrade, const DungeonCardRewardPreference& Preference);
 // 用途：进入可达节点并开始战斗或形成节点奖励。
 // 参与流程：探索路线选择动作。
 // 使用方式：传游戏和 node ID，战斗上下文先登记再调用 battleStart。

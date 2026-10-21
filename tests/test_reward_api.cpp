@@ -189,6 +189,8 @@ void runRewardApiTests() {
         if (!api::game().dungeons.run) return;
         auto view = rewardDungeons()["run"];
         const string frozen = view["bossRewards"].dump();
+        const auto MigratedStones = rewardOfKind(view["bossRewards"], "stones");
+        checkEq(MigratedStones["amount"].asInt(), 750, "缺少冻结主奖的旧筑基副本按当前三倍档补建七百五十灵石选项");
         check(view["phase"].asString() == "reward" && !view["bossRewardClaimed"].asBool() && view["targetKind"].asString().empty(), "旧v4导入仅迁移到新永久待选状态");
         check(api::game().player.arts.knownSpells == known && api::game().player.stones == stones && api::game().dungeons.run->stones == stash && api::game().rng == rng, "迁移不发知识或灵石，也不消耗世界随机数");
         checkEq(api::game().dungeons.run->materials["iron"], material, "旧通关材料库存保留且不再额外发十份");
@@ -197,7 +199,7 @@ void runRewardApiTests() {
         check(rewardDungeons()["run"]["bossRewards"].dump() == frozen && saveToJson(api::game()) == exported["game"].asString(), "新版本再导入完整保持冻结奖励与原存档");
         checkEq(rewardRequest("dungeon/claim", rewardInput("id", "boss-stones")).status, 200, "迁移后的永久待选项可实际领取");
         const int claimedStash = api::game().dungeons.run->stones;
-        checkEq(claimedStash, stash + 490, "筑基旧副本补领奖励只发一次四百九十灵石");
+        checkEq(claimedStash, stash + MigratedStones["amount"].asInt(), "旧副本补领奖励只兑现一次迁移后已冻结的实际金额");
         const auto completed = json::Value::parse(rewardRequest("export").body);
         checkEq(rewardRequest("import", rewardInput("game", completed["game"].asString())).status, 200, "已领取的升级收益可完整导出再导入");
         view = rewardDungeons()["run"];

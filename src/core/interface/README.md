@@ -12,8 +12,11 @@
 | `views.h` / `state_views.cpp` | 内部视图组合契约、`ViewContext` 与完整 state |
 | `player_views.cpp`、`arts_views.cpp`、`world_views.cpp`、`social_views.cpp`、`economy_views.cpp`、`equipment_views.cpp`、`battle_views.cpp` | 各领域 JSON 视图与数值预览 |
 | `api_exploration.cpp` | 秘境、洞府、检查点 JSON 视图 |
+| `dungeon_entry.cpp` / `dungeon_entry.h` | 普通与绿瓶入场的临时奖励偏好严格解析；全部/不出为空系，指定奖励仅接受一个稳定道系，委托领域校验 |
 | `cave_views.cpp` / `cave_views.h` | 洞府管理资格、训练、12苗批次灵田与永久日增权威快照；查询不生长或扣费 |
 | `green_bottle_api.cpp` / `green_bottle_api.h` | 永久瓶阶/材料/成熟周期/专属秘境视图与严格命令解析；真实规则委托crafting |
+| `steward_api.cpp` / `steward_api.h` | 五城执事身份/货架/纯报价视图与严格购买参数解析；不修改个人行囊或独立存档 |
+| `zhuji_api.cpp` / `zhuji_api.h` | 筑基公开快照、严格准备/报价/动作/本命绑定解析；局部随机种子不对客户端开放 |
 | `craft_price_views.cpp` / `craft_price_views.h` | 完整材料市价、1.5/3倍基价及法器额外售价乘区的协议编码 |
 | `view_policy.h` / `view_policy.cpp` | 视图与动作共享的阻止理由 |
 | `view_helpers.h` | 视图内部的 JSON/格式工具 |
@@ -36,9 +39,12 @@ transport 生成 `http::Request` → 外层 Web 服务处理账号与会话 → 
 - 前端收到的 JSON 字段是协议；内部函数或展示文字重命名不等于协议字段可随意变更。
 - 预览的阻止理由与执行资格保持一致；过期请求仍要在动作入口重新检查。
 - 会话绑定只在边界进行；transport 的 API 串行锁是当前并发前提。
+- `/api/zhuji` 同时提供GET纯查询及POST的 `start/quote/action/bind`，具体命令再区分查询与写入。快照中的 `lifeId/revision`、动作中的 `requestId` 和持久收据共同约束过期/重放请求；`quote` 不保存、不推进时钟或活动随机流。准备完成由真实90天安排回调激活，成功定型一次结算。
+- 完整state包含 `zhuji`。经典与v2界面共用 `web/zhuji.mjs`，stage2展示路线选择，active专用工作区展示玩法；成功结果保留本命选择，后续境界原突破入口仍可用。经典手机快捷突破入口定位同一面板。主app在新建、读取、导入、检查点恢复和退出账号时显式重置模块，账号/人生改变后的旧异步响应不得覆盖当前state或释放新动作busy。
+- 玩家视图给出绝对 `health/healthMax`，斗法内读取冻结Battle的当前/最大值；NPC/秘境内部百分比留在对应适配边界。丹药目录用 `catalogEffect`，当前服用用 `effect/effectValue` 及实际变化，两套网页共用后端报价，不复制恢复、寿元或基础气血公式。金丹与元婴本轮保持原突破协议与规则。
 
 ## 已有测试
 
-`tests/test_api.cpp`、`test_api_refactor.cpp`、`test_display_contract.cpp`、`test_numeric_previews.cpp`、`test_renown_artifact_api.cpp`、`test_reward_api.cpp`；端到端工具包括 `tools/check-web.mjs`、`v2-contract-check.mjs`、`v2-http-check.mjs`。测试与工具名用于导航，本 README 不代表这些工具本轮已运行。
+`tests/test_api.cpp`、`test_api_refactor.cpp`、`test_display_contract.cpp`、`test_numeric_previews.cpp`、`test_renown_artifact_api.cpp`、`test_reward_api.cpp`；三项集成补充 `test_zhuji.cpp`、`test_pill_revision.cpp`、`test_absolute_health.cpp`。端到端工具包括 `tools/check-web.mjs`、`v2-contract-check.mjs`、`v2-http-check.mjs`、`check-zhuji.mjs`、`check-pill-revision-http.mjs`。测试与工具名用于导航，本 README 不代表这些工具本轮已运行。
 
 完整声明与内部协作接口分表见 [C++ API 索引](../../../docs/CPP_API_INDEX.md)。

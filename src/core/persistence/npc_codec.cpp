@@ -1,5 +1,6 @@
 // Internal save implementation; public API remains in core/save.h.
 #include "core/persistence/internal.h"
+#include "core/persistence/forge_codec.h"
 #include "core/persistence/json_helpers.h"
 #include "core/artifact.h"
 #include "core/arts.h"
@@ -28,24 +29,7 @@ Value npcToJson(const Npc& npc) {
     npcObject.set("bag", mapToJson(npc.bag));
     {
         json::Array gearArray;
-        for (const auto& gear : npc.gear) {
-            Value gearObject(json::Object{});
-            gearObject.set("id", str(gear.id));
-            gearObject.set("name", str(gear.name));
-            gearObject.set("slot", str(gear.slot));
-            gearObject.set("element", str(gear.element));
-            gearObject.set("grade", num(gear.grade));
-            gearObject.set("bonus", num(gear.bonus));
-            gearObject.set("inscribed", Value(gear.inscribed));
-            gearObject.set("price", num(gear.price));
-            gearObject.set("polarity", str(gear.polarity));
-            gearObject.set("craftCost", num(gear.craftCost));
-            gearObject.set("crafted", Value(gear.crafted));
-            gearObject.set("shape", str(gear.crafted && gear.shape.empty() ? artifactShape(gear) : gear.shape));
-            json::Array dims; for (int d : gear.dimensions) dims.push_back(num(d));
-            gearObject.set("dimensions", Value(std::move(dims)));
-            gearArray.push_back(std::move(gearObject));
-        }
+        for (const auto& Item : npc.gear) gearArray.push_back(mfGearToJson(Item));
         npcObject.set("gear", Value(std::move(gearArray)));
     }
     npcObject.set("equipped", strMapToJson(npc.equipped));
@@ -60,13 +44,16 @@ Value npcToJson(const Npc& npc) {
         pills.set("poison", num(state.poison));
         pills.set("aptPills", num(state.aptPills));
         pills.set("hpBonus", num(state.hpBonus));
+        pills.set("baseHealthBonus", num(state.BaseHealthBonus));
         pills.set("heart", num(state.heart));
         pills.set("mind", num(state.mind));
         pills.set("speed", num(state.speed));
         pills.set("points", num(state.points));
         pills.set("repel", num(state.repel));
         pills.set("breakBuff", str(state.breakBuff));
+        pills.set("breakthroughPillStage", num(state.BreakthroughPillStage));
         pills.set("combatPrep", mapToJson(state.combatPrep));
+        pills.set("combatPillDoseCount", num(state.CombatPillDoseCount));
         pills.set("combatBuff", num(state.combatBuff));
         npcObject.set("pillState", std::move(pills));
     }
@@ -97,23 +84,11 @@ Npc npcFromJson(const Value& npcObject) {
         npc.history.push_back({historyObject["year"].asInt(), historyObject["text"].asString()});
     // 背包与家当（旧档没有这些字段，缺了就是空，之后由 ensureAllNpcData 补）
     npc.bag = jsonToMap<int>(npcObject["bag"]);
-    for (const auto& gearObject : npcObject["gear"].asArray()) {
-        Gear gear;
-        gear.id = gearObject["id"].asString();
-        gear.name = gearObject["name"].asString();
-        gear.slot = gearObject["slot"].asString("weapon");
-        gear.element = gearObject["element"].asString();
-        gear.grade = gearObject["grade"].asInt(1);
-        gear.bonus = gearObject["bonus"].asNumber();
-        gear.inscribed = gearObject["inscribed"].asBool();
-        gear.price = gearObject["price"].asInt();
-        gear.polarity = gearObject["polarity"].asString("天阳");
-        gear.craftCost = gearObject["craftCost"].asInt();
-        gear.crafted = gearObject["crafted"].asBool(false);
-        gear.shape = gearObject["shape"].asString();
-        if (gear.crafted && gear.shape.empty()) gear.shape = artifactShape(gear);
-        for (const auto& d : gearObject["dimensions"].asArray()) gear.dimensions.push_back(d.asInt());
-        npc.gear.push_back(gear);
+    for (const auto& Input : npcObject["gear"].asArray()) {
+        Gear Item = mfGearFromJson(Input);
+        if (Input["slot"].isNull()) Item.slot = "weapon";
+        if (Input["crafted"].isNull()) Item.crafted = false;
+        npc.gear.push_back(std::move(Item));
     }
     npc.equipped = jsonToStrMap(npcObject["equipped"]);
     npc.pillsUsed = jsonToStringVec(npcObject["pillsUsed"]);
@@ -127,13 +102,17 @@ Npc npcFromJson(const Value& npcObject) {
     state.poison = pills["poison"].asInt();
     state.aptPills = pills["aptPills"].asInt();
     state.hpBonus = pills["hpBonus"].asInt();
+    state.BaseHealthBonus = pills["baseHealthBonus"].asInt();
     state.heart = pills["heart"].asInt();
     state.mind = pills["mind"].asInt();
     state.speed = pills["speed"].asInt();
     state.points = pills["points"].asInt();
     state.repel = pills["repel"].asInt();
     state.breakBuff = pills["breakBuff"].asString();
+    state.BreakthroughPillStage = pills["breakthroughPillStage"].asInt(-1);
     state.combatPrep = jsonToMap<double>(pills["combatPrep"]);
+    state.CombatPillDoseCount = pills["combatPillDoseCount"].asInt(
+        static_cast<int>(std::min<std::size_t>(3, state.combatPrep.size())));
     state.combatBuff = pills["combatBuff"].asNumber();
     if (pills.isNull()) {
         // 老服药记录已结算过属性；只迁移次数和资质额度，绝不重放收益。
@@ -141,7 +120,7 @@ Npc npcFromJson(const Value& npcObject) {
             const auto* recipe = findRecipe(id);
             if (!recipe || state.used.count(id)) continue;
             state.used[id] = 1;
-            if (recipe->kind == "apt") state.aptPills = std::min(10, state.aptPills + recipe->value);
+            if (recipe->kind == "apt") state.aptPills += recipe->value;
         }
     }
     npc.dao = npcObject["dao"].asString();

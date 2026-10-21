@@ -6,6 +6,7 @@
 #include "core/cultivate.h"
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/talents.h"
 #include "core/sim.h"
 #include "core/interface/view_policy.h"
@@ -68,13 +69,13 @@ void appendPlayerState(const Game& game, Value& state) {
         }
 
         entry.set("health", num(player.health));
-        entry.set("healthMax", num(100));
-        entry.set("healthUnit", str("%"));
+        entry.set("healthMax", num(mfPlayerHealthMaximum(player)));
+        entry.set("healthUnit", str("点"));
         {
             const Battle ref = battleReferenceState(player);
             Value combat(json::Object{});
             combat.set("reference", Value(true));
-            combat.set("context", str("按当前健康度、境界、天赋、功法、悟道、装备与已有丹药准备计算的普通斗法开局参考；不含敌方行动或秘境额外效果。战斗中请以实时斗法面板为准。"));
+            combat.set("context", str("按当前气血、境界、天赋、功法、悟道、装备与已有丹药准备计算的普通斗法开局参考；不含敌方行动或秘境额外效果。战斗中请以实时斗法面板为准。"));
             combat.set("hp", num(ref.hp)); combat.set("hpMax", num(ref.max));
             combat.set("mana", num(ref.mana)); combat.set("manaRegen", num(battleEnergy(player)));
             combat.set("manaCap", num(battleManaCap(player))); combat.set("shield", num(ref.shield));
@@ -84,6 +85,7 @@ void appendPlayerState(const Game& game, Value& state) {
         }
         entry.set("lifespan", num(player.lifespan));
         entry.set("lifeBonus", num(player.lifeBonus));
+        entry.set("pillLifeBonus", num(player.PillLifeBonus));
         entry.set("stage", num(player.stage));
         entry.set("highestStage", num(player.highestStage));
         entry.set("realmName", str(realmName(player.stage)));
@@ -165,7 +167,7 @@ void appendPlayerState(const Game& game, Value& state) {
             std::string preview;
             if (id == "cultivate") {
                 const double mult = (player.sect.empty() ? 1.0 : 1.16) *
-                    (player.health < 50 ? 0.6 : 1.0) *
+                    (player.health < HealthGateMinimum ? 0.6 : 1.0) *
                     (player.sect.empty() && hasTalent(player, "solitary") ? 1.08 : 1.0);
                 const int bill = jsRound(cultivationCost(player) / 12.0) +
                     cultivate::supplyCost(player, "stone", player.stoneSupply) +
@@ -183,8 +185,10 @@ void appendPlayerState(const Game& game, Value& state) {
                 preview = "30 天：药材约 +" + std::to_string(std::min(game.world.herbs, 2 + bonus)) +
                     "～" + std::to_string(std::min(game.world.herbs, 4 + bonus)) + " · 险地可能受伤";
             } else if (id == "rest") {
-                preview = "30 天：气血最多 +" + std::to_string(std::min(100 - player.health,
-                    20 + (hasTalent(player, "body") ? 8 : 0))) + " · 积累少量修为";
+                preview = "30 天：气血最多 +" + std::to_string(std::min(
+                    std::max(0, mfPlayerHealthMaximum(player) - player.health),
+                    mfMonthlyHealthRecovery(mfPlayerHealthMaximum(player)) +
+                    mfRestExtraHealthRecovery(mfPlayerHealthMaximum(player)))) + " · 积累少量修为";
             } else if (id == "explore") {
                 preview = "30 天：灵石约 +8～25 · 积累见闻与修为 · 可能遇事或斗法";
             }

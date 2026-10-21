@@ -32,7 +32,7 @@ void completeLesson(Game& g, Job job) {
 }
 }
 void runNpcLearningLocationTests() {
-    Game g = createGame(CreateOptions{}); g.npcs.resize(1);
+    Game g = createGame(CreateOptions{}); g.pending.reset(); g.npcs.resize(1);
     auto& teacher = g.npcs[0]; teacher.sect = "jinhong"; teacher.dao = "金"; teacher.stage = 3;
     teacher.location = g.player.location; teacher.alive = true; teacher.health = 100;
     g.player.stage = 3; g.player.stones = 10000; g.player.relations[teacher.id] = 80;

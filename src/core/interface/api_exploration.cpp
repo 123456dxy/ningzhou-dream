@@ -1,6 +1,7 @@
 #include "core/api_exploration.h"
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/calendar.h"
 #include "core/cultivate.h"
 #include "core/dungeon.h"
@@ -9,7 +10,9 @@
 #include "core/exploration/dungeon_encounters.h"
 #include "core/exploration/dungeon_events.h"
 #include "core/exploration/dungeon_reward_rules.h"
+#include "core/exploration/dungeon_card_preferences.h"
 #include "core/content/green_bottle_content.h"
+#include "core/content/text_table.h"
 #include <algorithm>
 
 namespace nz::api {
@@ -65,6 +68,31 @@ Value rewardView(const Game& g, const DungeonReward& reward) {
 Value rewardsView(const Game& g, const vector<DungeonReward>& rewards) {
     json::Array a; for (const auto& reward:rewards) a.push_back(rewardView(g,reward)); return Value(std::move(a));
 }
+// 用途：编码本次探索已冻结的临时牌偏好；流程：秘境纯视图；用法：传领域值；返回：稳定mode/dao键，不改奖励或游戏。
+Value mfDungeonCardRewardPreferenceView(const DungeonCardRewardPreference& Preference) {
+    Value Result(json::Object{});
+    Result.set("mode", Value(string(mfDungeonCardRewardModeKey(Preference.Mode))));
+    json::Array Daos;
+    for (const auto Dao : Preference.Daos) Daos.emplace_back(string(content::stableId(Dao)));
+    Result.set("daos", Value(std::move(Daos)));
+    return Result;
+}
+// 用途：发布真实有临时神通的大道和模式目录；流程：入场控件/冻结摘要；用法：纯查询；返回：权威候选，不按展示中文反推协议键。
+Value mfDungeonCardRewardOptionsView() {
+    Value Result(json::Object{}); json::Array Modes, Daos;
+    for (const auto Mode : {DungeonCardRewardMode::All, DungeonCardRewardMode::None, DungeonCardRewardMode::Selected}) {
+        Value Entry(json::Object{}); Entry.set("id", Value(string(mfDungeonCardRewardModeKey(Mode))));
+        const char* Name = Mode == DungeonCardRewardMode::All ? "全部类型" :
+            Mode == DungeonCardRewardMode::None ? "不获取临时神通" : "指定类型";
+        Entry.set("name", Value(Name)); Modes.push_back(std::move(Entry));
+    }
+    for (const auto Dao : mfDungeonCardRewardDaos()) {
+        Value Entry(json::Object{}); Entry.set("id", Value(string(content::stableId(Dao))));
+        Entry.set("name", Value(string(content::displayName(Dao)))); Daos.push_back(std::move(Entry));
+    }
+    Result.set("modes", Value(std::move(Modes))); Result.set("daos", Value(std::move(Daos)));
+    return Result;
+}
 }
 // 用途：汇总地图秘境与爬塔状态预览。
 // 参与流程：HTTP请求分派、前端状态或动作预览。
@@ -72,6 +100,7 @@ Value rewardsView(const Game& g, const vector<DungeonReward>& rewards) {
 // 返回值：可直接供接口序列化的JSON值。
 Value dungeonView(const Game& g) {
     Value o(json::Object{}); const int year = calendarDate(g).year;
+    o.set("cardRewardOptions", mfDungeonCardRewardOptionsView());
     o.set("earlyPeriod",num(3)); o.set("latePeriod",num(50)); o.set("lateStage",num(9));
     o.set("nextSpawnYear",num(g.dungeons.lastSpawnYear + (g.player.stage < 9 ? 3 : 50)));
     json::Array sites;
@@ -129,9 +158,13 @@ Value dungeonView(const Game& g) {
     if (!g.dungeons.run) { o.set("run",Value()); return o; }
     const auto& run=*g.dungeons.run;
     Value r(json::Object{});
+    r.set("cardRewardPreference", mfDungeonCardRewardPreferenceView(run.CardRewardPreference));
     r.set("siteId",Value(run.siteId)); r.set("siteName",Value(run.siteName)); r.set("type",Value(run.type));
     r.set("location",Value(run.location)); r.set("phase",Value(run.phase)); r.set("current",Value(run.current));
     r.set("stage",num(run.stage)); r.set("realmName",Value(realmName(run.stage))); r.set("health",num(run.health));
+    const int HealthMaximum = mfPlayerHealthMaximum(g.player);
+    r.set("healthCurrent", num(mfHealthFromPercent(run.health, HealthMaximum)));
+    r.set("healthMax", num(HealthMaximum));
     const auto FrozenSite = std::find_if(g.dungeons.sites.begin(), g.dungeons.sites.end(),
         [&](const DungeonSite& Site) { return Site.id == run.siteId; });
     const int DifficultyStage = run.type == "bottle" && FrozenSite != g.dungeons.sites.end() ? FrozenSite->stage : run.stage;
@@ -154,13 +187,23 @@ Value dungeonView(const Game& g) {
     target(r,run.targetKind,run.targetId,run.targetName,run.targetGrade,run.TargetRewardCount);
     json::Array nodes;
     for (const auto& node:run.nodes) {
+        // 怪物仅在实际触发或访问过后揭晓；不改变存档中的冻结名称及路线重建依据。
+        const bool IsCombatNode = node.type == "battle" || node.type == "combat" || node.type == "elite" || node.type == "boss";
+        const bool DetailsRevealed = !IsCombatNode || node.visited || node.id == run.current;
+        const string HiddenName = node.type == "elite" ? "强敌" : node.type == "boss" ? "守关者" : "斗法";
+        const string HiddenHint = node.type == "elite" ? "高风险 · 高奖励；进入后揭晓对手。" :
+            node.type == "boss" ? "击败守关者后选择通关主奖励；进入后揭晓对手。" : "战胜后选择奖励；进入后揭晓对手。";
         Value n(json::Object{}); n.set("id",Value(node.id)); n.set("type",Value(node.type));
-        n.set("name",Value(node.name)); n.set("text",Value(node.text)); n.set("row",num(node.row));
+        n.set("detailsRevealed",Value(DetailsRevealed));
+        n.set("name",Value(DetailsRevealed ? node.name : HiddenName));
+        n.set("text",Value(DetailsRevealed ? node.text : HiddenHint)); n.set("row",num(node.row));
         n.set("lane",num(node.lane)); n.set("next",strings(node.next)); n.set("visited",Value(node.visited));
         n.set("available",Value(dungeonNodeAvailable(run,node.id)));
         if (run.LayoutVersion >= 2) {
-            if (const auto Encounter = mfDescribeDungeonEncounter(g, run, node); Encounter.Enabled) {
-                n.set("encounterName", Value(Encounter.Name)); n.set("encounterHint", Value(Encounter.Hint));
+            if (DetailsRevealed) {
+                if (const auto Encounter = mfDescribeDungeonEncounter(g, run, node); Encounter.Enabled) {
+                    n.set("encounterName", Value(Encounter.Name)); n.set("encounterHint", Value(Encounter.Hint));
+                }
             }
             if (node.type == "event") {
                 const auto Event = mfDescribeDungeonEvent(run, node);

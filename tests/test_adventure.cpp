@@ -193,7 +193,7 @@ void runAdventureTests() {
                  "武陵城可以探访后山");
 
         g.player.health = 20;
-        checkStr(adventureActionError(g, "backhill"), "请先休养至35气血。",
+        checkStr(adventureActionError(g, "backhill"), "请先休养至30气血。",
                  "气血不足不可探访");
         g.player.health = 100;
 
@@ -304,14 +304,14 @@ void runAdventureTests() {
         checkEq(g.player.herbs, before + 1, "引开妖兽给未分类灵药 +1");
     }
     {
-        // 行侠：掩护撤离得声望，掉 3 血
+        // 行侠：掩护撤离得声望，掉最大气血的3%
         Game g = makeAdvGame({"sword"}, 20261004);
         adventureEvent(g, "justice");
         const int renownBefore = g.player.renown;
         const int healthBefore = g.player.health;
         adventureChoose(g, "talk");
         checkEq(g.player.renown, renownBefore + 1, "掩护撤离给声望 +1");
-        checkEq(g.player.health, healthBefore - 3, "掩护撤离气血 −3");
+        checkEq(g.player.health, healthBefore - 5, "掩护撤离扣最大气血的3%");
         check(g.player.health >= 1, "掩护撤离不致死");
     }
     {
@@ -324,7 +324,7 @@ void runAdventureTests() {
 
     std::printf("\n-- 游历斗法奖励 --\n");
     {
-        // 妖兽胜：赏金 + 矿材 2 + 灵药 2
+        // 妖兽奇遇回调只给赏金与灵药；五部位由统一battleFinish收口发放。
         Game g = makeAdvGame({"sword"}, 20261004);
         adventureEvent(g, "beast");
         adventureChoose(g, "fight");
@@ -340,8 +340,8 @@ void runAdventureTests() {
             adventureBattleEnd(g, b);
             checkEq(g.player.stones, stonesBefore + 18, "妖兽胜利给赏金 18");
             checkEq(g.player.herbs, herbsBefore + 2, "妖兽胜利给灵药 2");
-            checkEq(g.player.arts.materials["iron"], 4 + 2,
-                    "妖兽胜利给矿材 2");
+            checkEq(g.player.arts.materials["iron"], 4,
+                    "妖兽奇遇不再额外发旧随机矿材");
         }
     }
     {

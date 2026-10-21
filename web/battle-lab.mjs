@@ -9,7 +9,7 @@ const daoArt = Object.freeze({
 });
 const ui = {
   config: null, state: null, draft: null, busy: false, requestSequence: 0,
-  notice: '', needsRefresh: false, target: null, loadoutOpen: false, logOpen: false,
+  notice: '', needsRefresh: false, target: null, loadoutOpen: false, logOpen: false, fixedSeed: false,
 };
 const configElement = document.querySelector('#lab-config');
 const battleElement = document.querySelector('#lab-battle');
@@ -85,11 +85,12 @@ function renderConfig() {
     </div><div class="config-controls">
       <label>境界<select id="lab-stage" data-testid="stage-select"${disabled}>${list(ui.config.realms).map(realm => `<option value="${escapeHtml(realm.stage)}"${Number(realm.stage) === Number(selection.stage) ? ' selected' : ''}>${escapeHtml(realm.name)}</option>`).join('')}</select></label>
       <label>对手<select id="lab-opponent" data-testid="opponent-select"${disabled}>${list(ui.config.opponents).map(opponent => `<option value="${escapeHtml(opponent.id)}"${opponent.id === selection.opponentId ? ' selected' : ''}>${escapeHtml(opponent.name)}</option>`).join('')}</select></label>
-      <label>种子<input id="lab-seed" data-testid="seed-input" type="number" min="0" max="4294967295" step="1" value="${escapeHtml(selection.seed)}"${disabled}></label>
-      <button type="button" data-action="new-seed"${disabled}>换个种子</button>
-      <button type="button" class="primary" data-action="start" data-testid="start-battle"${disabled}>${ui.busy ? '结算中…' : ui.state?.battle ? '按此构筑重开' : '开始斗法'}</button>
+      <label class="fixed-seed-toggle"><input id="lab-fixed-seed" data-testid="fixed-seed-input" type="checkbox"${ui.fixedSeed ? ' checked' : ''}${disabled}>固定种子</label>
+      <label class="seed-control">复现种子<input id="lab-seed" data-testid="seed-input" type="number" min="0" max="4294967295" step="1" value="${escapeHtml(selection.seed)}" aria-describedby="lab-seed-note"${ui.busy || !ui.fixedSeed ? ' disabled' : ''}></label>
+      <button type="button" class="primary" data-action="start" data-testid="start-battle"${disabled}>${ui.busy ? '结算中…' : ui.fixedSeed ? ui.state?.battle ? '按固定种子重开' : '固定种子开局' : ui.state?.battle ? '随机重开' : '随机开局'}</button>
     </div><p class="build-description" data-testid="build-description"><b>${escapeHtml(tierName(selection))} · ${escapeHtml(buildName(selectedBuild, selection))}</b> ${escapeHtml(description)}</p>
-    <p class="draft-note" data-testid="selection-note"${ui.state?.battle && !sameSelection(selection, ui.state.selection) ? '' : ' hidden'}>参数已改变，点击「按此构筑重开」应用；当前战局仍使用原构筑。</p>`;
+    <p id="lab-seed-note" class="seed-note">${ui.fixedSeed ? '固定种子接受 0～4294967295；构筑、对手和操作相同时可复现。' : '每次点击开局或重开都会随机抽取新种子；勾选「固定种子」可手填复现。'}</p>
+    <p class="draft-note" data-testid="selection-note"${ui.state?.battle && !sameSelection(selection, ui.state.selection) ? '' : ' hidden'}>参数已改变，点击上方重开按钮应用；当前战局仍使用原构筑。</p>`;
 }
 
 // 用途：只更新参数变更提示；参与表单输入；不替换输入框或按钮，避免失焦使下一次点击丢失。
@@ -108,7 +109,7 @@ function renderHealth(hp, maximum) {
 function renderStatuses(battle, enemy) {
   const rows = enemy ? [] : battleStatusRows(battle);
   if (enemy && battle.enemyFireGrowthRounds > 0) rows.push({ label: '焰势成长', value: `${numberText(battle.enemyFireGrowthRounds)} / ${numberText(battle.fireGrowthMaxRounds)} 轮`, scope: '对方本场已兑现灼烧的成长', tone: 'good' });
-  if (enemy && battle.poison > 0) rows.push({ label: '中毒', value: `${numberText(battle.poison)} 层 · 每回合 ${numberText(battle.poisonDamage)} 点`, scope: `剩 ${numberText(battle.poisonTurns)} 回合`, tone: 'bad' });
+  if (enemy && battle.poison > 0) rows.push({ label: '中毒', value: `${numberText(battle.poison)} 层 · 每回合 ${numberText(battle.poisonDamage)} 点 · 本场持续`, scope: '回合结束结算；可由清毒或爆毒效果削减', tone: 'bad' });
   if (enemy && battle.burn > 0) rows.push({ label: '灼烧', value: `${numberText(battle.burn)} 点 / 回`, scope: `剩 ${numberText(battle.burnTurns)} 回合`, tone: 'bad' });
   if (enemy && battle.soul > 0) rows.push({ label: '震荡', value: `${numberText(battle.soul)} 层`, scope: '神识爆发消耗', tone: 'bad' });
   if (!enemy && battle.playerBurn > 0) rows.push({ label: '受灼烧', value: `${numberText(battle.playerBurn)} 点 / 回`, scope: `剩 ${numberText(battle.playerBurnTurns)} 回合`, tone: 'bad' });
@@ -137,7 +138,7 @@ function renderActor(battle, enemy) {
 function renderFutureStatuses(battle) {
   const statuses = list(battle.enemyIntentStatuses).filter(status => Number(status.perTurn) > 0 && Number(status.turns) > 0);
   if (!statuses.length) return '';
-  return `<p class="intent-future" data-testid="future-dot"><b>对手行动后持续伤害</b>${statuses.map(status => `<span>${escapeHtml(status.name)} ${numberText(status.perTurn)} 点 / 回 · 剩 ${numberText(status.turns)} 回合</span>`).join('')}<small>将在下一回合结束时结算；本轮伤害为 0 也可能附加毒火。</small></p>`;
+  return `<p class="intent-future" data-testid="future-dot"><b>对手行动后持续伤害</b>${statuses.map(status => `<span>${escapeHtml(status.name)} ${numberText(status.perTurn)} 点 / 回 · ${status.id === 'poison' ? '本场持续' : `剩 ${numberText(status.turns)} 回合`}</span>`).join('')}<small>将在下一回合结束时结算；本轮伤害为 0 也可能附加毒火。</small></p>`;
 }
 
 // 用途：选择现有功法插图作流派卡面；参与手牌展示；传大道 ID，返回固定资源地址。
@@ -156,7 +157,7 @@ function cardPreviewNumbers(card) {
   const numbers = [damage, cardNumbers(card, { showDamage: false })];
   if (Number(card.healPotential) > Number(card.heal || 0)) numbers.push(`满效疗 ${numberText(card.healPotential)}`);
   if (Number(card.manaGain) > 0) numbers.push(`回灵 ${numberText(card.manaGain)}`);
-  if (Number(card.draw) > 0) numbers.push(`抽 ${numberText(card.draw)}`);
+  if (Number(card.draw) > 0 && card.kind !== 'drawTo') numbers.push(`抽 ${numberText(card.draw)}`);
   if (Number(card.drawNext) > 0) numbers.push(`下回抽 ${numberText(card.drawNext)}`);
   return numbers.filter(Boolean).join(' · ') || '辅助神通';
 }
@@ -181,7 +182,7 @@ function renderBattle() {
   const battle = ui.state?.battle;
   const result = ui.state?.result;
   if (!battle) {
-    battleElement.innerHTML = result ? `<div class="result-panel${result.won ? '' : ' loss'}" data-testid="battle-result" data-won="${!!result.won}"><h2>${result.won ? '试炼获胜' : '试炼落败'}</h2><p>${escapeHtml(result.text)}</p><p class="result-stats">${escapeHtml(tierName(ui.state?.selection))} · 历时 ${numberText(result.turns)} 回合 · 种子 ${numberText(ui.state?.selection?.seed)}</p><div class="result-actions"><button type="button" class="primary" data-action="retry" data-testid="retry-battle"${ui.busy ? ' disabled' : ''}>同种子再试</button><button type="button" data-action="restart-random"${ui.busy ? ' disabled' : ''}>换种子再试</button></div></div>`
+    battleElement.innerHTML = result ? `<div class="result-panel${result.won ? '' : ' loss'}" data-testid="battle-result" data-won="${!!result.won}"><h2>${result.won ? '试炼获胜' : '试炼落败'}</h2><p>${escapeHtml(result.text)}</p><p class="result-stats">${escapeHtml(tierName(ui.state?.selection))} · 历时 ${numberText(result.turns)} 回合 · 种子 ${numberText(ui.state?.selection?.seed)}</p><div class="result-actions"><button type="button" class="primary" data-action="restart-random" data-testid="random-retry-battle"${ui.busy ? ' disabled' : ''}>随机再来一局</button><button type="button" data-action="retry" data-testid="retry-battle"${ui.busy ? ' disabled' : ''}>同种子重试</button></div></div>`
       : '<div class="intro"><h2>选一套流派，开始试炼</h2><p>真实抽牌与敌方构筑。先看敌方意图，再连续施展神通，最后结束回合。</p></div>';
     return;
   }
@@ -283,18 +284,21 @@ function checkedSelection() {
   if (!selection || !availableTiers().some(tier => tier.id === selection.tier)) {
     ui.notice = '请选择后端支持的传承级别。'; renderNotice(); return null;
   }
-  const seed = Number(selection.seed);
-  if (String(selection.seed).trim() === '' || !Number.isInteger(seed) || seed < 0 || seed > 4294967295) {
-    ui.notice = '种子请填写 0～4294967295 的整数。'; renderNotice(); return null;
+  if (ui.fixedSeed) {
+    const seed = Number(selection.seed);
+    if (String(selection.seed).trim() === '' || !Number.isInteger(seed) || seed < 0 || seed > 4294967295) {
+      ui.notice = '种子请填写 0～4294967295 的整数。'; renderNotice(); return null;
+    }
+    selection.seed = seed;
   }
-  selection.seed = seed;
   selection.stage = Number(selection.stage);
   return selection;
 }
 
-// 用途：在独立 RNG 上选取重试种子；参与换种子；无参数，返回 uint32 范围整数，不改变引擎随机状态。
-function newSeed() {
-  return crypto.getRandomValues(new Uint32Array(1))[0];
+// 用途：只在明确开局动作上抽取种子；传上局种子，返回不同的uint32，不改变引擎共享随机状态。
+function newSeed(previous) {
+  const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+  return seed === Number(previous) ? (seed + 1) >>> 0 : seed;
 }
 
 // 用途：开始或重试一个合法构筑；参与开战按钮；传选择快照，等待后端验证并返回无值。
@@ -332,14 +336,17 @@ async function handleClick(event) {
       break;
     case 'build':
       ui.draft.buildId = button.dataset.buildId; renderConfig(); break;
-    case 'new-seed':
-      ui.draft.seed = newSeed(); renderConfig(); break;
-    case 'start':
-      await startBattle(checkedSelection()); break;
+    case 'start': {
+      const selection = checkedSelection();
+      if (selection) await startBattle(ui.fixedSeed ? selection : { ...selection, seed: newSeed(ui.state?.selection?.seed) });
+      break;
+    }
     case 'retry':
+      ui.fixedSeed = true;
       await startBattle(ui.state?.selection); break;
     case 'restart-random':
-      await startBattle(ui.state?.selection ? { ...ui.state.selection, seed: newSeed() } : null); break;
+      ui.fixedSeed = false;
+      await startBattle(ui.state?.selection ? { ...ui.state.selection, seed: newSeed(ui.state.selection.seed) } : null); break;
     case 'spell':
       await playCard(button.dataset.cardUid); break;
     case 'end':
@@ -373,6 +380,10 @@ function handleSelection(event) {
   if (event.target.id === 'lab-stage') ui.draft.stage = Number(event.target.value);
   if (event.target.id === 'lab-opponent') ui.draft.opponentId = event.target.value;
   if (event.target.id === 'lab-seed') ui.draft.seed = event.target.value;
+  if (event.target.id === 'lab-fixed-seed') {
+    ui.fixedSeed = event.target.checked; renderConfig();
+    configElement.querySelector('#lab-fixed-seed')?.focus();
+  }
   renderSelectionNote();
 }
 

@@ -1,11 +1,14 @@
 // 宁州一梦 · C++ 版 — 游历与后山实现（对应 Demo 06 的 adventure.mjs）
 #include "core/adventure.h"
+#include "core/combat/battle_scaling.h"
 
 #include <algorithm>
 
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/crafting/herb_acquisition.h"
+#include "core/crafting/forging_product.h"
+#include "core/content/gear_templates.h"
 #include "core/economy.h"
 #include "core/reward_receipt.h"
 #include "core/sim.h"
@@ -208,10 +211,10 @@ static vector<ChoiceOption> advOptions(const Player& p, const AdvContext& d) {
         out.push_back({"gear", "破阵取法器",
                        "迎战" + foeLabel + "守阵灵影；胜后获得" +
                            std::to_string(d.grade) + "品法器",
-                       p.arts.gear.size() >= 40 || p.health < 35});
+                       p.arts.gear.size() >= 40 || p.health < HealthGateMinimum});
         out.push_back({"book", "寻取功法抄本",
                        "迎战守阵灵影；胜后获得未持有的适境功法抄本（需修习）；全有则剑道经验+12",
-                       p.health < 35});
+                       p.health < HealthGateMinimum});
         out.push_back({"leave", "记下阵势，暂且离开",
                        "阵道经验+4，不发生战斗", false});
         return out;
@@ -238,13 +241,13 @@ static vector<ChoiceOption> advOptions(const Player& p, const AdvContext& d) {
     // 妖兽 / 劫修 / 行侠
     out.push_back({"fight", (d.kind == "justice") ? "出手相助" : "迎战",
                    foeLabel + "对手；胜后得灵石、材料或声望；生死斗失败会死亡，可选择回档",
-                   p.health < 35});
+                   p.health < HealthGateMinimum});
     if (d.kind == "beast")
         out.push_back({"talk", "引开妖兽，绕路采药",
                        "未分类灵药+1，避开斗法", false});
     else if (d.kind == "justice")
         out.push_back({"talk", "掩护受困者撤离",
-                       "声望+1，气血−3（不致死）", false});
+                       "声望+1，损失气血上限3%（不致死）", false});
     else
         out.push_back({"talk", "交出路资脱身",
                        "交出至多12灵石，平安脱身", false});
@@ -302,6 +305,13 @@ void adventureEvent(Game& g, const string& kindIn) {
     data.npcId = npc ? npc->id : "";
     data.grade = std::min(5, 1 + group);
     data.style = advStyleOf(kind);
+    if (kind == "backhill") {
+        const auto Templates = content::mfGearTemplates();
+        const auto TemplateIndex = std::min(Templates.size() - 1,
+            static_cast<std::size_t>(randomOf(g) * Templates.size()));
+        data.GearTemplateId = string(Templates[TemplateIndex].Id);
+        data.RewardVersion = 1;
+    }
 
     // 正文
     string text;
@@ -376,7 +386,7 @@ string adventureActionError(Game& g, const string& id) {
     const Player& p = g.player;
     if (!ecoIsCity(p.location) && p.location != p.sect)
         return "请在城池或本宗山门探访后山。";
-    if (p.health < 35) return "请先休养至35气血。";
+    if (p.health < HealthGateMinimum) return "请先休养至30气血。";
     if (p.stones < 8) return "探访需8灵石整备。";
     if (g.adventure.backhillMonth == g.clock.days / 30)
         return "本月已探访过后山。";
@@ -458,7 +468,7 @@ bool adventureChoose(Game& g, const string& optionId) {
         (optionId == "fight" || optionId == "gear") ||
         (optionId == "book" && data.kind == "backhill");
     if (needBattle) {
-        if (p.health < 35) return true;
+        if (p.health < HealthGateMinimum) return true;
         if (optionId == "gear" && a.gear.size() >= 40) return true;
 
         g.pending.reset();
@@ -504,12 +514,12 @@ bool adventureChoose(Game& g, const string& optionId) {
         if (data.kind == "beast") p.herbs++;
         if (data.kind == "justice") {
             p.renown++;
-            p.health = std::max(1, p.health - 3);
+            p.health = std::max(1, p.health - mfHealthPercentAmount(mfPlayerHealthMaximum(p), 3));
         }
     } else if (optionId == "leave" && data.kind == "backhill") {
         artGain(p, "阵", 4);
     } else if (optionId == "leave" && data.kind == "caravan") {
-        p.insight = std::min(INSIGHT_MAX, p.insight + 1);
+        p.insight = std::min(std::max(INSIGHT_MAX, p.insight), p.insight + 1);
     }
 
     // 找到所选选项名用于纪事
@@ -547,11 +557,25 @@ void adventureBattleEnd(Game& g, const Battle& b) {
         return;
     }
 
+    std::optional<Gear> FrozenReward;
+    if (b.advKind == "backhill" && b.advChoice != "book" && b.AdvRewardVersion == 1) {
+        FrozenReward = crafting::mfCreateGearFromTemplate(b.AdvGearTemplateId, b.advGrade);
+        if (!FrozenReward) return;
+    }
+
     g.adventure.wins++;
 
     if (b.advKind == "backhill") {
         if (b.advChoice == "book") {
             adventureBook(g, b.advBook);
+        } else if (FrozenReward) {
+            if (a.gear.size() < 40) {
+                FrozenReward->id = "event-" + std::to_string(g.clock.days) + "-" + std::to_string(g.economy.seq++);
+                logEvent(g, "self", "后山遗藏取得「" + FrozenReward->name + "」，" + std::to_string(FrozenReward->grade) + "阶制成法器。");
+                a.gear.push_back(std::move(*FrozenReward));
+            } else {
+                logEvent(g, "self", "行囊法器已满，未能带走后山遗藏；请先出售或分解法器。");
+            }
         } else {
             // 交替给剑/法衣
             const bool isSword = (b.advSeq % 2) != 0;
@@ -570,9 +594,7 @@ void adventureBattleEnd(Game& g, const Battle& b) {
 
     // 妖兽 / 劫修 / 行侠
     p.stones += b.advFee;
-    const string mat = materialForStage(p.stage);
     if (b.advKind == "beast") {
-        a.materials[mat] = a.materials[mat] + 2;
         p.herbs += 2;
     }
     if (b.advKind == "justice") {

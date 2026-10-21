@@ -1,7 +1,7 @@
 #include "core/crafting/craft_prices.h"
 
 #include "core/arts.h"
-#include "core/content/green_bottle_content.h"
+#include "core/content/forge_content.h"
 #include "core/renown.h"
 #include "core/talents.h"
 #include "data/reference_tables.h"
@@ -68,7 +68,8 @@ CraftPriceQuote mfApplyGearSaleBonuses(const Game& GameState, const Gear& GearSt
     if (!Quote.Valid) return Quote;
     Quote.InscriptionMultiplier = GearState.inscribed ? InscribedSaleMultiplier : 1.0;
     Quote.RenownSaleMultiplier = 1.0 + renown::sellBonus(GameState.player.renown);
-    Quote.CraftedSaleMultiplier = GearState.crafted ? 1.0 + talentMods(GameState.player).craftedSale : 1.0;
+    const bool IsPlayerForged = GearState.crafted && GearState.Origin != "event" && GearState.Origin != "talent";
+    Quote.CraftedSaleMultiplier = IsPlayerForged ? 1.0 + talentMods(GameState.player).craftedSale : 1.0;
     Quote.SaleMultiplier = Quote.InscriptionMultiplier * Quote.RenownSaleMultiplier * Quote.CraftedSaleMultiplier;
     const double FinalSaleValue = Quote.BaseSellPrice * Quote.SaleMultiplier;
     if (!std::isfinite(FinalSaleValue) || FinalSaleValue <= 0.0 ||
@@ -125,9 +126,8 @@ int mfNormalMaterialBuyPrice(const Game& GameState, MaterialPriceKind Kind, cons
         return mfNormalBuyPrice(GameState, LocalBasePrice);
     }
     case MaterialPriceKind::ForgeMaterial:
-        if (const auto* Special = content::mfFindGreenBottleMaterial(MaterialId)) return mfNormalBuyPrice(GameState, Special->Material.price);
-        for (const auto& Material : data::MaterialDef_TABLE())
-            if (Material.id == MaterialId) return mfNormalBuyPrice(GameState, Material.price);
+        if (const auto* Material = content::mfFindForgeMaterial(MaterialId))
+            return mfNormalBuyPrice(GameState, Material->Material.price);
         return 0;
     }
     return 0;
@@ -152,6 +152,22 @@ CraftPriceQuote mfQuotePotionPrice(const Game& GameState, const std::string& Rec
 CraftPriceQuote mfQuoteGearPrice(const Game& GameState, const Gear& GearState) {
     if (GearState.grade < MinimumGearGrade || GearState.grade > MaximumGearGrade)
         return mfPriceFailure("法器品阶必须为一至六阶。");
+    if (GearState.ForgeVersion == 2) {
+        int MaterialCount = 0;
+        std::int64_t MaterialCost = 0;
+        for (const auto& [MaterialId, RowCount] : GearState.SourceMaterials) {
+            const int UnitPrice = mfNormalMaterialBuyPrice(GameState, MaterialPriceKind::ForgeMaterial, MaterialId);
+            if (RowCount < 1 || RowCount > StandardForgeMaterialCount ||
+                !mfAddMaterialValue(MaterialCost, UnitPrice, RowCount))
+                return mfPriceFailure("法器原始配料记录无效。");
+            MaterialCount += RowCount;
+            if (MaterialCount > StandardForgeMaterialCount)
+                return mfPriceFailure("法器原始配料总数无效。");
+        }
+        if (MaterialCount != StandardForgeMaterialCount)
+            return mfPriceFailure("法器原始配料记录不完整。");
+        return mfApplyGearSaleBonuses(GameState, GearState, mfBaseCraftQuote(MaterialCost, 1, false));
+    }
     const std::string LedgerPrefix = "forge-materials-v1:" + GearState.id + ":";
     bool HasMaterialLedger = false;
     int MaterialCount = 0;

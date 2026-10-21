@@ -13,9 +13,9 @@ enum class SpellKind {
     Attack, Heal, Shield, Fire, Sword, Drain, Guard, Store, Flow, Burst,
     Draw, Foresee, Redraw, Exhaust, Empower, Ward, FireBurst, Mana, Charge, Heavy,
     Water, Wave, Poison, PoisonBurst, Float, Human, Soul, SoulBurst,
-    Steal, BodyBurst, FireSiphon
+    Steal, BodyBurst, FireSiphon, PoisonBloom, PoisonSiphon, DrawTo
 };
-enum class BattleKind { Spar, Wild, Hunt, Tide, Ambush, Kill, Rob, Dungeon, SectTrial, Tianji };
+enum class BattleKind { Spar, Wild, Hunt, Tide, Ambush, Kill, Rob, Dungeon, SectTrial, Tianji, AscensionTournament };
 
 // 用途：提供十二大道的强类型集合。
 // 参与流程：节点、元素和内容注册校验。

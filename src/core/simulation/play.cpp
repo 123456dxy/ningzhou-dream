@@ -1,5 +1,6 @@
 // 宁州一梦 · C++ 版 — 玩家可直接操作的行动（实现）
 #include "core/play.h"
+#include "core/combat/battle_scaling.h"
 #include "core/renown.h"
 
 #include <algorithm>
@@ -13,6 +14,8 @@
 #include "core/battle.h"
 #include "core/shop.h"
 #include "core/crafting/craft_prices.h"
+#include "core/crafting/material_sources.h"
+#include "core/content/forge_content.h"
 #include "core/source_limits.h"
 #include "core/sim.h"
 #include "core/talents.h"
@@ -114,8 +117,9 @@ vector<MarketItem> marketList(const Game& g) {
         out.push_back(m);
     }
     // 普通材料铺只供一至二阶资材。三阶以上必须去秘境寻找。
-    for (const auto& material : data::MaterialDef_TABLE()) {
-        if (!ordinaryMaterialError(g.player, material.grade).empty()) continue;
+    for (const auto& Definition : content::mfForgeMaterials()) {
+        const auto& material = Definition.Material;
+        if (!crafting::mfCanBuyOrdinaryForgeMaterial(g.player, material.id)) continue;
         MarketItem m;
         m.kind = "material";
         m.id = material.id;
@@ -207,15 +211,16 @@ string marketBuy(Game& g, const string& kind, const string& id, int count) {
     }
 
     if (kind == "material") {
-        const data::MaterialDef* material = nullptr;
-        for (const auto& item : data::MaterialDef_TABLE())
-            if (item.id == id) { material = &item; break; }
-        if (!material) return "坊市里没有这份炼器材料。";
-        const string sourceError = ordinaryMaterialError(p, material->grade);
+        const auto* Definition = content::mfFindForgeMaterial(id);
+        if (!Definition) return "坊市里没有这份炼器材料。";
+        const auto* material = &Definition->Material;
+        const string sourceError = crafting::mfOrdinaryForgeMaterialError(p, id);
         if (!sourceError.empty()) return sourceError;
         const int unit = normalMaterialBuyPrice(g, "material", material->id);
         if (unit <= 0) return "材料市场报价无效，请刷新后重试。";
-        const int total = unit * count;
+        const long long TotalCost = static_cast<long long>(unit) * count;
+        if (TotalCost > std::numeric_limits<int>::max()) return "材料购买金额超过支持范围。";
+        const int total = static_cast<int>(TotalCost);
         if (p.stones < total)
             return "灵石不足：需要 " + std::to_string(total) + "，你只有 " + std::to_string(p.stones) + "。";
         const auto owned = a.materials.find(material->id);
@@ -349,9 +354,9 @@ vector<SocialAction> socialActions(const Game& g, const string& npcId) {
                 a.reason = "没有药材可送（可在坊市购买）";
             }
         } else if (a.id == "spar") {
-            if (p.health < 40) {
+            if (p.health < HealthGateMinimum) {
                 a.enabled = false;
-                a.reason = "气血不足 40，先休养";
+                a.reason = "气血不足 30，先休养";
             }
         } else if (a.id == "study") {
             if (p.stones < a.cost) {
@@ -362,9 +367,9 @@ vector<SocialAction> socialActions(const Game& g, const string& npcId) {
             if (p.stones < a.cost) {
                 a.enabled = false;
                 a.reason = "灵石不足（需 " + std::to_string(a.cost) + "）";
-            } else if (p.health < 50) {
+            } else if (p.health < HealthGateMinimum) {
                 a.enabled = false;
-                a.reason = "气血不足 50，先休养";
+                a.reason = "气血不足 30，先休养";
             }
         } else if (a.id == "partner") {
             if (b.master == npcId ||
@@ -448,7 +453,7 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         p.npcBonds[npcId].talkMonth = month;
         const int gain = socialAffinityGain(p, actionId);
         addRelation(g, npcId, gain);
-        p.insight = std::min(INSIGHT_MAX, p.insight + 1);
+        p.insight = std::min(std::max(INSIGHT_MAX, p.insight), p.insight + 1);
         r.relationDelta = gain;
         r.text = "你与" + who + "闲谈一阵，气氛颇为投契。";
         logEvent(g, "npc", r.text + "（好感 +" + std::to_string(gain) + "）",
@@ -471,7 +476,7 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         p.stones -= act->cost;
         const int gain = 8 + p.insight / 20;
         artGain(p, a.focus, gain);
-        p.insight = std::min(INSIGHT_MAX, p.insight + 2);
+        p.insight = std::min(std::max(INSIGHT_MAX, p.insight), p.insight + 2);
         r.relationDelta = socialAffinityGain(p, actionId);
         addRelation(g, npcId, r.relationDelta);
         r.text = "你向" + who + "请教修行疑难，受益良多。";
@@ -483,7 +488,7 @@ SocialResult socialDo(Game& g, const string& npcId, const string& actionId) {
         p.stones -= act->cost;
         const int gain = socialAffinityGain(p, actionId);
         addRelation(g, npcId, gain);
-        p.insight = std::min(INSIGHT_MAX, p.insight + 4);
+        p.insight = std::min(std::max(INSIGHT_MAX, p.insight), p.insight + 4);
         artGain(p, a.focus, 5);
         g.adventure.total += 10;
         g.adventure.since += 10;

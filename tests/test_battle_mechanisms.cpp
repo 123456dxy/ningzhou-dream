@@ -18,7 +18,6 @@ Game fight(const vector<string>& spells, const vector<string>& nodes = {}, int s
     Game g;
     g.seed = g.rng = 20261011;
     g.player.stage = stage;
-    g.player.health = 100;
     g.player.sword = 0;
     g.player.body = 0;
     ensureArts(g);
@@ -28,6 +27,7 @@ Game fight(const vector<string>& spells, const vector<string>& nodes = {}, int s
     g.player.arts.equipped.clear();
     g.player.arts.spells = spells;
     g.player.arts.nodes = nodes;
+    g.player.health = mfPlayerHealthMaximum(g.player);
     EnemySpec enemy;
     enemy.name = "机制试炼";
     enemy.style = "体";
@@ -168,7 +168,7 @@ void runBattleMechanismTests() {
         b.cooldowns.clear(); hand(b, {"purge", "strike"});
         check(battleTurn(g, "purge", copies(b, "strike").front()).ok, "可用卡UID选择固定普通攻击");
         checkEq(b.exhausted.size(), 2, "第二次忘机只再移除一张普通攻击");
-        for (int i = 0; i < 3; ++i) { b.intentKind = "guard"; battleTurn(g, "end"); check(partitioned(b), "移除牌经过弃牌洗牌不复活"); }
+        for (int i = 0; i < 3; ++i) { b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end"); check(partitioned(b), "移除牌经过弃牌洗牌不复活"); }
         checkEq(copies(b, "strike").size(), 5, "原牌组仍保留五张普通攻击定义");
         battleTurn(g, "escape");
         EnemySpec e; e.name = "下场"; battleStart(g, e);
@@ -186,7 +186,7 @@ void runBattleMechanismTests() {
         for (int i = 0; i < 5; ++i) { b.cooldowns.clear(); hand(b, {"aegis"}); battleTurn(g, "aegis"); }
         checkNear(b.reduction, 0.20, "本场额外减伤最高20%");
         checkNear(battleReduction(g.player, b), 0.20, "减伤权威helper包含新增buff");
-        b.intentKind = "guard"; battleTurn(g, "end");
+        b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end");
         checkNear(b.buff, 0.30, "本场增伤在回合结束后保留");
         checkNear(b.reduction, 0.20, "本场减伤在回合结束后保留");
     }
@@ -284,18 +284,19 @@ void runBattleMechanismTests() {
         }
     }
     {
-        Game g = fight({"corrode", "poisonBurst", "fire"}); Battle& b = *g.player.arts.battle;
+        Game g = fight({"corrode", "poisonSiphon", "fire"}); Battle& b = *g.player.arts.battle;
         for (int i = 0; i < 3; ++i) { hand(b, {"corrode"}); battleTurn(g, "corrode"); }
         checkEq(b.poison, 9, "无功法三次腐毒咒天然累积九层，不被六层封顶");
-        const int enemyHp = b.enemyHp; b.intentKind = "guard"; battleTurn(g, "end");
+        const int enemyHp = b.enemyHp; b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end");
         checkEq(enemyHp - b.enemyHp, jsRound(mfBattleDamageBasis(g.player.stage) * 0.045 * 9),
                 "九层毒按真实层数跳伤");
         checkEq(b.poison, 9, "无毒增长功法时持续中的毒保留全部层数");
-        b.enemyShield = 0; hand(b, {"poisonBurst"}); const auto preview = battlePreview(g.player, b, "poisonBurst");
-        const int before = b.enemyHp; battleTurn(g, "poisonBurst");
-        checkEq(before - b.enemyHp, preview.damage, "高于六层的毒爆预览等于真实伤害");
-        checkEq(b.poison, 0, "毒爆消费所有天然叠加毒层"); checkEq(b.poisonTurns, 0, "毒爆解除持续毒伤");
-        b.poison = BATTLE_POISON_CAP - 1; b.poisonTurns = 2; hand(b, {"corrode"}); battleTurn(g, "corrode");
+        b.hp = b.max / 2; b.enemyShield = 0; hand(b, {"poisonSiphon"});
+        const auto preview = battlePreview(g.player, b, "poisonSiphon");
+        const int before = b.hp; battleTurn(g, "poisonSiphon");
+        checkEq(b.hp - before, preview.heal, "高于六层时借毒治疗预览等于真实回血");
+        checkEq(b.poison, 9, "借毒保留所有天然叠加毒层"); checkEq(b.poisonTurns, 1, "借毒保留本场毒活跃状态");
+        b.poison = BATTLE_POISON_CAP - 1; b.poisonTurns = 1; hand(b, {"corrode"}); battleTurn(g, "corrode");
         checkEq(b.poison, BATTLE_POISON_CAP, "毒只在九十九层安全上限封顶");
         b.burn = BATTLE_BURN_CAP - 1; b.burnTurns = 1;
         hand(b, {"fire"}); const auto lastBurn = battlePreview(g.player, b, "fire");
@@ -315,7 +316,7 @@ void runBattleMechanismTests() {
         Game g = fight({"woodSeal"}, {"1-4", "1-5"}); Battle& b = *g.player.arts.battle;
         b.hp = b.max / 2; hand(b, {"woodSeal"}); const int hp = b.hp;
         battleTurn(g, "woodSeal"); check(b.hp > hp, "木系新增毒层触发毒疗");
-        b.intentKind = "guard"; battleTurn(g, "end"); checkEq(b.poison, 3, "仍持续的毒在回合末生长1层");
+        b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end"); checkEq(b.poison, 3, "仍持续的毒在回合末生长1层");
     }
     {
         Game g = fight({"waterSeal", "soulspark", "mountainSeal", "sword"}); Battle& b = *g.player.arts.battle;
@@ -332,14 +333,14 @@ void runBattleMechanismTests() {
     {
         Game g = fight({"corrode"}, {"1-5"}); Battle& b = *g.player.arts.battle;
         for (int i = 0; i < 3; ++i) { hand(b, {"corrode"}); battleTurn(g, "corrode"); }
-        b.intentKind = "guard"; battleTurn(g, "end");
+        b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end");
         checkEq(b.poison, 10, "蔓毒在九层基础上继续生长，不退回旧六层上限");
-        b.poison = BATTLE_POISON_CAP; b.poisonTurns = 2;
-        b.intentKind = "guard"; battleTurn(g, "end");
+        b.poison = BATTLE_POISON_CAP; b.poisonTurns = 1;
+        b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end");
         checkEq(b.poison, BATTLE_POISON_CAP, "蔓毒增长只受九十九层安全上限限制");
-        b.intentKind = "guard"; battleTurn(g, "end");
-        checkEq(b.poison, 0, "毒到期清除全部层数，蔓毒不能让已到期毒复生");
-        checkEq(b.poisonTurns, 0, "高层毒三回合到期后解除持续标记");
+        b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end");
+        checkEq(b.poison, BATTLE_POISON_CAP, "毒本场持续，蔓毒仍遵守99层上限");
+        checkEq(b.poisonTurns, 1, "高层毒不自然到期，活跃标记仍为1");
     }
     {
         Game g = fight({"earth", "goldslash"}, {"4-4", "4-5"}); Battle& b = *g.player.arts.battle;
@@ -359,7 +360,7 @@ void runBattleMechanismTests() {
         Game g = fight({"hoard"}, {"8-4", "8-5"}); Battle& b = *g.player.arts.battle;
         hand(b, {"hoard"}); b.mana = 6; battleTurn(g, "hoard");
         checkEq(b.carryMana, 4, "气道封存基础2加额外2");
-        const int predicted = battleNextMana(g.player, b); b.intentKind = "guard"; battleTurn(g, "end");
+        const int predicted = battleNextMana(g.player, b); b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end");
         checkEq(b.mana, predicted, "少出牌聚灵加封存返还与预测一致"); checkEq(b.carryMana, 0, "封存只返还一次");
     }
     {
@@ -403,14 +404,14 @@ void runBattleMechanismTests() {
     }
     {
         Game g = fight({"wood"}, {"10-4", "10-5"}); Battle& b = *g.player.arts.battle;
-        hand(b, {"wood"}); b.playerPoison = 2; b.playerPoisonTurns = 3;
+        hand(b, {"wood"}); b.playerPoison = 2; b.playerPoisonTurns = 1;
         battleTurn(g, "wood"); checkEq(b.playerPoison, 0, "丹道治疗神通清除2点自身毒伤");
         checkEq(b.playerPoisonTurns, 0, "自身毒伤归零清除持续回合");
     }
     {
         Game g = fight({"gold"}, {"11-4", "11-5"}); Battle& b = *g.player.arts.battle;
         checkEq(b.shield, jsRound(b.max * 0.14), "器道提供开局10%加本回合4%护盾");
-        b.intentKind = "guard"; battleTurn(g, "end");
+        b.BeastActions.clear(); b.intentKind = "guard"; battleTurn(g, "end");
         checkEq(b.shield, jsRound(b.max * 0.04), "器道后续每回合重新提供4%护盾");
     }
 

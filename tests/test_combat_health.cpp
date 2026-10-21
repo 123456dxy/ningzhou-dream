@@ -2,6 +2,7 @@
 #include "core/api.h"
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/save.h"
 #include "core/sim.h"
 #include <algorithm>
@@ -31,7 +32,6 @@ Game mfCombatHealthGame(bool IsHuman = false) {
     auto& PlayerState = State.player;
     PlayerState.stage = 6;
     PlayerState.highestStage = 6;
-    PlayerState.health = 100;
     PlayerState.body = 0;
     PlayerState.talent.clear();
     PlayerState.traits.clear();
@@ -45,6 +45,7 @@ Game mfCombatHealthGame(bool IsHuman = false) {
     PlayerState.arts.combatBuff = 0;
     PlayerState.arts.spells = {"wood"};
     PlayerState.arts.knownSpells = {"wood"};
+    PlayerState.health = mfPlayerHealthMaximum(PlayerState);
     EnemySpec Enemy;
     Enemy.name = IsHuman ? "健康数据散修" : "健康数据妖兽";
     Enemy.kind = "spar"; // 同一非致命结算契约，避免把野外死亡惩罚误当延迟扣血。
@@ -101,7 +102,7 @@ void mfCheckLiveCombatHealth(const Game& State, const json::Value& Response) {
     checkEq(Response["state"]["battle"]["max"].asInt(), Combat.max, "动作API返回当前斗法气血上限");
     checkEq(View["hp"].asInt(), Combat.hp, "独立只读战斗JSON与即时气血完全一致");
     checkEq(View["max"].asInt(), Combat.max, "独立只读战斗JSON上限与即时状态完全一致");
-    checkEq(Response["state"]["player"]["health"].asInt(), State.player.health, "持久健康百分比是不同明确字段");
+    checkEq(Response["state"]["player"]["health"].asInt(), State.player.health, "持久气血按点数保留至战后回写");
 }
 }
 
@@ -115,20 +116,21 @@ void mfRunCombatHealthTests() {
         State = mfCombatHealthGame();
         Scope.SessionState.started = true;
         auto& Combat = *State.player.arts.battle;
-        checkEq(Combat.hp, 614, "无被动金丹满健康度开局气血为614");
+        checkEq(Combat.hp, 724, "无被动金丹满气血开局为724");
+        Combat.BeastActions.clear(); // 用冻结旧单意图隔离气血传导，不混入独立妖兽多段计划。
         Combat.intentKind = "attack";
         Combat.intentRaw = 60; // 冻结合法意图值，独立验证受伤与归一，不依赖意图随机数。
         const auto Hit = mfHealthTurn("end");
-        checkEq(State.player.arts.battle->hp, 554, "妖兽真实回合立即扣除60斗法气血");
-        checkEq(State.player.health, 100, "战中持久健康度不覆盖实时斗法气血");
+        checkEq(State.player.arts.battle->hp, 664, "妖兽真实回合立即扣除60斗法气血");
+        checkEq(State.player.health, 724, "战中持久点数保留至实际战后回写");
         mfCheckLiveCombatHealth(State, Hit);
         State.player.arts.battle->enemyHp = 1;
         State.player.arts.battle->enemyShield = 0;
         check(mfHoldHealthCard(*State.player.arts.battle, "strike"), "胜利使用真实普通攻击卡");
         const auto Win = mfHealthTurn("strike");
         check(Win["ok"].asBool() && !State.player.arts.battle, "击杀后战斗正常结束");
-        checkEq(State.player.health, 90, "结束只把554除614归一为90健康度，没有第二次扣60");
-        checkEq(Win["state"]["player"]["health"].asInt(), 90, "胜利API下发归一后的实际健康度");
+        checkEq(State.player.health, 664, "结束直接写回664气血，没有二次扣血或百分比取整");
+        checkEq(Win["state"]["player"]["health"].asInt(), 664, "胜利API下发真实剩余气血点数");
         check(Win["state"]["battle"].isNull(), "胜利API不保留过期战斗血量");
         const auto BeforeRepeat = saveToJson(State);
         check(!mfHealthTurn("strike")["ok"].asBool(), "结束后的重复动作被拒绝");
@@ -163,18 +165,19 @@ void mfRunCombatHealthTests() {
         State = mfCombatHealthGame();
         Scope.SessionState.started = true;
         auto& Combat = *State.player.arts.battle;
+        Combat.BeastActions.clear();
         Combat.intentKind = "guard";
         Combat.intentRaw = 0;
         Combat.playerPoison = 11;
-        Combat.playerPoisonTurns = 3;
+        Combat.playerPoisonTurns = 1;
         Combat.enemyCards.burn = 17;
         Combat.enemyCards.burnTurns = 3;
         const auto Dot = mfHealthTurn("end");
-        checkEq(State.player.arts.battle->hp, 586, "毒11和灼烧17在本轮立即合计扣28斗法气血");
+        checkEq(State.player.arts.battle->hp, 696, "毒11和灼烧17在本轮立即合计扣28斗法气血");
         mfCheckLiveCombatHealth(State, Dot);
         check(mfHoldHealthCard(*State.player.arts.battle, "wood"), "回春使用真实已携带神通卡");
         const auto Heal = mfHealthTurn("wood");
-        checkEq(State.player.arts.battle->hp, 614, "回春施放后即时回复缺失28气血且不超过上限");
+        checkEq(State.player.arts.battle->hp, 724, "回春施放后即时回复缺失28气血且不超过上限");
         mfCheckLiveCombatHealth(State, Heal);
     }
     {
@@ -184,16 +187,17 @@ void mfRunCombatHealthTests() {
         Scope.SessionState.started = true;
         check(mfHoldHealthCard(*State.player.arts.battle, "defend"), "守势使用真实固定防御卡");
         const auto Guard = mfHealthTurn("defend");
-        checkEq(State.player.arts.battle->shield, 74, "守势即时增加74护盾");
+        checkEq(State.player.arts.battle->shield, 87, "守势即时增加87护盾");
         mfCheckLiveCombatHealth(State, Guard);
+        State.player.arts.battle->BeastActions.clear();
         State.player.arts.battle->intentKind = "attack";
         State.player.arts.battle->intentRaw = 60;
         const auto Blocked = mfHealthTurn("end");
-        checkEq(State.player.arts.battle->hp, 614, "护盾完全格挡60伤害后即时气血保持满值");
+        checkEq(State.player.arts.battle->hp, 724, "护盾完全格挡60伤害后即时气血保持满值");
         mfCheckLiveCombatHealth(State, Blocked);
         const auto Escape = mfHealthTurn("escape");
-        check(Escape["ok"].asBool() && !State.player.arts.battle && State.player.health == 100,
-              "无气血损失的非致命撤离结束也不会突然掉健康度");
+        check(Escape["ok"].asBool() && !State.player.arts.battle && State.player.health == 724,
+              "无气血损失的非致命撤离结束保持满气血");
     }
     {
         CombatHealthSession Scope;
@@ -201,15 +205,16 @@ void mfRunCombatHealthTests() {
         State = mfCombatHealthGame();
         Scope.SessionState.started = true;
         for (int RoundIndex = 0; RoundIndex < 2; ++RoundIndex) {
+            State.player.arts.battle->BeastActions.clear();
             State.player.arts.battle->intentKind = "attack";
             State.player.arts.battle->intentRaw = 60;
             mfCheckLiveCombatHealth(State, mfHealthTurn("end"));
         }
-        checkEq(State.player.arts.battle->hp, 494, "两个完整回合逐次即时扣血614减120为494");
+        checkEq(State.player.arts.battle->hp, 604, "两个完整回合逐次即时扣血724减120为604");
         const auto Escape = mfHealthTurn("escape");
         check(Escape["ok"].asBool() && !State.player.arts.battle, "非致命撤离按当前斗法状态结束");
-        checkEq(State.player.health, 80, "撤离仅归一494除614为80健康度，不追加追击或惩罚");
-        checkEq(Escape["state"]["player"]["health"].asInt(), 80, "撤离API健康度与核心归一结果相同");
+        checkEq(State.player.health, 604, "撤离直接回写604气血，不追加追击或惩罚");
+        checkEq(Escape["state"]["player"]["health"].asInt(), 604, "撤离API气血与核心回写结果相同");
     }
 }
 } // namespace nztest

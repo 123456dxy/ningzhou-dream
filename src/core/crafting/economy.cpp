@@ -1,12 +1,16 @@
 // 宁州一梦 · C++ 版 — 营生与坊市实现（对应 JS 版 economy.mjs）
 #include "core/economy.h"
+#include "core/combat/battle_scaling.h"
 #include "core/shop.h"
 #include "core/progression/manual_study.h"
 #include "core/crafting/material_supply.h"
+#include "core/crafting/forge_rules.h"
+#include "core/crafting/alchemy_rules.h"
 #include "core/crafting/craft_timing.h"
 #include "core/crafting/craft_prices.h"
 #include "core/crafting/cave_garden.h"
 #include "core/crafting/market_cycle.h"
+#include "core/exploration/beast_loot.h"
 #include "core/renown.h"
 
 #include <algorithm>
@@ -351,16 +355,14 @@ EcoActionInfo ecoActionInfo(const Game& g, const string& type,
         return info;
     }
     if (type == "brew") {
-        if (batch != 1 && batch != 3 && batch != 5 && batch != 10) return info;
-        const BrewInfo b = artBrewInfo(p, id);
-        if (!b.valid) return info;
-        info.valid = true;
-        info.name = "炼制" + b.recipeName;
-        info.days = ecoCraftDays(p, "brew", b.grade) * batch;
-        info.cost = b.cost * batch;
-        info.chance = b.chance;
+        const auto Quote = crafting::mfQuoteAlchemy(g, id, batch);
+        info.valid = Quote.Valid;
+        info.name = Quote.Name;
+        info.days = Quote.DurationDays;
+        info.cost = Quote.StoneCost;
+        info.chance = Quote.SuccessProbability;
         info.batch = batch;
-        info.output = b.output;
+        info.output = Quote.OutputPerSuccess;
         return info;
     }
     if (type == "forge") {
@@ -508,23 +510,7 @@ string ecoActionError(const Game& g, const string& type, const string& id, int b
         return "";
     }
     if (type == "brew") {
-        const string err = artAnnualError(g, "brew", id);
-        if (!err.empty()) return err;
-        // 丹炉耐久要够整批
-        const data::RecipeDef* r = findRecipeEco(id);
-        const data::FurnaceDef* f = nullptr;
-        for (const auto& x : data::FurnaceDef_TABLE())
-            if (x.id == a.furnace) f = &x;
-        if (!(artHas(a, "丹", 4) && f && r && f->grade > r->grade) &&
-            a.durability < batch)
-            return "丹炉耐久不足以完成整批。";
-        for (const auto& [herbName, n] : parseIngredients(r->ingredients)) {
-            const auto it = a.herbs.find(herbName);
-            if (it == a.herbs.end() || it->second < n * batch)
-                return "指定药材不足以完成整批：" + herbName + "需 " +
-                       std::to_string(n * batch) + " 份。";
-        }
-        return "";
+        return crafting::mfQuoteAlchemy(g, id, batch).Reason;
     }
     if (type == "forge") return artAnnualError(g, "forge", id);
     if (type == "task") {
@@ -584,7 +570,7 @@ string ecoActionError(const Game& g, const string& type, const string& id, int b
     }
     if (type == "hunt") {
         if (!ecoIsCity(p.location)) return "请从城中猎妖任务堂出发。";
-        if (p.health < 50) return "猎妖请先休养到50气血。";
+        if (p.health < HealthGateMinimum) return "猎妖请先休养到30气血。";
         auto it = e.orders.find("hunt");
         if (it != e.orders.end() && it->second >= 3)
             return "本月猎妖委托已满三次。";
@@ -609,6 +595,7 @@ void ecoBegin(Game& g, const string& type, const string& id, int batch) {
     Arts& a = p.arts;
     Economy& e = g.economy;
     const EcoActionInfo info = ecoActionInfo(g, type, id, batch);
+    const auto AlchemyQuote = type == "brew" ? crafting::mfQuoteAlchemy(g, id, batch) : crafting::AlchemyQuote{};
 
     Job job;
     job.actionType = type;
@@ -628,19 +615,11 @@ void ecoBegin(Game& g, const string& type, const string& id, int batch) {
     p.stones -= info.cost;
 
     if (type == "brew") {
-        const data::RecipeDef* r = findRecipeEco(id);
-        const data::FurnaceDef* f = nullptr;
-        for (const auto& x : data::FurnaceDef_TABLE())
-            if (x.id == a.furnace) f = &x;
-        if (r) {
-            for (const auto& [herbName, n] : parseIngredients(r->ingredients)) {
-                a.herbs[herbName] -= n * batch;
-                p.herbs = std::max(0, p.herbs - n * batch);
-            }
-            // 高阶炉炼低阶丹不损耐久
-            if (!(artHas(a, "丹", 4) && f && f->grade > r->grade))
-                a.durability -= batch;
+        for (const auto& Ingredient : AlchemyQuote.Ingredients) {
+            a.herbs[Ingredient.Name] -= Ingredient.Required;
+            p.herbs = std::max(0, p.herbs - Ingredient.Required);
         }
+        a.durability -= AlchemyQuote.DurabilityCost;
     } else if (type == "forge") {
         for (const auto& material : artForgeMaterials(p, info.mainId, info.auxId, info.coreId))
             a.materials[material.id] -= material.required;
@@ -686,6 +665,7 @@ void ecoBegin(Game& g, const string& type, const string& id, int batch) {
 // 使用方式：传入Game& g, const Job& job，按本模块入口调用。
 // 返回值：无；完成说明所述写入或展示操作。
 void ecoComplete(Game& g, const Job& job) {
+    if (job.actionType == "forge" && crafting::mfCompleteForge(g, job)) return;
     Player& p = g.player;
     Arts& a = p.arts;
     Economy& e = g.economy;
@@ -774,7 +754,7 @@ void ecoComplete(Game& g, const Job& job) {
         p.stones += jsRound(static_cast<double>(job.fee));
         e.cityTasks++;
         if (id == "escort" && randomOf(g) < 0.15)
-            p.health = std::max(1, p.health - 8);
+            p.health = std::max(1, p.health - mfHealthPercentAmount(mfPlayerHealthMaximum(p), 8));
         logEvent(g, "self",
                  "完成" + job.name + "：" + receipt.changes(g) + "。");
     } else if (type == "commission") {
@@ -805,11 +785,13 @@ void ecoComplete(Game& g, const Job& job) {
         enemy.name = "任务妖兽";
         enemy.stage = p.stage;
         enemy.kind = "hunt";
+        enemy.beast = true;
+        enemy.style = exploration::mfRollBeastMaterialElement(g);
         enemy.huntFee = job.fee;
         battleStart(g, enemy);
     } else if (type == "meditate") {
         artGain(p, id, jsRound(4 + jsSqrt(p.insight) * 0.5));
-        p.insight = std::min(INSIGHT_MAX, p.insight + 1);
+        p.insight = std::min(std::max(INSIGHT_MAX, p.insight), p.insight + 1);
         a.focus = id;
         logEvent(g, "self", "参悟" + id + "道" + std::to_string(job.total) +
                                 "天，经验有所增长。");
@@ -839,16 +821,7 @@ void ecoHuntEnd(Game& g, bool win) {
     if (win) {
         p.stones += fee;
         e.huntCounts++;
-        const int tier = ordinaryMaterialGradeLimit(p);
-        vector<const data::MaterialDef*> pool;
-        for (const auto& m : data::MaterialDef_TABLE())
-            if (m.grade <= tier) pool.push_back(&m);
-        if (!pool.empty()) {
-            const data::MaterialDef* m = pickOf(g, pool);
-            a.materials[m->id] = a.materials[m->id] + 2;
-            logEvent(g, "self", "猎妖交付：赏金 +" + std::to_string(fee) +
-                                    " 灵石，获得" + m->name + " ×2。");
-        }
+        logEvent(g, "self", "猎妖交付：赏金 +" + std::to_string(fee) + " 灵石。");
         if (e.huntCounts >= 1) ecoAcquireBook(g, "bull", "猎妖任务堂奖励");
         if (e.huntCounts >= 5) ecoAcquireBook(g, "longlife", "猎妖五胜传承");
     } else {

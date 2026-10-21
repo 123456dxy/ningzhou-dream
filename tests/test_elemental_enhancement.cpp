@@ -27,6 +27,7 @@ Game mfEnhancementEncounter(int ManualLevel = 5, bool IsAuxiliary = false) {
     if (IsAuxiliary) PlayerState.arts.aux = {"fiveSword"};
     PlayerState.arts.spells = {"earthSword", "metalSword", "waterSword", "woodSword", "fireSword", "gather", "skim", "gold"};
     PlayerState.arts.knownSpells = PlayerState.arts.spells;
+    PlayerState.health = mfPlayerHealthMaximum(PlayerState);
     Npc Opponent;
     Opponent.id = "enhancement-opponent"; Opponent.name = "强化计量对手";
     Opponent.stage = 12; Opponent.sect = "zhushan"; Opponent.dao = "木";
@@ -84,7 +85,7 @@ void mfRunElementalEnhancementTests() {
             auto& State = *Encounter.player.arts.battle;
             State.last = "土"; State.ElementalSwordSequence = 1;
             const auto Modifiers = talentMods(Encounter.player);
-            const double EffectPerLayer = ManualLevel * .04 * (IsAuxiliary ? .5 : 1.0);
+            const double EffectPerLayer = ManualLevel * .02 * (IsAuxiliary ? .5 : 1.0);
             checkNear(Modifiers.ElementalSwordMastery, ManualLevel * .2 * (IsAuxiliary ? .5 : 1.0),
                       "功法有效系数遵守主修全额与辅修减半");
             State.ElementalSwordEnhancementLayers = 5;
@@ -105,6 +106,35 @@ void mfRunElementalEnhancementTests() {
             checkEq(State.ElementalSwordManaReturns, ManualLevel == 5 && !IsAuxiliary ? 1 : 0,
                     "强化不放大返灵，整数返灵仍按有效功法系数取整");
         }
+    }
+    {
+        Game Encounter = mfEnhancementEncounter();
+        Encounter.player.arts.aux = {"swordcraft"};
+        Encounter.player.arts.manuals["swordcraft"] = 5;
+        auto& State = *Encounter.player.arts.battle;
+        State.last = "土";
+        State.ElementalSwordSequence = 1;
+        State.ElementalSwordEnhancementLayers = 5;
+        State.swordQi = 4;
+        State.swordSequence = 0;
+        const auto FirstElemental = battlePreview(Encounter.player, State, "metalSword");
+        const auto FirstOrdinary = battlePreview(Encounter.player, State, "sword");
+        State.swordSequence = 6;
+        const auto LaterElemental = battlePreview(Encounter.player, State, "metalSword");
+        const auto LaterOrdinary = battlePreview(Encounter.player, State, "sword");
+        checkEq(LaterElemental.RawDamage, FirstElemental.RawDamage,
+                "五行剑不叠加普通剑修的同轮连剑增伤");
+        check(LaterOrdinary.RawDamage > FirstOrdinary.RawDamage,
+              "普通剑修仍保留同轮连续剑招的增伤");
+        check(battlePreviewConditions(Encounter.player, *battleSpell("metalSword")).find("连续剑招每次额外") == string::npos,
+              "五行剑条件说明不再承诺普通连剑增伤");
+        check(battlePreviewConditions(Encounter.player, *battleSpell("sword")).find("连续剑招每次额外") != string::npos,
+              "普通剑招条件说明仍显示真实连剑增伤");
+        const int EnemyHealthBefore = State.enemyHp;
+        check(battleTurn(Encounter, mfHoldEnhancementCard(State, "metalSword")).ok,
+              "收紧重复增伤后五行剑仍可从真实手牌施放");
+        checkEq(EnemyHealthBefore - State.enemyHp, LaterElemental.damage,
+                "五行剑排除普通连剑增伤的预览与真实损血一致");
     }
     {
         Game Encounter = mfEnhancementEncounter();
@@ -143,18 +173,18 @@ void mfRunElementalEnhancementTests() {
         State.enemyCards.planned.clear();
         check(battleTurn(Encounter, "end").ok, "强化对局跨真实回合");
         checkEq(State.ElementalSwordEnhancementLayers, 5, "新回合保留本场五层强化");
-        checkNear(ElementalSword::mfGenerationDamageMultiplier(Modifiers, State, *battleSpell("metalSword"), true), 1.30,
-                  "满强化将基础15%相生额外部分加倍为30%");
+        checkNear(ElementalSword::mfGenerationDamageMultiplier(Modifiers, State, *battleSpell("metalSword"), true), 1.225,
+                  "满强化将基础15%相生额外部分提高至22.5%");
         checkNear(ElementalSword::mfGenerationDamageMultiplier(Modifiers, State, *battleSpell("gold"), true), 1.15,
                   "非五剑普通金道神通不获得五行剑强化增伤");
         checkNear(ElementalSword::mfGenerationDamageMultiplier(Modifiers, State, *battleSpell("fireSword"), false), 1.0,
                   "未相生时强化不放大基础伤害");
         auto ExtraGeneration = Modifiers;
         ExtraGeneration.combo = .15;
-        checkNear(ElementalSword::mfGenerationDamageMultiplier(ExtraGeneration, State, *battleSpell("metalSword"), true), 1.60,
-                  "附加相生系数也作为有界额外部分放大，最大总倍率1.60");
-        checkNear(ElementalSword::mfDamageMultiplier(*battleSpell("fireSword"), true, 2.0), 1.50,
-                  "火剑只将额外25%加倍，不把整段基础伤害翻倍");
+        checkNear(ElementalSword::mfGenerationDamageMultiplier(ExtraGeneration, State, *battleSpell("metalSword"), true), 1.45,
+                  "附加相生系数只放大额外部分，最大总倍率1.45");
+        checkNear(ElementalSword::mfDamageMultiplier(*battleSpell("fireSword"), true, 1.5), 1.375,
+                  "火剑满强化的额外25%增幅受限至37.5%");
         EnemySpec Enemy; Enemy.id = Encounter.npcs.front().id; Enemy.name = Encounter.npcs.front().name;
         Enemy.stage = 12; Enemy.sect = "zhushan"; Enemy.style = "木"; Enemy.speed = 0;
         battleStart(Encounter, Enemy);
@@ -171,8 +201,8 @@ void mfRunElementalEnhancementTests() {
         const auto Preview = battlePreview(Encounter.player, State, "woodSword");
         const int HealthBefore = State.hp;
         check(battleTurn(Encounter, CardUid).ok, "木剑通过真实动作测试相生与非相生吸血");
-        checkEq(State.hp - HealthBefore, jsRound(Preview.damage * (HasGeneratingCombo ? .50 : .25)),
-                "满强化木剑仅在相生时吸血50%，非相生保留原25%");
+        checkEq(State.hp - HealthBefore, jsRound(Preview.damage * (HasGeneratingCombo ? .375 : .25)),
+                "满强化木剑相生时吸血37.5%，非相生保留原25%");
         checkEq(State.hp - HealthBefore, Preview.heal, "木剑强化吸血与预览一致");
     }
     {
@@ -191,7 +221,7 @@ void mfRunElementalEnhancementTests() {
         checkEq(State.hp, State.max, "强化吸血不突破自身气血上限");
         State.last = "火"; State.ElementalSwordSequence = 1; State.guard = .15;
         const auto Preview = battlePreview(Encounter.player, State, "earthSword");
-        checkNear(Preview.guardPct, 5.0, "土剑单次强化10%仍被总守势20%限制为实际5%");
+        checkNear(Preview.guardPct, 5.0, "土剑单次强化7.5%仍被总守势20%限制为实际5%");
         check(battleTurn(Encounter, mfHoldEnhancementCard(State, "earthSword")).ok, "满强化土剑进入真实守势结算");
         checkNear(State.guard, .20, "强化土剑不能越过20%总守势上限");
     }

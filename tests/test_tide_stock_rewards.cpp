@@ -63,6 +63,7 @@ void mfRunTideStockRewardTests() {
     Options.seed = 20261014;
     Options.traitsExplicit = true;
     auto SavedState = createGame(Options);
+    SavedState.pending.reset();
     SavedState.npcs.clear();
     SavedState.tide.active = true;
     tide::ensureTide(SavedState);

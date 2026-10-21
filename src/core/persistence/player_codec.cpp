@@ -2,6 +2,8 @@
 #include "core/persistence/internal.h"
 #include "core/persistence/json_helpers.h"
 #include "core/talents.h"
+#include "core/persistence/zhuji_codec.h"
+#include "core/persistence/ascension_codec.h"
 #include <stdexcept>
 
 namespace nz::persistence {
@@ -63,12 +65,19 @@ Value playerToJson(const Player& player) {
     playerObject.set("highestStage", num(player.highestStage));
     playerObject.set("achievements", pairsToJson(player.achievements));
     playerObject.set("arts", artsToJson(player.arts));
+    if (player.Zhuji) playerObject.set("zhuji", mfZhujiToJson(*player.Zhuji));
+    playerObject.set("ascensionTournament", mfAscensionTournamentToJson(player.AscensionTournament));
     return playerObject;
 }
 
 
 void playerFromJson(const Value& playerObject, Player& player, uint32_t seed) {
     personFromJson(playerObject, player);
+    if (playerObject.asObject().contains("ascensionTournament")) {
+        string Error;
+        if (!mfAscensionTournamentFromJson(playerObject["ascensionTournament"], player.AscensionTournament, Error))
+            throw std::invalid_argument(Error);
+    }
     player.portraitId = playerObject["portraitId"].asString();
     // 洞府与配给
     // 道友往来（旧档没有这个字段，缺了就是空）
@@ -128,6 +137,11 @@ void playerFromJson(const Value& playerObject, Player& player, uint32_t seed) {
                                                achievementObject["year"].asInt());
     }
     artsFromJson(playerObject["arts"], player.arts);
+    if (playerObject["zhuji"].isObject()) {
+        ZhujiRun Run;
+        std::string Error;
+        if (mfZhujiFromJson(playerObject["zhuji"], Run, Error)) player.Zhuji = std::move(Run);
+    }
     if (!playerObject["build"].isObject() && player.lifeBonus == 0 &&
         player.stage >= 0 && player.stage < static_cast<int>(REALMS().size())) {
         // 旧 Player 重复定义 lifeBonus，基类序列化永远写零。

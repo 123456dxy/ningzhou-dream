@@ -1,4 +1,5 @@
 #include "core/interface/green_bottle_api.h"
+#include "core/interface/dungeon_entry.h"
 #include "core/crafting/green_bottle.h"
 #include "core/crafting/garden_rules.h"
 #include <algorithm>
@@ -58,7 +59,7 @@ std::string mfExecuteGreenBottleCommand(Game& State, RouteId Route, const json::
     if (!Input.isObject()) return "绿瓶动作需要JSON对象。";
     for (const auto& [Key, Value] : Input.asObject()) {
         static_cast<void>(Value);
-        if (Key != "expectedGrade" && !(Route == RouteId::CaveGreenBottleDungeon && Key == "grade")) return "未知绿瓶动作参数。";
+        if (Key != "expectedGrade" && !(Route == RouteId::CaveGreenBottleDungeon && (Key == "grade" || Key == "cardRewardPreference"))) return "未知绿瓶动作参数。";
     }
     const auto& Expected = Input["expectedGrade"];
     if (!Expected.isNumber() || !std::isfinite(Expected.asNumber()) || Expected.asNumber() != std::floor(Expected.asNumber()) || Expected.asNumber() < 0 || Expected.asNumber() > 6)
@@ -68,6 +69,8 @@ std::string mfExecuteGreenBottleCommand(Game& State, RouteId Route, const json::
     const auto& Grade = Input["grade"];
     if (!Grade.isNumber() || !std::isfinite(Grade.asNumber()) || Grade.asNumber() != std::floor(Grade.asNumber()) || Grade.asNumber() < 4 || Grade.asNumber() > 6)
         return "专属灵材秘境品阶必须为4至6。";
-    return crafting::mfEnterGreenBottleDungeon(State, Grade.asInt(), Expected.asInt());
+    DungeonCardRewardPreference Preference;
+    if (const auto Error = mfReadDungeonCardRewardPreference(Input, Preference); !Error.empty()) return Error;
+    return crafting::mfEnterGreenBottleDungeon(State, Grade.asInt(), Expected.asInt(), Preference);
 }
 }

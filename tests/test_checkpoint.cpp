@@ -10,6 +10,7 @@
 #include "core/calendar.h"
 #include "core/checkpoint.h"
 #include "core/dungeon.h"
+#include "core/exploration/ascension_tournament.h"
 #include "core/json.h"
 #include "core/legacy.h"
 #include "core/save.h"
@@ -93,7 +94,8 @@ void runCheckpointTests() {
     struct CheckpointArchiveScope {
         string previous = defaultSaveDir();
         CheckpointArchiveScope() {
-            const auto directory = std::filesystem::temp_directory_path() / ("nz-checkpoint-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            const auto directory = std::filesystem::current_path() / "tmp" /
+                ("nz-checkpoint-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
             std::filesystem::create_directories(directory);
             const auto utf8 = directory.u8string();
             setSaveDirOverride(string(reinterpret_cast<const char*>(utf8.data()), utf8.size()));
@@ -296,6 +298,11 @@ void runCheckpointTests() {
         const auto completion = calendarRun(g, 1);
         check(completion.ok && !completion.restored && g.clock.days == 3600 && !g.job,
               "满十年那日的最后一个任务正常结算");
+        check(g.pending && g.pending->type == AscensionTournamentBattleKind,
+              "十年任务完成后收到本届大会邀请");
+        checkEq(g.checkpoint.lastAutoYear, 0, "大会邀请待处理时延期十年快照");
+        check(mfChooseAscensionTournament(g, "decline"), "通过真实选择暂不参加大会并恢复空闲");
+        check(checkpointTick(g), "处理邀请后的安全动作边界补存十年快照");
         checkEq(g.checkpoint.lastAutoYear, 10, "任务结算后补存十年快照");
         checkEq(g.checkpoint.days, 3600, "十年快照包含任务完成后的真实进度");
         const auto saved = json::Value::parse(g.checkpoint.snapshot);
@@ -368,6 +375,12 @@ void runCheckpointTests() {
         const auto response = checkpointRequest("advance", advance);
         const string label = std::to_string(decade) + "年自动档";
         checkEq(response.status, 200, label + "通过真实推进接口完成年界任务");
+        check(g.pending && g.pending->type == AscensionTournamentBattleKind,
+              label + "年界任务完成后保留待处理大会邀请");
+        checkEq(g.checkpoint.lastAutoYear, decade - 10, label + "大会邀请期间不覆盖旧安全快照");
+        json::Value invitationChoice(json::Object{}); invitationChoice.set("id", "decline");
+        checkEq(checkpointRequest("choose", invitationChoice).status, 200,
+              label + "真实选择接口处理邀请后补存并落盘");
         checkEq(g.checkpoint.lastAutoYear, decade, label + "更新十年周期");
         checkEq(g.checkpoint.days, decade * 360, label + "保存实际游戏日期");
         check(g.checkpoint.source == "auto" && g.checkpoint.slot == 4 && !g.job,

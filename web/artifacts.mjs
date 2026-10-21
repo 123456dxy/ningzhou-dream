@@ -1,3 +1,4 @@
+import { renderArtifactIllustration } from './artifact-illustrations.mjs';
 import { esc } from './shell.mjs';
 import { renderNumericPreview } from './numeric-preview.mjs';
 import { renderCraftPricing } from './craft-pricing.mjs';
@@ -13,7 +14,7 @@ const kindLabel = { attack: '攻击', shield: '护盾', guard: '护盾', heal: '
 export function renderArtifactAbility(ability, { compact = false } = {}) {
   if (!ability) return '';
   return `<div class="artifact-ability${compact ? ' compact' : ''}" data-artifact-ability="${esc(ability.id)}">`
-    + `<div><strong>${esc(ability.name)}</strong><span>${esc(ability.dao)}道 · ${esc(kindLabel[ability.kind] || '法宝神通')}</span></div>`
+    + renderArtifactIllustration(ability, { compact: true }) + `<div><strong>${esc(ability.name)}</strong><span>${esc(ability.dao)}道 · ${esc(kindLabel[ability.kind] || '法宝神通')}</span></div>`
     + `<p>${esc(ability.description)}</p>` + renderNumericPreview(ability.preview, { compact })
     + `<small>耗灵力 ${esc(ability.cost)} · 冷却 ${esc(ability.cooldown)} 回合${ability.stageName ? ` · 需${esc(ability.stageName)}` : ''}</small></div>`;
 }
@@ -43,10 +44,10 @@ export function renderBattleArtifacts(battle) {
         .filter(([key]) => ability[key] > 0).map(([key, label]) => `${label} ${ability[key]}`).join(' · ');
       const playable = ability.playable === true;
       return `<button class="combat-artifact${playable ? ' available' : ''}" data-action="artifact-play" data-id="${esc(ability.id)}" ${playable ? '' : 'disabled'}>`
-        + `<div class="combat-artifact-top"><span>灵力 ${esc(ability.cost)}</span><strong>${esc(ability.name)}</strong><em>${esc(ability.dao)}道</em></div>`
+        + renderArtifactIllustration(ability, { compact: true }) + `<div class="combat-artifact-top"><span>灵力 ${esc(ability.cost)}${ability.healthCost > 0 ? ` · 气血 ${esc(ability.healthCost)}` : ''}</span><strong>${esc(ability.name)}</strong><em>${esc(ability.dao)}道</em></div>`
         + (effects ? `<p class="combat-artifact-effect">${esc(effects)}</p>` : '')
         + (ability.text ? `<p class="combat-artifact-preview">${esc(ability.text)}</p>` : !effects ? '<p class="combat-artifact-effect">按法宝神通效果结算</p>' : '')
-        + `<p>${esc(ability.description)}</p><small>冷却 ${esc(ability.cooldown)} 回合${ability.cooldownRemaining > 0 ? ` · 尚余 ${esc(ability.cooldownRemaining)} 回合` : ' · 已就绪'}</small>`
+        + `<p>${esc(ability.description)}</p><small>冷却 ${esc(ability.cooldown)} 回合${ability.cooldownRemaining > 0 ? ` · 尚余 ${esc(ability.cooldownRemaining)} 回合${ability.nextAvailableTurn != null ? ` · 第 ${esc(Number(ability.nextAvailableTurn) + 1)} 个自身回合可用` : ''}` : ' · 已就绪'}</small>`
         + `<b class="combat-artifact-action">${esc(playable ? '施展法宝神通' : ability.reason || '当前无法施展')}</b></button>`;
     }).join('')}</div>` : '<p class="combat-artifact-empty">尚未装备带有神通的法宝。可在任务与工坊铸炼，再到行囊装备。</p>')
     + `</section>`;

@@ -5,6 +5,7 @@
 
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/conflict.h"
 #include "core/economy.h"
 #include "core/play.h"
@@ -19,8 +20,9 @@ namespace nztest {
 namespace {
 Game richGame() {
     Game g = createGame(CreateOptions{});
+    g.pending.reset();
     g.player.stones = 10000;
-    g.player.health = 100;
+    g.player.health = mfPlayerHealthMaximum(g.player);
     return g;
 }
 int materialCount(const Game& g) {
@@ -86,6 +88,7 @@ void runMechanicsRegressionTests() {
         Game g = richGame();
         startTestBattle(g);
         Battle& b = *g.player.arts.battle;
+        b.BeastActions.clear();
         b.intentKind = "poison";
         b.intentRaw = 0;
         const int enemyHp = b.enemyHp;
@@ -93,6 +96,7 @@ void runMechanicsRegressionTests() {
         checkEq(b.poison, 0, "敌方施毒不增加敌方受到的毒层");
         check(b.playerPoison > 0, "玩家记录敌方毒伤");
         const int hp = b.hp, tick = b.playerPoison;
+        b.BeastActions.clear();
         b.intentKind = "guard";
         b.intentRaw = 0;
         battleTurn(g, "end");
@@ -128,6 +132,8 @@ void runMechanicsRegressionTests() {
               battlePreview(base.player, *base.player.arts.battle, "strike").damage,
               "百分比攻击丹药确实提高伤害");
         checkNear(boosted.player.arts.battle->reduction, 0.12, "减伤丹保留小数效果");
+        base.player.arts.battle->BeastActions.clear();
+        boosted.player.arts.battle->BeastActions.clear();
         base.player.arts.battle->intentKind = "attack";
         boosted.player.arts.battle->intentKind = "attack";
         base.player.arts.battle->intentRaw = boosted.player.arts.battle->intentRaw = 100;

@@ -15,7 +15,7 @@ std::span<const NpcCombatProfile> npcCombatProfiles() {
          {"waterSeal", "wavehit", "stormSword", "waterfall", "water", "softwater", "waterDraw", "skim"}, "water-wave"},
         {"zhushan-complete", "竹山毒生回春", "zhushan",
          {"venom", "turtle", "wood", "evergreen", "longlife"},
-         {"corrode", "poisonBurst", "toxinRain", "wood", "woodwall", "woodDraw", "skim", "gather"}, "wood-poison"},
+         {"corrode", "wood", "woodwall", "poisonBloom", "poisonSiphon", "toxinRain", "woodDraw", "skim"}, "wood-poison"},
         {"lihuo-complete", "离火积焰引爆", "lihuo",
          {"playfire", "flame", "kindle", "sunwheel", "fire"},
          {"fireSeal", "spitfire", "fire", "fireburst", "fireSiphon", "fireDraw", "gather", "hoard"}, "fire-stack"},

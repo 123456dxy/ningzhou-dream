@@ -92,7 +92,11 @@ void mfRunCraftPriceTests() {
         check(loadFromJson(saveToJson(State), Restored, &Error), "已耗尽预算的旧档可读回：" + Error);
         checkEq(Restored.economy.marketCash, 0, "旧档读取保留当月已经用尽的预算");
         Restored.clock.days += 30; ecoRefresh(Restored);
-        check(shop::saleQuote(Restored, "potion", "5505").enabled, "旧档进入下月后可按新曲线足额收购");
+        checkEq(Restored.economy.marketCash, 0, "旧档进入下月仍不补充当前三年账期资金");
+        check(!shop::saleQuote(Restored, "potion", "5505").enabled, "换月不能恢复已耗尽的收购资格");
+        Restored.clock.days = 1080; Restored.year = 3; Restored.player.age = Restored.clock.ageBase + 3;
+        ecoRefresh(Restored);
+        check(shop::saleQuote(Restored, "potion", "5505").enabled, "旧档跨三年边界后可按当前价格足额收购");
         Restored.player.location = "yishan";
         const auto Outside = saveToJson(Restored);
         check(!shop::sell(Restored, "potion", "5505").ok, "高品收购不能绕过五城地点限制");
@@ -117,7 +121,7 @@ void mfRunCraftPriceTests() {
             Found = true;
             const auto Market = Entry["pricing"]["market"];
             checkEq(Market["remainingCash"].asInt(), 199, "真实状态报价显示本月已花费后的剩余资金");
-            checkEq(Market["affordableCount"].asInt(), 5, "可售量按资金与剩余同类需求计算且不依赖现有库存");
+            checkEq(Market["affordableCount"].asInt(), 6, "可售量按199资金除以32单价向下取整，旧销量与现有库存不限制资金报价");
             check(Market["locations"].asArray().size() == 5 && Market["inCity"].asBool(),
                   "价格报价公布实际五城收购渠道");
         }

@@ -59,7 +59,7 @@ struct CraftPriceQuote {
 [[nodiscard]] CraftPriceQuote mfQuotePotionPrice(const Game& GameState, const std::string& RecipeId);
 
 // 用途：按完整配料账查询现有法器买卖基价与额外加成；流程：装备预览和实际回收。
-// 参数：合法法器快照，配料账按GearState.id从同一游戏读取；无账物按同阶十份材料估价。
+// 参数：新版从SourceMaterials读取冻结明细（预览可无装备ID）；旧配料账按GearState.id读取；旧无账物按同阶十份材料估价。
 // 返回：独立报价；损坏账、非法品阶/行情/金额明确失败，无RNG/时间/资源或文件副作用。
 [[nodiscard]] CraftPriceQuote mfQuoteGearPrice(const Game& GameState, const Gear& GearState);
 

@@ -204,7 +204,71 @@ test('all HTML helper text and action payload boundaries escape metacharacters',
 
 // These controller functions are not public exports. Execute their actual source
 // with injected collaborators, rather than copying their implementation or merely
-// checking that a guard's spelling exists. No boot code or real DOM is evaluated.
+// checking that a guard's spelling exists. No live requests or real DOM are used.
+function bootHarness(reader) {
+  const source=readFileSync(new URL('../web/v2/app.mjs',import.meta.url),'utf8');
+  const start=source.indexOf('async function boot('),end=source.indexOf('\nboot();',start);
+  assert.ok(start>=0&&end>start,'boot test boundary must track controller refactors');
+  const store=createStore(),calls=[],activity={renders:0,routerStarts:0};
+  const api={read:async(...args)=>{calls.push(args);return reader(...args);}};
+  const context=vm.createContext({store,api,loginMessage:'',loginRequired:false,
+    refreshState:async()=>store.accept(await api.read('state')),
+    router:{start:()=>activity.routerStarts++},render:()=>activity.renders++,
+  });
+  vm.runInContext(source.slice(start,end)+'\nthis.startBoot=boot;',context);
+  return {store,calls,activity,context,boot:context.startBoot};
+}
+
+test('local boot reads mode and loads real weather without requesting disabled whoami',async()=>{
+  const h=bootHarness(async path=>{
+    if(path==='mode')return {ok:true,local:true,nickname:'本地道友'};
+    if(path==='state')return {ok:true,hasGame:true,state:{world:{weather:'烟雨绵延'}}};
+    throw new Error(`unexpected local request ${path}`);
+  });
+  await h.boot();
+  assert.deepEqual(h.calls.map(call=>call[0]),['mode','state']);
+  assert.equal(h.calls[0][2],'GET');assert.equal(h.store.get().account.nickname,'本地道友');
+  assert.equal(h.store.get().account.local,true);assert.equal(h.store.get().state.world.weather,'烟雨绵延');
+  assert.equal(h.activity.routerStarts,1);assert.equal(h.context.loginRequired,false);
+});
+
+test('online boot keeps authenticated whoami and state flow after mode detection',async()=>{
+  const h=bootHarness(async path=>path==='mode'?{ok:true,local:false}:path==='whoami'?{ok:true,nickname:'联机道友'}:{ok:true,state:{world:{weather:'丹霞映天'}}});
+  await h.boot();
+  assert.deepEqual(h.calls.map(call=>call[0]),['mode','whoami','state']);
+  assert.equal(h.calls[1][2],'GET');assert.equal(h.store.get().account.nickname,'联机道友');
+  assert.equal(h.store.get().state.world.weather,'丹霞映天');assert.equal(h.activity.routerStarts,1);
+});
+
+test('online boot preserves 401 login requirement without loading state or inventing local account',async()=>{
+  const h=bootHarness(async path=>{if(path==='mode')return {ok:true,local:false};throw new ApiError('请登录',401);});
+  await h.boot();
+  assert.deepEqual(h.calls.map(call=>call[0]),['mode','whoami']);
+  assert.equal(h.context.loginRequired,true);assert.equal(h.context.loginMessage,'');
+  assert.equal(h.store.get().account,null);assert.equal(h.activity.routerStarts,0);assert.equal(h.activity.renders,1);
+});
+
+for(const failure of [new ApiError('未能连接游戏服务',0),new ApiError('服务不可用',503),new ApiError('返回内容无法读取',200)])test(`mode detection failure is visible and does not become local login: ${failure.status}`,async()=>{
+  const h=bootHarness(async()=>{throw failure;});await h.boot();
+  assert.deepEqual(h.calls.map(call=>call[0]),['mode']);assert.equal(h.context.loginMessage,failure.message);
+  assert.equal(h.store.get().account,null);assert.equal(h.activity.routerStarts,0);assert.equal(h.activity.renders,1);
+});
+
+test('non-boolean mode flag is rejected rather than granting local mode',async()=>{
+  const h=bootHarness(async()=>({ok:true,local:'true',nickname:'错误模式'}));await h.boot();
+  assert.deepEqual(h.calls.map(call=>call[0]),['mode']);assert.equal(h.store.get().account,null);
+  assert.ok(h.context.loginMessage);assert.equal(h.activity.routerStarts,0);
+});
+
+test('explicit local mode with absent nickname uses stable local display name',async()=>{
+  for(const nickname of [undefined,'','   ']){
+    const h=bootHarness(async path=>path==='mode'?{ok:true,local:true,nickname}:{ok:true,state:{world:{weather:'长风过境'}}});
+    await h.boot();assert.deepEqual(h.calls.map(call=>call[0]),['mode','state']);
+    assert.equal(h.store.get().account.nickname,'本地道友');assert.equal(h.activity.routerStarts,1);
+    assert.equal(h.context.loginRequired,false);
+  }
+});
+
 function controllerHarness(reader) {
   const source=readFileSync(new URL('../web/v2/app.mjs',import.meta.url),'utf8');
   const extract=(name,next)=>{

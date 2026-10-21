@@ -13,7 +13,7 @@ inline constexpr int DrawLimitPerTurn = 2;
 inline constexpr int SwordChainCycleLength = 3;
 inline constexpr double MasteryPerManualLevel = 0.2;
 inline constexpr int MaximumEnhancementLayers = 5;
-inline constexpr double EnhancementPerMastery = 0.2;
+inline constexpr double EnhancementPerMastery = 0.1;
 inline constexpr double WoodLifeStealFraction = 0.25;
 inline constexpr double FireComboDamageMultiplier = 1.25;
 inline constexpr double EarthComboGuardGain = 0.05;
@@ -29,7 +29,7 @@ inline constexpr double TemporaryGuardCap = 0.20;
 [[nodiscard]] bool mfAdvanceSwordChain(Battle& State, const SpellDef& Spell);
 // 用途：积累本场相生强化；流程：双方真实施术与预览副本；使用：传已确认的五剑接链事实；返回：无，有效功法下加一层，最多五层，跨回合保留。
 void mfAdvanceEnhancement(Battle& State, const ArtMods& Modifiers, bool HasSwordCombo);
-// 用途：读取功法修习决定的相生附加收益倍率；流程：伤害、吸血、守势及界面共用；返回：1至2，主修五层每强化层+20%，辅修减半。
+// 用途：读取功法修习决定的相生附加收益倍率；流程：伤害、吸血、守势及界面共用；返回：1至1.5，主修五层每强化层+10%，辅修减半。
 [[nodiscard]] double mfEnhancementMultiplier(const ArtMods& Modifiers, const Battle& State);
 // 用途：计算通用相生直伤倍率；流程：真实施术与预览；使用：仅白名单五剑放大相生额外部分；返回：基础伤害不被强化重复乘算。
 [[nodiscard]] double mfGenerationDamageMultiplier(const ArtMods& Modifiers, const Battle& State,

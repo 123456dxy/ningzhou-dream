@@ -47,19 +47,36 @@ inline void checkStr(const std::string& got, const std::string& want,
 }
 
 // 各模块测试入口
+void mfRunHealthMigrationTests();
+void mfRunZhujiTests();
+void mfRunAbsoluteHealthTests();
+void mfRunPillRevisionTests();
+void mfRunLifeboundCardTests();
 void mfRunBattleLabTests();
 void mfRunHandCapacityTests();
 void mfRunElementalEnhancementTests();
 void mfRunCombatBalanceIterationTests();
+void mfRunPermanentPoisonTests();
+void mfRunPoisonSiphonTests();
+void mfRunWaterFlowTests();
+void mfRunWaterFlowIntegrationTests();
+void mfRunWaterFlowEdgeTests();
+void mfRunWaterVitalityTests();
+void mfRunWaterVitalityIntegrationTests();
+void mfRunWaterVitalityEdgeTests();
+void mfRunNpcPlanRecoveryTests();
+void mfRunSoftwaterRefillTests();
 void mfRunXuandaoSectTests();
 void mfRunMarketCycleTests();
 void mfRunGreenBottleTests();
 void mfRunFireGrowthTests();
 void mfRunBeastActionTests();
+void mfRunBeastLootTests();
 void mfRunNpcShuffleContinuationTests();
 void mfRunDiscardTimingTests();
 void mfRunDungeonSweepTests();
 void mfRunDungeonEventTests();
+void mfRunDungeonCardPreferenceTests();
 void mfRunDungeonEncounterTests();
 void mfRunBeastPortraitTests();
 void mfRunCultivationUnitTests();
@@ -136,4 +153,16 @@ void mfRunPillEffectsTests();
 void mfRunHerbAcquisitionTests();
 void mfRunTimePerformanceTests();
 
+void mfRunForgeApiTests();
+void mfRunForgeArtifactTests();
+void mfRunForgeRedesignTests();
+void mfRunArtifactFixedValueTests();
+
+void mfRunPillBatchTests();
+void mfRunAlchemyQuoteTests();
+void runTianjiStewardTests();
+void mfRunAscensionTalentCatalogTests();
+void mfRunAscensionTournamentTests();
+void mfRunGameplayTemplateTests();
+void mfRunLifeboundSlotTests();
 } // namespace nztest

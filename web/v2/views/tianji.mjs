@@ -28,7 +28,8 @@ function currentNumbers(item, compact = false) {
   const fields = [['damage', '伤害'], ['shield', '护盾'], ['heal', '治疗'], ['energy', '灵力'], ['qi', '势']];
   const pieces = fields.filter(([key]) => Number(item[key]) !== 0 && Number.isFinite(Number(item[key]))).map(([key, label]) => `${label} ${fmt(item[key])}`);
   if (item.damage === 0 && ['attack', 'sword', 'human', 'wave', 'heavy', 'poisonBurst', 'soulBurst', 'bodyBurst', 'drain', 'steal', 'fireBurst'].includes(item.kind)) pieces.unshift('伤害 0');
-  if (item.heal === 0 && item.kind === 'heal') pieces.push('治疗 0');
+  if (item.heal === 0 && ['heal', 'poisonSiphon'].includes(item.kind)) pieces.push('治疗 0');
+  if (item.kind === 'drawTo' && Number.isFinite(item.draw) && item.draw >= 0) pieces.push(`抽 ${fmt(item.draw)} 张`);
   return `<p>${esc(pieces.join(' · ') || item.text || '按卡面效果结算')}</p>${!compact && item.text && pieces.length ? paragraph(item.text) : ''}`;
 }
 

@@ -78,7 +78,8 @@ try {
         }
     }
     $taskCandidates = @('build-backend-desktop/ningzhou_web.exe', 'build-vs-share/Debug/ningzhou_web.exe',
-        'build-vs-share/Release/ningzhou_web.exe', 'build-vs2022/Debug/ningzhou_web.exe', 'build-vs2022/Release/ningzhou_web.exe')
+        'build-vs-share/Release/ningzhou_web.exe', 'build-vs2022/Debug/ningzhou_web.exe', 'build-vs2022/Release/ningzhou_web.exe',
+        'build-vs-current/Release/ningzhou_web.exe', 'build-vs-gameplay/Release/ningzhou_web.exe')
     $taskSourceExe = $taskCandidates | ForEach-Object { Join-Path $taskRoot $_ } |
         Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
         ForEach-Object { Get-Item -LiteralPath $_ } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1

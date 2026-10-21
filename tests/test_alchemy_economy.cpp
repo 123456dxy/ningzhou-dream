@@ -96,7 +96,8 @@ void runAlchemyEconomyTests() {
         game.economy.marketCash=31;
         check(!shop::sell(game,"potion","5001").ok,"商人现金不足仍不能透支收购");
         game.economy.marketCash=310; game.economy.sold["potion:5001"]=8;
-        check(!shop::sell(game,"potion","5001").ok,"既有同类货品每月需求上限不变");
+        check(shop::sell(game,"potion","5001").ok,"旧月销量不阻止资金充足时继续出售");
+        checkEq(game.economy.sold.at("potion:5001"),8,"停用的月销量账不会继续累计");
     }
     {
         auto plain=alchemyGame().player;
@@ -114,7 +115,7 @@ void runAlchemyEconomyTests() {
         plain.arts.main="pill"; plain.arts.manuals={{"pill",4}};
         checkEq(artBrewInfo(plain,"5001").output,1,"不足一枚的功法成丹系数不提前兑现");
     }
-    // 真实收购资金链：按境界分级、整枚出售、耗尽阻断、次月刷新。
+    // 真实收购资金链：按境界分级、整枚出售、耗尽阻断、同账期换月不补款、三年边界刷新。
     for (const int stage : {0,3,6,9,12}) for (const double market : {0.88,1.0,1.16}) {
         Game game=alchemyGame(); game.player.stage=stage; game.world.market=market;
         const int tier=ecoMarketTier(game.player);
@@ -126,45 +127,56 @@ void runAlchemyEconomyTests() {
         }
         game.economy.month=-1; ensureEconomy(game);
         const int budget=ecoMarketBudget(game);
-        checkEq(game.economy.marketCash,budget,"初始化采用统一月度预算");
+        checkEq(game.economy.marketCash,budget,"初始化采用统一三年预算");
         check(budget>=price,"每个市场层级至少能收购一枚该层级最贵丹药");
         const int RealmMultiplier = 1 << (stage / 3);
         const auto StandardGear = crafting::mfQuoteStandardGearPrice(game, tier);
-        checkEq(budget,std::max({400,price,StandardGear.SellPrice}) * 3 * RealmMultiplier,"整体月资金预算保障丹药和标准法器，再按基础三倍及大境界翻倍");
+        checkEq(budget,std::max({400,price,StandardGear.SellPrice}) * 3 * RealmMultiplier * 50,"三年资金保障丹药和标准法器，并保留原月额度的三倍及境界乘区后乘50");
         game.player.arts.potions[expensive]=2;
         const int stones=game.player.stones;
         const auto sale=shop::sell(game,"potion",expensive);
         check(sale.ok && sale.gain==price,"对应境界真实卖出完整高价值丹药");
         checkEq(game.player.stones,stones+price,"高阶丹实际获得全额灵石");
-        checkEq(game.economy.marketCash,budget-price,"高阶收购足额扣减本月资金");
+        checkEq(game.economy.marketCash,budget-price,"高阶收购足额扣减本期资金");
         // 翻倍后的预算可收多枚；将其余资金视为已经用于其他货物，再验证真实不足一枚时拒收。
         game.economy.marketCash = price - 1;
         const int remaining=game.economy.marketCash;
-        check(!shop::sell(game,"potion",expensive).ok,"月资金耗尽后不能再收同价丹药");
+        check(!shop::sell(game,"potion",expensive).ok,"本期资金不足后不能再收同价丹药");
         ecoRefresh(game);
         checkEq(game.economy.marketCash,remaining,"同月刷新不能重置已支出的预算");
         game.clock.days+=30; ecoRefresh(game);
-        checkEq(game.economy.marketCash,budget,"进入下月才补充当期市场预算");
+        checkEq(game.economy.marketCash,remaining,"同一三年账期进入下月仍不补充资金");
+        check(!shop::sell(game,"potion",expensive).ok,"换月不能绕过本期收购资金不足");
         check(game.economy.sold.empty(),"月度刷新同时清除旧需求计数");
-        check(shop::sell(game,"potion",expensive).ok,"下月可以实际卖出下一枚高价值成品");
+        game.clock.days=1080; game.year=3; game.player.age=game.clock.ageBase+3;
+        ecoRefresh(game);
+        checkEq(game.economy.marketCash,budget,"三年边界补充当前市场预算");
+        check(shop::sell(game,"potion",expensive).ok,"跨账期后可以实际卖出下一枚高价值成品");
     }
     {
         Game game=alchemyGame(); game.economy.month=-1; ensureEconomy(game);
-        checkEq(game.economy.marketCash,1440,"炼气无声望新月预算覆盖二品标准法器480再乘三倍");
+        checkEq(game.economy.marketCash,72000,"炼气无声望三年预算为二品标准法器480乘三倍再乘50");
         game.player.arts.potions["5512"]=1;
+        game.economy.marketCash=shop::salePrice(game,"potion","5512")-1;
         const int stones=game.player.stones, cash=game.economy.marketCash;
+        const auto Before=saveToJson(game);
         check(!shop::sell(game,"potion","5512").ok,"低阶角色不能凭高阶丹药透支当前层级资金");
         checkEq(game.player.stones,stones,"拒绝超预算交易不发放灵石");
         checkEq(game.economy.marketCash,cash,"拒绝超预算交易不修改商人现金");
+        check(saveToJson(game)==Before,"拒绝超预算交易保持完整存档状态不变");
         game.player.stage=12; ecoRefresh(game);
         checkEq(game.economy.marketCash,cash,"同月晋阶不会额外充值");
         Game restored; string error;
         check(loadFromJson(saveToJson(game),restored,&error),"保存读取晋阶后的市场状态");
-        checkEq(restored.economy.marketCash,cash,"读取存档不按高境界重新发放本月资金");
+        checkEq(restored.economy.marketCash,cash,"读取存档不按高境界重新发放本期资金");
         restored.clock.days+=30; ecoRefresh(restored);
-        check(shop::sell(restored,"potion","5512").ok,"晋阶后次月六品成品可以变现");
+        checkEq(restored.economy.marketCash,cash,"晋阶后次月也不重发当前账期资金");
+        restored.clock.days=1080; restored.year=3; restored.player.age=restored.clock.ageBase+3;
+        ecoRefresh(restored);
+        checkEq(restored.economy.marketCash,ecoMarketBudget(restored),"晋阶后跨三年边界按新境界补充预算");
+        check(shop::sell(restored,"potion","5512").ok,"晋阶后新账期六品成品可以变现");
         Game famous=alchemyGame(); famous.player.renown=100000;
-        checkEq(ecoMarketBudget(famous),7200,"低阶高声望2400基础额度再乘三倍");
+        checkEq(ecoMarketBudget(famous),360000,"低阶高声望三年资金为2400基础额度乘三倍再乘50");
     }
     // 实际即时/年度动作分别覆盖成功和失败，验证加成没有只停留在预览层。
     for (const bool success: {false,true}) for (const bool annual: {false,true}) {

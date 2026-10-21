@@ -36,14 +36,18 @@ constexpr std::array spells = {
     Entry{SpellKind::Human, "human", "human"}, Entry{SpellKind::Soul, "soul", "soul"},
     Entry{SpellKind::SoulBurst, "soul_burst", "soulBurst"}, Entry{SpellKind::Steal, "steal", "steal"},
     Entry{SpellKind::BodyBurst, "body_burst", "bodyBurst"},
-    Entry{SpellKind::FireSiphon, "fire_siphon", "fireSiphon"}
+    Entry{SpellKind::FireSiphon, "fire_siphon", "fireSiphon"},
+    Entry{SpellKind::PoisonBloom, "poisonBloom", "poisonBloom"},
+    Entry{SpellKind::PoisonSiphon, "poisonSiphon", "poisonSiphon"},
+    Entry{SpellKind::DrawTo, "drawTo", "drawTo"}
 };
 constexpr std::array battles = {
     Entry{BattleKind::Spar, "spar", "spar"}, Entry{BattleKind::Wild, "wild", "wild"},
     Entry{BattleKind::Hunt, "hunt", "hunt"}, Entry{BattleKind::Tide, "tide", "tide"},
     Entry{BattleKind::Ambush, "ambush", "ambush"}, Entry{BattleKind::Kill, "kill", "kill"},
     Entry{BattleKind::Rob, "rob", "rob"}, Entry{BattleKind::Dungeon, "dungeon", "dungeon"},
-    Entry{BattleKind::SectTrial, "sect_trial", "sectTrial"}, Entry{BattleKind::Tianji, "tianji", "tianji"}
+    Entry{BattleKind::SectTrial, "sect_trial", "sectTrial"}, Entry{BattleKind::Tianji, "tianji", "tianji"},
+    Entry{BattleKind::AscensionTournament, "ascension_tournament", "ascensionTournament"}
 };
 // 用途：按稳定标识或冻结旧值解析强类型枚举。
 // 参与流程：内容标识解析的内部共用实现。

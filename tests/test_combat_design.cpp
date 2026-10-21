@@ -118,6 +118,9 @@ void runCombatDesignTests() {
         check(Existing.player.arts.spells == PreviousLoadout && Existing.player.arts.knownSpells.size() == 6,
               "已初始化角色保留旧配装，不因新开局方案赠送或替换神通");
 
+        // The starter assertions above retain the real new-life state; the
+        // following encounter starts after handling its tournament invitation.
+        Starter.pending.reset();
         adventureEvent(Starter, "bandit");
         check(adventureChoose(Starter, "fight") && battleActive(Starter), "真实山道劫修事件可用新初装开战");
         if (Starter.player.arts.battle) {
@@ -143,6 +146,7 @@ void runCombatDesignTests() {
         checkEq(g.player.arts.spells.size(), 4, "新档有四个额外神通");
         check(std::find(g.player.arts.spells.begin(), g.player.arts.spells.end(), "gather") !=
               g.player.arts.spells.end(), "新档带聚气支持初始攻防与叠焰，已知明心咒可自行换装");
+        g.pending.reset();
         check(!artInstant(g, "spell", "strike").ok &&
               !artInstant(g, "spell", "defend").ok,
               "固定灵击和守势不能被配装卸下");

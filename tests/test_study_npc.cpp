@@ -6,6 +6,7 @@
 #include "core/arts.h"
 #include "core/battle.h"
 #include "core/cultivate.h"
+#include "core/combat/battle_scaling.h"
 #include "core/economy.h"
 #include "core/json.h"
 #include "core/progression/manual_study.h"
@@ -92,34 +93,38 @@ void runStudyNpcTests() {
     }
     {
         Npc npc = pillNpc(); npc.health = 50;
-        npc.bag = {{"potion:5001", 9}, {"potion:missing", 2}, {"potion:5002", -3}};
-        checkEq(npcConsumeUsefulPills(npc), 3, "一次真实动作最多服三枚");
+        npc.bag = {{"potion:5001", 20}, {"potion:missing", 2}, {"potion:5002", -3}};
+        const int Taken = npcConsumeUsefulPills(npc);
+        check(Taken > 3 && Taken <= 20, "一次真实日常动作不再受三枚上限限制");
         checkEq(npc.health, 100, "疗伤按实际缺口补至满血");
-        checkEq(npc.bag["potion:5001"], 6, "服药真正扣 NPC 行囊三枚");
-        checkEq(npc.pillState.used["5001"], 3, "疗伤丹允许耐药范围内多次使用");
-        checkEq(npc.pillState.poison, 3, "NPC服丹同步记录丹毒");
+        checkEq(npc.bag["potion:5001"], 20 - Taken, "服药真正扣NPC行囊对应枚数");
+        checkEq(npc.pillState.used["5001"], Taken, "疗伤丹允许耐药范围内多次使用");
+        checkEq(npc.pillState.poison, Taken, "NPC服丹同步记录丹毒");
         checkEq(npcConsumeUsefulPills(npc), 0, "满血、负库存与未知丹药不会浪费或崩溃");
         npc.health = 50; npc.pillState.poison = 80;
         check(!npcUsePill(npc, "5001"), "高丹毒禁止继续服普通丹药");
-        npc.bag["potion:5212"] = 1;
-        checkEq(npcConsumeUsefulPills(npc), 3, "高丹毒先化毒，再处理伤势");
-        checkEq(npc.bag["potion:5212"], 0, "化毒真实扣库存");
-        checkEq(npc.pillState.poison, 72, "化毒与后续疗伤丹毒共用玩家结算");
+        npc.bag["potion:5316"] = 2; npc.bag["potion:5001"] = 20;
+        check(npcConsumeUsefulPills(npc) > 2, "高丹毒先连续化毒至节奏线内，再处理伤势");
+        checkEq(npc.bag["potion:5316"], 0, "化毒真实扣库存");
+        check(npc.pillState.poison > 0 && npc.pillState.poison <= 40, "化毒后普通服药仍受40硬边界");
     }
     {
         Npc npc = pillNpc(12); npc.apt = 190;
         npc.bag = {{"potion:5416", 2}, {"potion:5514", 2}, {"potion:5207", 4}};
         check(npcUsePill(npc, "5416"), "资质丹可实际生效");
-        check(npcUsePill(npc, "5514"), "另一种资质丹只能补剩余额度");
-        checkEq(npc.pillState.aptPills, 10, "NPC共用本世资质丹十点上限");
-        check(!npcUsePill(npc, "5416"), "不同丹药不能绕过资质总额度");
+        check(npcUsePill(npc, "5514"), "另一种资质丹不受旧累计额度限制");
+        checkEq(npc.pillState.aptPills, 21, "NPC保留真实累计提升统计，不限制为10");
+        checkEq(npc.apt, 211, "NPC资质丹可超过旧总属性200");
+        check(!npcUsePill(npc, "5416"), "每味自己的耐药仍然生效");
         npc.pillState.used["5207"] = 3;
         check(!npcUsePill(npc, "5207"), "已达到耐药次数的丹药保留库存");
-        npc.lifeBonus = 250; npc.lifespan = std::min(3000, realmOf(12).life + 250);
+        npc.lifeBonus = npc.PillLifeBonus = 500; npc.lifespan = realmOf(12).life + 500;
+        npc.age = npc.lifespan - 4;
         npc.bag["potion:5517"] = 1;
-        check(!npcUsePill(npc, "5517"), "寿元额外上限时不浪费寿元丹");
+        check(!npcUsePill(npc, "5517"), "丹药寿元500年上限时不浪费续命丹");
+        npc.age = 16;
         npc.insight = INSIGHT_MAX; npc.bag["potion:5513"] = 1;
-        check(!npcUsePill(npc, "5513"), "悟性上限时不浪费悟性丹");
+        check(npcUsePill(npc, "5513") && npc.insight > INSIGHT_MAX, "悟性丹不再被旧总属性上限截断");
     }
     {
         Npc npc = pillNpc(8);
@@ -127,10 +132,10 @@ void runStudyNpcTests() {
         check(!npcUsePill(npc, "5407"), "水流派不服金道丹");
         check(npcUsePill(npc, "5409"), "水流派优先吸收水道丹");
         checkEq(npc.pillState.daoExp["水"], 60, "悟道丹记录真实追加经验");
-        const Arts before = artNpcLoadout(npc);
-        const double hp = artModsOf(before).hp;
+        const int MaximumBefore = mfNpcHealthMaximum(npc);
         check(npcUsePill(npc, "5209"), "通用体魄丹可以服用");
-        check(artModsOf(artNpcLoadout(npc)).hp > hp, "NPC常驻丹药实际增加战斗气血系数");
+        check(mfNpcHealthMaximum(npc) > MaximumBefore && npc.pillState.BaseHealthBonus == 3,
+              "NPC体魄丹实际增加基础值与战斗气血上限");
     }
     {
         Game game = studyGame(); game.player.arts.speed = 500;
@@ -208,7 +213,7 @@ void runStudyNpcTests() {
         game.npcs.push_back(npc);
         worldYear(game);
         const auto found = std::find_if(game.npcs.begin(), game.npcs.end(), [&](const Npc& value) { return value.id == npc.id; });
-        check(found != game.npcs.end() && found->alive && found->lifeBonus == 5,
+        check(found != game.npcs.end() && found->alive && found->lifeBonus == 10,
               "年度行动先服行囊寿元丹，再判定寿终");
     }
     {

@@ -2,6 +2,7 @@
 import { heading, panel, esc, hintBox } from './shell.mjs';
 import { locationArt } from './location-art.mjs';
 import { renderServiceRoute } from './service-navigation.mjs';
+import { loadDungeonCardRewardPreference, renderDungeonCardRewardPreference, dungeonCardRewardSummary } from './dungeon-card-preferences.mjs';
 
 const ROOM = {
   battle: ['⚔', '斗法'], combat: ['⚔', '斗法'], elite: ['✦', '强敌'],
@@ -70,6 +71,7 @@ export function renderDungeonEntrances(state, location) {
   const intel = location === 'tianji';
   if (!sites.length && !specials.length && !intel) return '';
   return `<section class="location-dungeons" data-location-dungeons><h4>秘境入口</h4>`
+    + `<p class="dungeon-card-summary">下次入境临时神通：${esc(dungeonCardRewardSummary(loadDungeonCardRewardPreference(), state.dungeons?.cardRewardOptions))}</p>`
     + (sites.some(site => site.sweep) ? `<p class="dungeon-sweep-note">扫荡直接选择通关主奖励，不获得沿途收益；离开秘境时结算所示耗时。</p>` : '')
     + sites.map(site => `<div class="location-service"><div><strong>${esc(site.name)}</strong>`
       + `<p>${esc(site.realmName)} · ${site.targetName ? `${esc(site.targetName)} ×${targetRewardCount(site)}` : esc(SITE[site.type] || '历练秘境')}</p>`
@@ -89,6 +91,7 @@ export function renderDungeonDirectory(state) {
   const d = state.dungeons || {};
   const sites = visibleDungeonSites(state);
   return `<div class="dungeon-directory" data-dungeon-directory>`
+    + renderDungeonCardRewardPreference(d.cardRewardOptions)
     + `<div class="dungeon-cycle"><b>山河秘境</b><span>炼气至金丹每 ${d.earlyPeriod || 3} 年出现新秘境；元婴起每 ${d.latePeriod || 50} 年更新。</span>`
     + `${d.nextSpawnYear != null ? `<small>下次发现：第 ${esc(d.nextSpawnYear)} 年</small>` : ''}</div>`
     + (sites.some(site => site.sweep) ? `<p class="dungeon-sweep-note" data-dungeon-sweep-note>扫荡直接选择通关主奖励，不获得沿途收益；耗时在离开秘境时结算。可否扫荡及耗时以各入口报价为准。</p>` : '')
@@ -145,9 +148,15 @@ function nodePosition(node, rows) {
   return { x: 120 + (Number(node.lane) || 0) * 240, y: 64 + (rows - 1 - (Number(node.row) || 0)) * 112 };
 }
 
-// 用途：读取节点的遭遇预告；流程：路线选择与当前房间；调用方式：传节点；返回值：后端名称和机制说明，不计算战斗数值。
-function dungeonNodePreview(node) {
-  return { name: node.encounterName || node.eventName || node.name || room(node.type)[1],
+// 用途：按实际探索进度读取节点说明；流程：路线、提示与当前房间共用；调用方式：传节点和run。
+// 返回值：已触发怪物及事件的详情，未触发怪物只有类型和风险；旧响应的name/text也不能绕过遮蔽。
+function dungeonNodePreview(node, run) {
+  const combat = ['battle', 'combat', 'elite', 'boss'].includes(node.type);
+  const detailsRevealed = !combat || node.visited === true || node.id === run.current;
+  if (!detailsRevealed) return { name: room(node.type)[1], detailsRevealed,
+    hint: node.type === 'elite' ? '高风险 · 高奖励；进入后揭晓对手。'
+      : node.type === 'boss' ? '击败守关者后选择通关主奖励；进入后揭晓对手。' : '战胜后选择奖励；进入后揭晓对手。' };
+  return { name: node.encounterName || node.eventName || node.name || room(node.type)[1], detailsRevealed,
     hint: node.encounterHint || node.eventHint || node.text || '' };
 }
 
@@ -159,12 +168,12 @@ function renderDungeonRouteOptions(run) {
   if (!available.length) return '';
   return `<section class="dungeon-route-options" data-dungeon-route-options aria-label="下一步路线对照"><h4>下一步去哪里</h4><div>`
     + available.map(node => {
-      const [icon, label] = room(node.type), preview = dungeonNodePreview(node);
+      const [icon, label] = room(node.type), preview = dungeonNodePreview(node, run);
       const destinations = [...new Set((node.next || []).map(id => byId.get(id)).filter(Boolean)
-        .map(next => `${room(next.type)[1]} · ${dungeonNodePreview(next).name}`))];
+        .map(next => `${room(next.type)[1]} · ${dungeonNodePreview(next, run).name}`))];
       return `<article class="dungeon-route-option${node.type === 'elite' ? ' elite' : ''}" data-dungeon-option="${esc(node.id)}">`
         + `<span class="dungeon-option-kind">${icon} ${label} · 第 ${esc(Number(node.row) + 1)} 层</span><h5>${esc(preview.name)}</h5>`
-        + (node.name && node.name !== preview.name ? `<small>${esc(node.name)}</small>` : '')
+        + (preview.detailsRevealed && node.name && node.name !== preview.name ? `<small>${esc(node.name)}</small>` : '')
         + (preview.hint ? `<p>${esc(preview.hint)}</p>` : '')
         + (node.type === 'elite' ? `<b class="dungeon-elite-warning">高风险 · 高奖励</b>` : '')
         + (destinations.length ? `<p class="dungeon-option-next">后续可达：${destinations.map(esc).join(' / ')}</p>` : '')
@@ -192,13 +201,13 @@ export function renderDungeonRoute(run) {
     + `<div class="dungeon-route-viewport" data-dungeon-route-viewport tabindex="0" aria-label="秘境分支路线，由下至上探索">`
     + `<div class="dungeon-route-map" style="height:${height}px" data-dungeon-route-map><svg viewBox="0 0 720 ${height}" preserveAspectRatio="none" aria-hidden="true">${edges}</svg>`
     + nodes.map(node => {
-      const pos = nodePosition(node, rows), [icon,label] = room(node.type), preview = dungeonNodePreview(node);
+      const pos = nodePosition(node, rows), [icon,label] = room(node.type), preview = dungeonNodePreview(node, run);
       const current = node.id === run.current;
       const enabled = node.available && run.phase === 'route';
       return `<button class="dungeon-node ${esc(node.type)}${current ? ' current' : ''}${node.visited ? ' visited' : ''}${enabled ? ' available' : ''}" `
         + `style="left:${pos.x / 7.2}%;top:${pos.y}px" data-action="dungeon-choose" data-id="${esc(node.id)}" data-dungeon-row="${esc(node.row)}" `
         + `${enabled ? '' : 'disabled'} aria-label="第 ${Number(node.row) + 1} 层，${esc(preview.name)}${current ? '，当前所在' : node.visited ? '，已探索' : enabled ? '，可前往' : '，不可前往'}" title="${esc([preview.name, preview.hint].filter(Boolean).join(' · '))}">`
-        + `<span class="dungeon-node-icon" aria-hidden="true">${icon}</span><strong>${esc(node.name || label)}</strong><small>${current ? '当前所在' : node.visited ? '已探索' : enabled ? '可前往' : `第 ${Number(node.row) + 1} 层`}</small></button>`;
+        + `<span class="dungeon-node-icon" aria-hidden="true">${icon}</span><strong>${esc(preview.name || label)}</strong><small>${current ? '当前所在' : node.visited ? '已探索' : enabled ? '可前往' : `第 ${Number(node.row) + 1} 层`}</small></button>`;
     }).join('') + `</div></div><div class="dungeon-room-legend" aria-label="节点类型图例">${[['battle','斗法','战胜后选择奖励'],['elite','强敌','高风险、高奖励'],['camp','营地','休整或调整构筑'],['event','奇遇','按选项承担代价与风险'],['merchant','行商','以秘境灵石交易'],['chest','宝箱','获取物资'],['boss','守关者','通关后选择主奖励']].map(([type,label,description]) => `<span title="${description}">${room(type)[0]} ${label}</span>`).join('')}</div></section>`;
 }
 
@@ -225,7 +234,8 @@ export function renderDungeonRun(state, battleHTML = '') {
   if (!run) return '';
   const loot = lootEntries(run);
   const current = (run.nodes || []).find(node => node.id === run.current);
-  const health = state.battle?.max ? Math.max(0, Math.round(state.battle.hp / state.battle.max * 100)) : run.health ?? state.player.health;
+  const health = state.battle?.max ? Math.max(0, state.battle.hp) : run.healthCurrent ?? state.player.health;
+  const healthMax = state.battle?.max ?? run.healthMax ?? state.player.healthMax;
   const groupedDeck = new Map();
   for (const card of run.deck || []) {
     const key = `${card.spell}:${card.cost}`;
@@ -243,14 +253,17 @@ export function renderDungeonRun(state, battleHTML = '') {
   const isChoice = ['camp','event','merchant','chest','choice'].includes(run.phase);
   const isEventChoice = rewards.some(reward => reward.kind === 'eventChoice');
   const isBossReward = isReward && run.cleared && !run.bossRewardClaimed;
+  const preferenceSkippedCards = isReward && !isBossReward && !rewards.length
+    && ['none', 'selected'].includes(run.cardRewardPreference?.mode);
   const taken = run.bossRewardTaken;
-  const currentPreview = current ? dungeonNodePreview(current) : null;
+  const currentPreview = current ? dungeonNodePreview(current, run) : null;
   return `<div class="dungeon-run" data-dungeon-run="${esc(run.siteId)}">`
     + `<header class="dungeon-run-heading"><div><span class="dungeon-eyebrow">${esc((run.type === 'bottle' ? run.difficultyRealmName : '') || run.entryRealmName || run.realmName)} · ${esc(SITE[run.type] || '秘境历练')}</span><h2>${esc(run.siteName)}</h2>`
-    + `<p>${esc(current?.name || '秘境入口')} · 已探索 ${(run.nodes || []).filter(node => node.visited).length} 处 · 入境 ${run.elapsedDays || 0} 天</p>`
+    + `<p>${esc(currentPreview?.name || '秘境入口')} · 已探索 ${(run.nodes || []).filter(node => node.visited).length} 处 · 入境 ${run.elapsedDays || 0} 天</p>`
     + (run.rewardHint ? `<p class="dungeon-reward-hint" data-dungeon-reward-hint>${esc(run.rewardHint)}</p>` : '') + `</div>`
-    + `<div class="dungeon-run-vitals"><span>气血 <b>${health}</b> / 100 · 秘境灵石 ${run.stones || 0}</span><button class="subtle" data-action="save">保存进度</button>`
+    + `<div class="dungeon-run-vitals"><span>气血 <b>${health}</b> / ${healthMax} · 秘境灵石 ${run.stones || 0}</span><button class="subtle" data-action="save">保存进度</button>`
     + `<button data-action="dungeon-leave" ${state.battle || isBossReward ? 'disabled' : ''} ${isBossReward ? 'title="请先选择通关主奖励"' : ''}>${run.phase === 'complete' ? '带着战利品离开' : '离开秘境'}</button></div></header>`
+    + `<p class="dungeon-card-frozen" data-dungeon-card-frozen>本次临时神通：${esc(dungeonCardRewardSummary(run.cardRewardPreference, state.dungeons?.cardRewardOptions))}。途中不能更改，永久通关奖励不受影响。</p>`
     + (run.phase !== 'complete' ? `<p class="dungeon-exit-note">提前退出后入口消失，无法再次进入；主动退出带回已得物资，战斗中逃离只带回一半。</p>` : '')
     + (current && (current.encounterName || current.eventName || current.encounterHint || current.eventHint) && !isBossReward && run.phase !== 'route' && run.phase !== 'complete'
       ? `<div class="dungeon-current-preview" data-dungeon-current-preview><strong>${esc(currentPreview.name)}</strong><p>${esc(currentPreview.hint)}</p></div>` : '')
@@ -258,12 +271,13 @@ export function renderDungeonRun(state, battleHTML = '') {
     + (!isBossReward && run.phase !== 'complete' ? renderDungeonBossPreview(run, { details: true }) : '')
     + (state.battle ? `<div class="dungeon-combat">${battleHTML}</div>` : '')
     + (run.phase === 'complete' ? `<section class="dungeon-complete"><span>♜</span><h3>秘境已通关</h3><p>${run.targetName ? `已取得${esc(run.targetName)} ×${targetRewardCount(run)}。` : ''}${taken ? `通关主奖：${esc(taken.name)}${taken.kind === 'stones' ? ` · ${esc(taken.amount)} 灵石` : ' · 永久获得'}。` : ''}点击离开，结算本次战利品。</p><button class="primary" data-action="dungeon-leave">结算战利品并离开</button></section>` : '')
-    + (isReward || isChoice ? `<section class="dungeon-reward-panel${isBossReward ? ' permanent' : ''}" data-dungeon-rewards><div class="dungeon-reward-heading"><span>${esc(current?.name || '本层已完成')}</span>`
+    + (isReward || isChoice ? `<section class="dungeon-reward-panel${isBossReward ? ' permanent' : ''}" data-dungeon-rewards><div class="dungeon-reward-heading"><span>${esc(currentPreview?.name || '本层已完成')}</span>`
       + `<h3>${isBossReward ? '通关主奖励 · 三选一' : ['camp','rest'].includes(current?.type) ? '营地休整' : ['merchant','shop'].includes(current?.type) ? '秘境行商' : current?.type === 'event' ? '眼前的奇遇' : isReward ? '选择一项奖励' : '眼前的抉择'}</h3><p>${esc(isBossReward ? '选择一份永久传承或大量灵石。神通学会后自行携带，功法抄本带回后可修习；这些主奖励会留下。' : run.text || (isEventChoice ? currentPreview?.hint || '选择一项；代价与风险见各选项。' : ['merchant','shop'].includes(current?.type) ? '用本次行囊中的灵石购买一项，或略过行商继续探索。' : isReward ? '沿途神通与遗物只在本次秘境生效，构筑会带入后续斗法。' : current?.text || '做出选择后继续前进。'))}</p></div>`
+      + (preferenceSkippedCards ? '<p class="dungeon-card-summary" data-dungeon-card-skipped>已按偏好不提供临时神通，继续前行。</p>' : '')
       + `<div class="dungeon-reward-list">${rewards.map(reward => `<button class="dungeon-reward-card ${esc(reward.kind === 'buyRelic' ? 'relic' : reward.kind || 'choice')}" data-action="dungeon-claim" data-id="${esc(reward.id)}" ${reward.enabled === false ? 'disabled' : ''}>`
         + `<span class="dungeon-item-kind">${esc(kindName(reward.kind))}${reward.cost ? ` · ${esc(reward.cost)} 灵石` : ''}${reward.healthCost ? ` · 气血 -${esc(reward.healthCost)}` : ''}</span><strong>${esc(reward.name)}</strong><p>${esc(rewardDescription(reward))}</p>`
         + `<small>${esc(reward.reason || reward.disabledReason || (isReward && !isEventChoice ? '点击领取' : '选择此项'))}</small></button>`).join('')}</div>`
-      + `${run.canSkip === false ? '' : `<button class="subtle" data-action="dungeon-claim" data-id="skip">${isBossReward ? '领取灵石奖励' : isReward && !isEventChoice ? '放弃本次奖励' : '继续前行'}</button>`}</section>` : '')
+      + `${run.canSkip === false ? '' : `<button class="subtle" data-action="dungeon-claim" data-id="skip">${isBossReward ? '领取灵石奖励' : isReward && !isEventChoice && rewards.length ? '放弃本次奖励' : '继续前行'}</button>`}</section>` : '')
     + `<div class="dungeon-run-layout">${renderDungeonRoute(run)}<aside class="dungeon-expedition-bag">`
     + `<h3>本次构筑</h3><p class="dungeon-note">带伤继续探索。临时卡牌与遗物在离开秘境后消失，通关得到的永久神通与功法抄本留下；原有功法与悟道持续生效。</p>`
     + `<details class="dungeon-deck" open><summary>秘境牌组 <b>${(run.deck || []).length} 张</b></summary><div>${[...groupedDeck.values()].map(card => `<span class="dungeon-deck-card"><b>${esc(card.name || card.spell)} <em>×${card.copies}</em></b><small>${esc(card.dao)} · 灵力 ${esc(card.cost)}</small></span>`).join('')}</div></details>`

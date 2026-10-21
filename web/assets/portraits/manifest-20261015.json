@@ -3,34 +3,38 @@
   "tool": "built-in image_gen",
   "compression": "Sharp WebP effort 6, preserving alpha",
   "count": 32,
-  "originalBytes": 91568037,
-  "compressedBytes": 8556040,
+  "originalBytes": 91908926,
+  "compressedBytes": 8545412,
   "assets": [
     {
       "id": "xuandao-male",
       "path": "assets/portraits/sect-xuandao-male-v1.webp",
       "prompt": "Use case: stylized-concept. Asset type: transparent full-body Chinese xianxia RPG character portrait. Original male master of Xuandao Sect, scholarly elegant adult man with a tall jade hair crown and half-tied long ink-black hair, ivory and deep teal layered robes, subtle gold five-element embroidered hems, holds a bronze five-ring formation compass in his left hand, two fingers drawing five small elemental sword lights in the air. Painterly semi-realistic Chinese fantasy character art, fine silk folds, calm intelligent face. Full figure head to boots, centered, robes complete and fully inside frame, portrait aspect ratio 2:3, natural dignified pose, no background scenery. Actual transparent background and clean alpha, isolated character, no frame, no text, no lettering or watermark. Visually distinct from water sect fan wielders.",
-      "generatedSource": "exec-d6d7bd83-88df-4029-ae57-137fb77490a2.png",
-      "sourceBytes": 2825437,
-      "bytes": 256046,
+      "generatedSource": "exec-4b13c2cb-3cbd-4347-94c0-2517d95c044b.png",
+      "sourceBytes": 2914051,
+      "bytes": 247494,
       "width": 768,
       "height": 1152,
-      "quality": 78,
+      "quality": 80,
       "hasAlpha": true,
-      "sha256": "5e824c9e46f50d736f52aaa5a3179e0f3ac34b9604cdde2ecc5f012f6587f4ef"
+      "sha256": "fb157e56f08d97e6455f14fb0f90d1d53762bb0208d8f7363a793c9745725ed2",
+      "revisionOn": "2026-10-16",
+      "revisionManifest": "manifest-20261016-xuandao.json"
     },
     {
       "id": "xuandao-female",
       "path": "assets/portraits/sect-xuandao-female-v1.webp",
       "prompt": "Use case: stylized-concept. Asset type: transparent full-body Chinese xianxia RPG character portrait. Original female master of Xuandao Sect, elegant adult woman with long black hair coiled in a high braided loop with a small geometric jade hairpin and dangling gold chain ornaments, ivory and muted dark teal flowing Taoist robes with five-element golden embroidery, a floating bronze astronomical five-ring compass beside her open palm, slender sheathed sword at the waist. Painterly semi-realistic Chinese fantasy character art, delicate controlled brushwork, realistic face and fine silk textures. Full figure head to boots, centered, complete silhouette and cloth inside frame, portrait 2:3. Actual transparent background and clean alpha, no scenery, no frame, no text, no lettering or watermark.",
-      "generatedSource": "exec-1a1e6c03-4557-4f3e-b131-ceae6892ed73.png",
-      "sourceBytes": 2635492,
-      "bytes": 236758,
+      "generatedSource": "exec-366b50da-e6f1-47b1-b06b-e327d1fd211f.png",
+      "sourceBytes": 2887767,
+      "bytes": 234682,
       "width": 768,
       "height": 1152,
-      "quality": 78,
+      "quality": 80,
       "hasAlpha": true,
-      "sha256": "7cfcf2ab020c1eae1775cbbdd557814b4840aabab06519c80d62b50d7d767fc2"
+      "sha256": "77ceca7a0ce662b49eb7bb2cd857eef188e61b970834cc0cc397b4f28dfecdbe",
+      "revisionOn": "2026-10-16",
+      "revisionManifest": "manifest-20261016-xuandao.json"
     },
     {
       "id": "beast-stone-guard-0-v1",
@@ -422,5 +426,6 @@
       "hasAlpha": true,
       "sha256": "286b19efc29fe0ffbf742d079e38e08bbe312bd82deace8b6b55f7e5c932af97"
     }
-  ]
+  ],
+  "lastUpdatedOn": "2026-10-16"
 }

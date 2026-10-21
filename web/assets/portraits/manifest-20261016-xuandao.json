@@ -1,0 +1,69 @@
+{
+  "generatedOn": "2026-10-16",
+  "tool": "built-in image_gen",
+  "generationPrompts": [
+    {
+      "Key": "xuandao-male-20261016",
+      "Prompt": "Use case: stylized-concept. Asset type: one original transparent character portrait for a Chinese xianxia cultivation RPG, replacement of the Xuandao Sect character. Input images are STYLE REFERENCES ONLY, not edit targets: preserve the refined, expressive painterly face, fine dark hair strands, silk and ink-wash brushwork of the Lihuo reference, but CHANGE all red/fire clothing to Xuandao's quiet dark teal, pale moon-white, and restrained antique gold. The previous Xuandao reference is only a sect-color guide; improve its stiff ceremonial silhouette into a graceful immortal cultivator. Original Chinese fantasy 2D game painting, realistic yet poetic adult face, soft ink edges, airy translucent silk sleeves, beautiful natural anatomy and delicate hands. A readable warm, serene immortal presence, not cold armored royalty. Subtle five-element sword cultivation is shown by an elegant sheathed long sword and five tiny near-monochrome pale-gold sword glints close to the shoulder, NEVER a rainbow ring. Do not use a giant compass, orbiting machinery, chunky shoulder armor, heavy geometric plates, red garments, enormous multicolored effects, anime cel shading or photoreal photography. Tall 2:3 portrait, single full figure head to boots, subject centered and fills about 90% of height, flowing sleeves and all hair/jewelry entirely within frame with a small clear margin; no cropped extremities. Actual transparent background with clean preserved alpha, no scenery, no rectangular fog/gradient, no floor, no text, no lettering, no logo, no watermark, no border. Subject: a handsome adult East Asian male immortal swordsman, refined gentle strong-browed face and intelligent relaxed eyes, long black hair loosely half-tied with a slim pale-jade hairpin instead of a towering crown, a few soft loose locks. Long moon-white inner hanfu and flowing deep teal outer robe with only delicate pale-gold cloud and sword embroidery; narrow jade belt, light ribbon ties flutter in a natural breeze. Calm graceful three-quarter pose, one hand gently holds the sword hilt near the hip and the other makes a subtle two-finger guiding gesture near the waist, relaxed shoulders, asymmetrical drifting sleeve and hem rhythm. Masculine, elegant, quietly powerful, the clean silhouette and face have priority over ornaments."
+    },
+    {
+      "Key": "xuandao-female-20261016",
+      "Prompt": "Use case: stylized-concept. Asset type: one original transparent character portrait for a Chinese xianxia cultivation RPG, replacement of the Xuandao Sect character. Input images are STYLE REFERENCES ONLY, not edit targets: preserve the refined, expressive painterly face, fine dark hair strands, silk and ink-wash brushwork of the Lihuo reference, but CHANGE all red/fire clothing to Xuandao's quiet dark teal, pale moon-white, and restrained antique gold. The previous Xuandao reference is only a sect-color guide; improve its stiff ceremonial silhouette into a graceful immortal cultivator. Original Chinese fantasy 2D game painting, realistic yet poetic adult face, soft ink edges, airy translucent silk sleeves, beautiful natural anatomy and delicate hands. A readable warm, serene immortal presence, not cold armored royalty. Subtle five-element sword cultivation is shown by an elegant sheathed long sword and five tiny near-monochrome pale-gold sword glints close to the shoulder, NEVER a rainbow ring. Do not use a giant compass, orbiting machinery, chunky shoulder armor, heavy geometric plates, red garments, enormous multicolored effects, anime cel shading or photoreal photography. Tall 2:3 portrait, single full figure head to boots, subject centered and fills about 90% of height, flowing sleeves and all hair/jewelry entirely within frame with a small clear margin; no cropped extremities. Actual transparent background with clean preserved alpha, no scenery, no rectangular fog/gradient, no floor, no text, no lettering, no logo, no watermark, no border. Subject: a beautiful adult East Asian female immortal swordswoman, soft graceful facial proportions and luminous gentle eyes, confident restrained smile, long fine black hair half-up in a light flowing braid with a delicate moon-jade hairpin and one thin gold chain. Moon-white layered hanfu and misty dark teal translucent silk sleeve drapes, sparse pale-gold embroidery at the collar, wrist and flowing hems, small jade pendants at a simple sash. Graceful three-quarter standing pose with a soft S-curve and relaxed shoulders, one hand delicately guiding a small floating pale sword glint and the other holds a slender sheathed sword obliquely down beside the body; all sword and silk remain in frame. Modest elegant neckline, no exposed thigh, no battle armor. Her silhouette feels like drifting cloud silk, spiritual, ethereal, poised and warm."
+    }
+  ],
+  "backgroundExtractionPrompt": "Use case: background-extraction. Edit target: this exact Xuandao character portrait. Remove ALL of the broad gray/brown/beige hazy backdrop, glow cloud, floor haze, vignette and every background pixel. Output a genuinely clean transparent PNG cutout: only the person, individual hair strands, garments, jewelry, held sword and the five delicate golden sword lights remain. Any area between silhouette elements, around swords, in sleeve gaps, around feet, and all corners must be fully transparent alpha 0. Keep the person's face, expression, pose, proportions, exact teal/ivory/gold costume, hair, fine embroidery and sword positions UNCHANGED. Preserve tiny soft attached edges and narrow natural glow only directly on the sword shapes; remove the huge soft glowing background clouds completely. Do not replace with a white/black/gray/checkerboard background. Do not add scenery, text, borders, floor or new objects. Keep the exact 1024x1536 canvas and original figure framing.",
+  "count": 2,
+  "operation": "Replace the two existing Xuandao portrait resources without changing IDs or paths; original PNGs remain outside the repository.",
+  "compression": "Sharp resize 1024x1536 to 768x1152; WebP quality 80, alphaQuality 100, effort 6, preserving generated alpha.",
+  "promptSummary": "Original painterly Chinese xianxia adult male/female; moon-white and deep teal flowing silk, restrained antique gold details, gentle immortal expression, delicate hair and pale five-element sword lights; Lihuo portraits used only as painterly style references. Built-in image_gen background-extraction pass retained the exact person and narrow sword glows while removing the broad backdrop.",
+  "originalBytes": 5801818,
+  "compressedBytes": 482176,
+  "assets": [
+    {
+      "id": "xuandao-male",
+      "playerPortraitId": "xuandao-male-v1",
+      "path": "assets/portraits/sect-xuandao-male-v1.webp",
+      "revisionOn": "2026-10-16",
+      "generatedSource": "exec-4b13c2cb-3cbd-4347-94c0-2517d95c044b.png",
+      "design": "玄青月白长袍、玉簪半束发、淡金五行剑意、温润修仙气质",
+      "sourceBytes": 2914051,
+      "bytes": 247494,
+      "width": 768,
+      "height": 1152,
+      "quality": 80,
+      "hasAlpha": true,
+      "sha256": "fb157e56f08d97e6455f14fb0f90d1d53762bb0208d8f7363a793c9745725ed2",
+      "transparentPixelCount": 263808,
+      "nearOpaquePixelCount": 508710,
+      "visibleBounds": {
+        "left": 11,
+        "top": 17,
+        "right": 763,
+        "bottom": 1142
+      }
+    },
+    {
+      "id": "xuandao-female",
+      "playerPortraitId": "xuandao-female-v1",
+      "path": "assets/portraits/sect-xuandao-female-v1.webp",
+      "revisionOn": "2026-10-16",
+      "generatedSource": "exec-366b50da-e6f1-47b1-b06b-e327d1fd211f.png",
+      "design": "玄青月白长裙、月玉花簪、轻纱长袖、淡金五行剑意",
+      "sourceBytes": 2887767,
+      "bytes": 234682,
+      "width": 768,
+      "height": 1152,
+      "quality": 80,
+      "hasAlpha": true,
+      "sha256": "77ceca7a0ce662b49eb7bb2cd857eef188e61b970834cc0cc397b4f28dfecdbe",
+      "transparentPixelCount": 272671,
+      "nearOpaquePixelCount": 527968,
+      "visibleBounds": {
+        "left": 5,
+        "top": 11,
+        "right": 761,
+        "bottom": 1141
+      }
+    }
+  ]
+}

@@ -717,6 +717,7 @@ ActionQuote gearActionQuote(const Game& g, const string& action, const string& i
         quote.costStones = gear ? 30 * gear->grade : 0;
         if (!artHas(g.player.arts, "器", 1)) quote.reason = "需先领悟「器道入门」才能铭刻。";
         else if (!gear) quote.reason = "没有这件法器。";
+        else if (gear->ForgeVersion == 2) quote.reason = "新版法器的灵纹已在成器前确定，不能追加旧式铭刻；如需更改请重新炼制。";
         else if (gear->inscribed) quote.reason = "这件法器已经铭刻过了。";
         else if (g.player.stones < quote.costStones)
             quote.reason = "铭刻需 " + std::to_string(quote.costStones) + " 灵石。";

@@ -70,6 +70,8 @@ void mfRunCultivationUnitTests() {
     Npc Resting; Resting.id = "cultivation-resting-npc"; Resting.name = "修炼测试同道";
     Resting.age = 20; Resting.lifespan = 100; Resting.health = 30;
     Resting.stage = 0; Resting.location = State.player.location; Resting.xp = 0;
+    // 此夹具只核对正常修炼单位；明确已有非丹药库存，避免真实年度补包/服丹混入收益。
+    Resting.bag = {{"herb:恒心草", 1}};
     State.npcs = {Resting}; State.year = 1;
     worldYear(State);
     const auto Found = std::find_if(State.npcs.begin(), State.npcs.end(), [&](const Npc& Person) { return Person.id == Resting.id; });

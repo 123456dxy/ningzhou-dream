@@ -33,7 +33,7 @@ export function tianjiCardNumbers(card, battle = {}) {
   const numbers = cardNumbers(card);
   if (numbers) pieces.push(numbers);
   if (Number.isFinite(card.energy) && card.energy !== 0) pieces.push(`灵力 ${card.energy > 0 ? '+' : ''}${card.energy}`);
-  if (Number.isFinite(card.draw) && card.draw > 0) pieces.push(`抽 ${card.draw} 张`);
+  if (Number.isFinite(card.draw) && card.draw > 0 && card.kind !== 'drawTo') pieces.push(`抽 ${card.draw} 张`);
   return pieces.join(' · ') || card.text || cardKind(card);
 }
 

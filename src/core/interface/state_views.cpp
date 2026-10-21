@@ -1,6 +1,9 @@
 #include "core/interface/views.h"
 #include "core/interface/view_helpers.h"
 #include "core/interface/service_views.h"
+#include "core/interface/zhuji_api.h"
+#include "core/interface/steward_api.h"
+#include "core/interface/ascension_api.h"
 #include "core/api_exploration.h"
 #include "core/shop.h"
 #include "data/reference_tables.h"
@@ -22,6 +25,9 @@ Value state(const Game& game, const ViewContext& context) {
     mfAppendServiceRoutes(game, state);
     appendPlayerState(game, state);
     appendArtsState(game, state);
+    state.set("zhuji", mfZhujiView(game));
+    state.set("ascensionTournament", mfAscensionTournamentView(game));
+    state.set("tianjiSteward", mfTianjiStewardView(game));
 
 
     // ---- 计划与在途工作 ----

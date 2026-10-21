@@ -1,0 +1,45 @@
+{
+  "generatedOn": "2026-10-17",
+  "tool": "built-in image_gen",
+  "operation": "Add a distinct Xuandao five-element aura variant for each gender; preserve the existing restrained variants.",
+  "sourceCommit": "c3a683c",
+  "sourceImages": "Original 2026-10-15 Xuandao male/female portraits recovered from Git and original generated PNGs.",
+  "design": "Unified translucent five-element qi with smooth color gradients around the whole figure, using Xinghe water effects as the VFX reference; the female compass glows throughout with five-element radiance.",
+  "compression": "Sharp 1024x1536 to 768x1152, WebP quality 82, alphaQuality 100, effort 6; preserve generated alpha.",
+  "generationPrompts": [
+    {
+      "key": "male",
+      "prompt": "Use case: precise-object-edit. Asset type: transparent Chinese xianxia game character portrait, an additional special-effects costume. Input Image 1 is the EDIT TARGET: preserve this exact Xuandao cultivator's face, identity, pose, hair, robes, hands and bronze compass. Input Image 2 is a VFX STYLE REFERENCE ONLY: borrow the soft, elegant, painterly, airy depth of the water qi surrounding the Xinghe character; do NOT copy that character, face, clothing, weapon or blue-only element. User's precise correction: NOT one trail per element. NOT five separate colored streams. Instead a single unified surrounding aura, with the five colors gently blending and GRADUATING WITHIN THE SAME qi and magical light. Add soft flowing translucent wisps and light veils around the whole figure, in an organic graceful circulation partly behind shoulders, curling around the waist and drifting around the lower robes. Gold, jade-green, pale water-blue, soft vermilion and warm earth-amber blend naturally in the same semi-transparent qi, with gentle smooth color transitions and a few delicate luminous particles. Moderate, pale and tasteful saturation; luminous but airy and refined, face and silk details remain the focus, like the existing reference portrait's effects. Enough volume and placement around upper, middle and lower body to feel surrounded by spiritual energy, but retain lots of clear negative space. No rigid multicolor tubes, no five parallel ribbons, no rainbow spiral staircase, no saturated neon fire/water/rocks/leaves sequence, no dense effects covering the outfit. Keep the original painterly semi-realistic Chinese fantasy rendering. Tall 2:3 canvas, single full figure, uncropped head/hair/feet/clothes and complete outer qi arcs with small margins. Real TRANSPARENT background: only the person, localized translucent qi and particles; no opaque gradient backdrop, no scenery, no frame, no text, no UI or watermark. Male: preserve the jade crown, face, fingers, compass and sword motif. Let his existing sword qi and the compass softly light a unified mist-like five-element aura flowing around the body; color gradients within each natural wisp rather than a separate path for each color.",
+      "editTarget": "exec-d6d7bd83-88df-4029-ae57-137fb77490a2.png",
+      "vfxStyleReference": "assets/portraits/sect-xinghe-male.webp"
+    },
+    {
+      "key": "female",
+      "prompt": "Use case: precise-object-edit. Asset type: transparent Chinese xianxia game character portrait, an additional special-effects costume. Input Image 1 is the EDIT TARGET: preserve this exact Xuandao cultivator's face, identity, pose, hair, robes, hands and bronze compass. Input Image 2 is a VFX STYLE REFERENCE ONLY: borrow the soft, elegant, painterly, airy depth of the water qi surrounding the Xinghe character; do NOT copy that character, face, clothing, weapon or blue-only element. User's precise correction: NOT one trail per element. NOT five separate colored streams. Instead a single unified surrounding aura, with the five colors gently blending and GRADUATING WITHIN THE SAME qi and magical light. Add soft flowing translucent wisps and light veils around the whole figure, in an organic graceful circulation partly behind shoulders, curling around the waist and drifting around the lower robes. Gold, jade-green, pale water-blue, soft vermilion and warm earth-amber blend naturally in the same semi-transparent qi, with gentle smooth color transitions and a few delicate luminous particles. Moderate, pale and tasteful saturation; luminous but airy and refined, face and silk details remain the focus, like the existing reference portrait's effects. Enough volume and placement around upper, middle and lower body to feel surrounded by spiritual energy, but retain lots of clear negative space. No rigid multicolor tubes, no five parallel ribbons, no rainbow spiral staircase, no saturated neon fire/water/rocks/leaves sequence, no dense effects covering the outfit. Keep the original painterly semi-realistic Chinese fantasy rendering. Tall 2:3 canvas, single full figure, uncropped head/hair/feet/clothes and complete outer qi arcs with small margins. Real TRANSPARENT background: only the person, localized translucent qi and particles; no opaque gradient backdrop, no scenery, no frame, no text, no UI or watermark. Female priority: the bronze floating compass above her raised palm MUST itself be filled and suffused with five-element magical radiance. Make luminous energy flow throughout the concentric rings, inscriptions and central core, with gold-green-blue-red-amber iridescent gradients, soft emitted halos and small blended motes. It should look like an ACTIVATED five-element artifact, not an inert bronze prop. Its delicate five-element radiance flows outward into the same unified qi circulation around her shoulders, waist and lower skirt; soft and elegant, never five separate ropes.",
+      "editTarget": "exec-1a1e6c03-4557-4f3e-b131-ceae6892ed73.png",
+      "vfxStyleReference": "assets/portraits/sect-xinghe.webp"
+    }
+  ],
+  "assets": [
+    {
+      "playerPortraitId": "xuandao-male-effects-v1",
+      "path": "assets/portraits/sect-xuandao-male-effects-v1.webp",
+      "generatedSource": "exec-82c3e828-bb74-4407-b085-d1c17638f9f1.png",
+      "bytes": 309872,
+      "width": 768,
+      "height": 1152,
+      "hasAlpha": true,
+      "sha256": "bb64333ed272f57a4d02abe1e1b3966e963f74e315ff43c789c1ac3e2ed8f352"
+    },
+    {
+      "playerPortraitId": "xuandao-female-effects-v1",
+      "path": "assets/portraits/sect-xuandao-female-effects-v1.webp",
+      "generatedSource": "exec-efda38af-5c00-4993-b3e1-f20eef5400d4.png",
+      "bytes": 310754,
+      "width": 768,
+      "height": 1152,
+      "hasAlpha": true,
+      "sha256": "9a8457b69d661ee179086d670273cfcd293a05c7e42f9c0a47e98da3f959f0ac"
+    }
+  ]
+}

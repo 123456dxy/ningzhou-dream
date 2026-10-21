@@ -1,6 +1,7 @@
 // 宁州一梦 · C++ 版 — 控制台界面实现
 #include "ui.h"
 #include "core/checkpoint.h"
+#include "core/combat/battle_scaling.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -146,7 +147,7 @@ static void showHeader(const Game& g) {
               << g.clock.days << "天（第" << d.year << "年" << d.month
               << "月" << d.day << "日）\n";
     std::cout << "  年龄 " << p.age << "/" << p.lifespan
-              << "   气血 " << p.health
+              << "   气血 " << p.health << "/" << mfPlayerHealthMaximum(p)
               << "   修为 " << p.xp << "/" << realmOf(p.stage).need
               << "   灵石 " << p.stones
               << "   灵药 " << p.herbs << "\n";
@@ -306,6 +307,10 @@ static Game newGameFlow() {
 // 使用方式：传入Game& g, int days，按本模块入口调用。
 // 返回值：无；完成说明所述写入或展示操作。
 static void doAdvance(Game& g, int days) {
+    if (g.player.Zhuji && g.player.Zhuji->Status == ZhujiStatus::Active) {
+        std::cout << "  筑基已入关，请在网页端继续凝练或冲穴。\n";
+        return;
+    }
     // 直接推进若干天：没有在途工作时先按当前计划建一个
     if (!g.job.has_value()) {
         Job j;
@@ -1222,6 +1227,12 @@ static void mainMenu(Game& g) {
         std::cout << "  0.退出\n> ";
         const int c = readInt(0, 10, -1);
 
+        if (g.player.Zhuji && g.player.Zhuji->Status == ZhujiStatus::Active && c >= 1 && c <= 8) {
+            std::cout << "  筑基正在运转，请存档后在网页端继续；当前可查看状态、存读档或退出。\n";
+            std::string Input;
+            readLine(Input);
+            continue;
+        }
         if (g.job.has_value() && c >= 3 && c <= 8) {
             std::cout << "  当前在途安排尚未完成，请先推进行动。\n";
             std::string dummy;
@@ -1251,7 +1262,8 @@ static void mainMenu(Game& g) {
             const int restores=g.checkpoint.restores;
             for (int i = 0; i < 12; ++i) {
                 if (g.checkpoint.restores!=restores || g.pending.has_value() || g.ended ||
-                    g.player.arts.battle.has_value())
+                    g.player.arts.battle.has_value() ||
+                    (g.player.Zhuji && g.player.Zhuji->Status == ZhujiStatus::Active))
                     break;
                 doAdvance(g, calendarDate(g).left);
             }
@@ -1266,6 +1278,12 @@ static void mainMenu(Game& g) {
         } else if (c == 4) {
             doArtsMenu(g);
         } else if (c == 5) {
+            if (g.player.stage == 2) {
+                std::cout << "  筑基需在网页端自选五行凝练或周天冲穴，请存档后继续。\n";
+                std::string Input;
+                readLine(Input);
+                continue;
+            }
             const BreakthroughInfo info = breakthroughInfo(g);
             std::cout << "\n  目标：" << info.next
                       << "   成功率 " << jsRound(info.chance * 100) << "%"
@@ -1275,8 +1293,8 @@ static void mainMenu(Game& g) {
                           << realmOf(g.player.stage).need << "）。\n";
             } else if (g.player.stones < info.cost) {
                 std::cout << "  灵石不足。\n";
-            } else if (g.player.health < 35) {
-                std::cout << "  伤势过重，请先休养至 35 气血。\n";
+            } else if (g.player.health < HealthGateMinimum) {
+                std::cout << "  伤势过重，请先休养至 30 气血。\n";
             } else {
                 std::cout << "  开始闭关？1.是 0.否\n> ";
                 if (readInt(0, 1, 0) == 1) {
@@ -1298,8 +1316,11 @@ static void mainMenu(Game& g) {
                         if (g.player.cores > 0) --g.player.cores;
                     }
                     if ((!info.major && g.player.arts.breakBuff == "step") ||
-                        (info.major && g.player.arts.breakBuff == "stage"))
+                        (info.major && g.player.arts.breakBuff == "stage" &&
+                         g.player.arts.BreakthroughPillStage == g.player.stage)) {
                         g.player.arts.breakBuff.clear();
+                        g.player.arts.BreakthroughPillStage = -1;
+                    }
                     g.job = j;
                     doAdvance(g, j.total);
                 }

@@ -186,6 +186,9 @@ struct TurnResult {
 // 使用方式：传游戏、手牌 UID/神通 ID/end/escape 与可选移除目标。
 // 返回值：操作成功或拒绝原因；成功更新战斗并可能触发结算。
 TurnResult battleTurn(Game& g, const string& id, const string& target = "");
+// 新版法器定向等量换牌只接受本场当前手牌UID；整组失败不改变状态或随机数。
+TurnResult battleTurn(Game& GameState, const string& Id, const string& Target,
+    const vector<string>& Targets);
 
 // 抽牌（内部使用，也供测试）
 // 用途：为玩家抽牌并在必要时重洗弃牌。
@@ -223,6 +226,8 @@ struct Preview {
 // 使用方式：传角色、战斗和施术 ID，不写真实状态。
 // 返回值：实际效果预览；未知或境界不足时无效。
 Preview battlePreview(const Player& p, const Battle& b, const string& id);
+Preview battlePreview(const Player& Actor, const Battle& State, const string& Id,
+    const vector<string>& Targets);
 // 目录和炼器的参考环境与真实斗法使用相同的开局属性、结算函数。
 // 不抽牌、不生成对手、不消耗 RNG；参考手牌固定五张，仅用于说明换念。
 // 用途：生成角色当前准备下的参考开局状态。

@@ -1,5 +1,8 @@
+import { renderArtifactIllustration } from './artifact-illustrations.mjs';
+import { renderPillBatchControls } from './pill-batch.mjs';
 import { esc, heading, panel, layout, asideBlock } from './shell.mjs';
 import { renderArtifactAbility, renderEquippedArtifacts } from './artifacts.mjs';
+import { forgeInscriptionName } from './forge.mjs';
 import { renderPillEffect } from './economy.mjs';
 import { renderRenownPanel } from './renown.mjs';
 import { renderCraftPricing } from './craft-pricing.mjs';
@@ -72,20 +75,21 @@ export function renderInventoryPanel(state, { kind = 'all', grade = 'all', sub =
   const cards = visible.map(item => {
     const label = `${item.grade ? `${item.grade} 阶` : '无品阶 / 待查'} · ×${item.count}${item.equipped ? ' · 已装备' : ''}`;
     let actions = '';
-    if (item.kind === 'potion') actions = `<button class="primary" data-action="use-pill" data-id="${esc(item.id)}" ${item.enabled === false ? 'disabled' : ''}>${esc(item.enabled === false ? item.reason || '暂不可服用' : '服用丹药')}</button>`
+    if (item.kind === 'potion') actions = renderPillBatchControls(item.id)
       + renderPotionSaleActions(item.id, item.maxSale, state);
     if (item.kind === 'gear') {
       const equipAction = item.equipped ? 'gear/unequip' : 'equip';
       const quote = item.actions?.[item.equipped ? 'unequip' : 'equip'];
       actions = `<button data-action="${equipAction}" data-id="${esc(item.id)}" ${quote?.enabled === false ? 'disabled' : ''}>${item.equipped ? '卸下' : '装备'}</button>`
-        + (!item.inscribed ? `<button data-action="gear/inscribe" data-id="${esc(item.id)}" ${item.actions?.inscribe?.enabled === false ? 'disabled' : ''}>铭刻</button>` : '')
+        + (!item.inscribed && Number(item.forgeVersion || 0) < 2 ? `<button data-action="gear/inscribe" data-id="${esc(item.id)}" ${item.actions?.inscribe?.enabled === false ? 'disabled' : ''}>铭刻</button>` : '')
         + `<button data-action="gear-salvage-preview" data-id="${esc(item.id)}">材料回收预览</button>`
         + `<button data-action="sell" data-kind="gear" data-id="${esc(item.id)}" data-count="1" ${item.actions?.sell?.enabled === true ? '' : 'disabled'} title="${esc(item.actions?.sell?.reason || '')}">出售法器</button>`;
     }
-    return `<article class="inventory-item" data-inventory-item="${esc(item.id)}"><div class="inventory-item-head"><h4>${esc(item.name)}</h4><span>${esc(label)}</span></div>`
+    return `<article class="inventory-item" data-inventory-item="${esc(item.id)}"><div class="inventory-item-head">${item.kind === "gear" || item.illustration ? renderArtifactIllustration(item,{compact:true}) : ""}<h4>${esc(item.name)}</h4><span>${esc(label)}</span></div>`
       + (item.kind === 'potion'
         ? `<details class="inventory-pill-details" data-inventory-pill-details="${esc(item.id)}"><summary>查看效果与服用</summary><p>持有 ${item.count} 枚</p>${renderPillEffect(state, item.id)}${renderCraftPricing(item.pricing, { kind: 'potion', compact: true })}<div class="arts-actions">${actions}</div></details>`
-        : (item.ability ? renderArtifactAbility(item.ability, { compact: true }) : `<p>${esc(item.desc || '')}</p>`)
+        : (item.ability ? renderArtifactAbility(item.ability, { compact: true }) : `<p>${esc(item.effectText || item.passive?.text || item.desc || '')}</p>`)
+          + (item.kind === 'gear' && Number(item.forgeVersion || 0) >= 2 ? `<p class="panel-note">${esc(forgeInscriptionName(item.inscription))} · 主效果与灵纹已在成器时确定</p>` : '')
           + (item.kind === 'gear' ? renderCraftPricing(item.pricing, { kind: 'gear', compact: true }) : '')
           + `<div class="arts-actions">${actions}</div>${item.kind === 'gear' ? renderMarketCash(state)
             + (item.actions?.sell?.reason ? `<p class="trade-limit-reason">${esc(item.actions.sell.reason)}</p>` : '') : ''}`)

@@ -7,6 +7,7 @@
 #include "core/battle.h"
 #include "core/cultivate.h"
 #include "core/crafting/herb_acquisition.h"
+#include "core/content/forge_content.h"
 #include "core/economy.h"
 #include "core/json.h"
 #include "core/location_services.h"
@@ -105,8 +106,20 @@ void runMaterialSourceTests() {
         EnemySpec enemy; enemy.name = "常规猎妖"; enemy.stage = g.player.stage;
         enemy.kind = "hunt"; enemy.beast = true; enemy.huntFee = 100;
         battleStart(g, enemy);
-        if (g.player.arts.battle) ecoHuntEnd(g, true);
-        check(lowMaterialsOnly(g.player.arts), "普通猎妖委托材料封顶二阶");
+        if (g.player.arts.battle) {
+            g.player.arts.battle->enemyHp = 0;
+            battleFinish(g, true);
+        }
+        int PartKinds = 0;
+        bool MatchesEnemyGrade = true;
+        for (const auto& [Id, Count] : g.player.arts.materials) {
+            const auto* Definition = content::mfFindForgeMaterial(Id);
+            if (!Count) continue;
+            ++PartKinds;
+            MatchesEnemyGrade &= Definition && Definition->Source == content::ForgeMaterialSource::BeastDrop &&
+                Definition->Material.grade == 5 && Count == 1;
+        }
+        check(PartKinds == 5 && MatchesEnemyGrade, "猎妖按所杀五阶妖兽发五部位，不再按普通矿材二阶封顶");
     }
     {
         Game g = sourceGame(12);

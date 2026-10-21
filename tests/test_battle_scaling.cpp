@@ -1,6 +1,7 @@
 #include "harness.h"
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/sim.h"
 #include <algorithm>
 
@@ -13,7 +14,6 @@ Player mfScalingPlayer(int Stage) {
     Player PlayerState;
     PlayerState.name = "伤害尺度测试";
     PlayerState.stage = Stage;
-    PlayerState.health = 100;
     PlayerState.body = 0;
     PlayerState.talent.clear();
     PlayerState.traits.clear();
@@ -23,6 +23,7 @@ Player mfScalingPlayer(int Stage) {
     PlayerState.arts.nodes.clear();
     PlayerState.arts.gear.clear();
     PlayerState.arts.equipped.clear();
+    PlayerState.health = mfPlayerHealthMaximum(PlayerState);
     return PlayerState;
 }
 }
@@ -32,13 +33,13 @@ Player mfScalingPlayer(int Stage) {
 void mfRunBattleScalingTests() {
     std::printf("\n--- 统一战斗伤害尺度回归 ---\n");
     struct Sample { int Stage, Health, Strike, Fire, Burn, Poison, Shield, Mana; };
-    for (const auto& Row : {Sample{0,144,11,16,2,3,17,3}, Sample{1,168,12,18,2,3,20,3},
-                           Sample{2,204,14,21,2,4,24,3}, Sample{3,266,18,27,3,5,32,4},
-                           Sample{6,614,39,58,6,11,74,5}, Sample{9,1694,104,156,17,29,203,6},
-                           Sample{12,4430,268,402,45,75,532,7}}) {
+    for (const auto& Row : {Sample{0,148,11,16,2,3,18,3}, Sample{1,160,12,17,2,3,19,3},
+                           Sample{2,175,13,19,2,4,21,3}, Sample{3,264,18,27,3,5,32,4},
+                           Sample{6,724,46,68,8,13,87,5}, Sample{9,2568,156,234,26,44,308,6},
+                           Sample{12,9940,598,898,100,168,1193,7}}) {
         const Player PlayerState = mfScalingPlayer(Row.Stage);
         const Battle Reference = battleReferenceState(PlayerState);
-        checkEq(Reference.max, Row.Health, "伤害调整不改变各阶段斗法气血");
+        checkEq(Reference.max, Row.Health, "曲线A提供各阶段权威斗法气血");
         checkEq(Reference.maxMana, Row.Mana, "伤害调整不改变每轮基础灵力");
         checkEq(battlePreview(PlayerState, Reference, "strike").damage, Row.Strike, "普通攻击采用零点三战力加十八的新伤害基底");
         const auto Fire = battlePreview(PlayerState, Reference, "fire");
@@ -55,15 +56,17 @@ void mfRunBattleScalingTests() {
         const Player PlayerState = mfScalingPlayer(12);
         Battle Reference = battleReferenceState(PlayerState);
         Reference.poison = 9;
-        Reference.poisonTurns = 3;
-        const auto WithPoison = battlePreview(PlayerState, Reference, "poisonBurst");
+        Reference.poisonTurns = 1;
+        Reference.hp = Reference.max / 2;
+        const auto WithPoison = battlePreview(PlayerState, Reference, "poisonSiphon");
         Reference.poison = 0;
         Reference.poisonTurns = 0;
-        const auto WithoutPoison = battlePreview(PlayerState, Reference, "poisonBurst");
-        checkEq(WithPoison.damage - WithoutPoison.damage, 904,
-                "化神九层毒爆追加558乘九乘百分之十八取整为904");
-        checkEq(battlePreview(PlayerState, Reference, "rain").damage, 837,
-                "化神剑雨真实首击为558乘一点五，不额外乘境界");
+        const auto WithoutPoison = battlePreview(PlayerState, Reference, "poisonSiphon");
+        checkEq(WithPoison.healPotential, std::min(jsRound(mfBattleDamageBasis(12) * .04 * 9), jsFloor(Reference.max * .12)),
+                "化神九层借毒采用同源基底并受12%上限约束");
+        checkEq(WithoutPoison.heal, 0, "无毒不能借毒治疗");
+        checkEq(battlePreview(PlayerState, Reference, "rain").damage, 1870,
+                "化神剑雨真实首击为1246.8乘一点五，不额外乘境界");
     }
     {
         Game GameState;
@@ -81,9 +84,9 @@ void mfRunBattleScalingTests() {
         check(GameState.player.arts.battle.has_value(), "同阶妖兽可以建立真实隔离战斗");
         if (!GameState.player.arts.battle) return;
         const auto& BattleState = *GameState.player.arts.battle;
-        checkEq(BattleState.enemyMax, 6424, "妖兽气血一点四五乘区保持不变");
-        check(BattleState.intentRaw >= 1445 && BattleState.intentRaw <= 1631 && BattleState.BeastActions.size() == 4,
-              "化神妖兽558基底按整轮2.9乘0.95系数分配三次攻击与凝甲，不逐段复制整轮伤害");
+        checkEq(BattleState.enemyMax, 14414, "妖兽气血一点四五乘区在最终取整前应用");
+        check(BattleState.intentRaw >= 3229 && BattleState.intentRaw <= 3641 && BattleState.BeastActions.size() == 4,
+              "化神妖兽1246.8基底按整轮2.9乘0.95系数分配三次攻击与凝甲，不逐段复制整轮伤害");
         const int BeforeHealth = BattleState.hp;
         const int PredictedDamage = battleEnemyPreview(GameState).damage;
         const int IntentDamage = BattleState.intentRaw;

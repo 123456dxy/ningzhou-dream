@@ -1,6 +1,7 @@
 #include "core/combat/battle_lab.h"
 #include "core/arts.h"
 #include "core/battle.h"
+#include "core/combat/battle_scaling.h"
 #include "core/character_build.h"
 #include "core/content/advanced_builds.h"
 #include "core/content/game_ids.h"
@@ -48,7 +49,6 @@ Player mfPreparePlayer(const Selection& Requested, const BuildInfo& Build,
     Prepared.lifespan = realmOf(Requested.Stage).life;
     Prepared.apt = 90;
     Prepared.insight = 37;
-    Prepared.health = 100;
     Prepared.body = 0;
     Prepared.talent.clear();
     Prepared.traits.clear();
@@ -107,6 +107,7 @@ Player mfPreparePlayer(const Selection& Requested, const BuildInfo& Build,
                 Loadout.nodes.push_back(Prerequisite);
         }
     }
+    Prepared.health = mfPlayerHealthMaximum(Prepared);
     return Prepared;
 }
 

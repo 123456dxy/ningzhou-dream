@@ -44,4 +44,6 @@ GreenBottleDungeonQuote mfQuoteGreenBottleDungeon(const Game& State, int Grade);
 std::vector<GreenBottleDungeonQuote> mfGreenBottleDungeonOptions(const Game& State);
 // 用途：进入新一轮真实爬塔；流程：专属秘境动作；返回：错误或空，无门票费，失败不生成site/消耗序号。
 std::string mfEnterGreenBottleDungeon(Game& State, int Grade, int ExpectedGrade);
+// 用途：按指定临时卡奖励偏好进入绿瓶秘境；流程：洞府入场；返回：错误或空，非法偏好不生成入口，既有三参入口保留默认全部。
+std::string mfEnterGreenBottleDungeon(Game& State, int Grade, int ExpectedGrade, const DungeonCardRewardPreference& Preference);
 }

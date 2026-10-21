@@ -1,6 +1,7 @@
 // 宁州一梦 · C++ 版 — 宗门与知交实现
 // 覆盖 society.mjs 的：姓名、身份、俸禄账簿、师徒道侣、原创支线、野外冲突。
 #include "core/society.h"
+#include "core/combat/battle_scaling.h"
 #include "core/source_limits.h"
 
 #include <algorithm>
@@ -280,18 +281,18 @@ void storyComplete(Game& g, const data::StoryDef& s, int optionIndex) {
             a.heart += 4;
             p.luck = std::min(150, p.luck + 2);
         } else {                          // 将信收入旧卷：悟性+2
-            p.insight = std::min(INSIGHT_MAX, p.insight + 2);
+            p.insight = std::min(std::max(INSIGHT_MAX, p.insight), p.insight + 2);
         }
     } else if (s.id == "rootpool") {
-        if (optionIndex == 0) {          // 以身引泉：资质+3，气血−12
-            p.apt = std::min(APT_MAX, p.apt + 3);
-            p.health = std::max(1, p.health - 12);
+        if (optionIndex == 0) {          // 以身引泉：资质+3，损失气血上限12%。
+            p.apt = std::min(std::max(APT_MAX, p.apt), p.apt + 3);
+            p.health = std::max(1, p.health - mfHealthPercentAmount(mfPlayerHealthMaximum(p), 12));
         } else {                          // 只取一缕灵息：土道经验+40
             artGain(p, "土", 40);
         }
     } else if (s.id == "rootecho") {
         if (optionIndex == 0) {          // 承接残碑：资质+3，消耗 40 灵石
-            p.apt = std::min(APT_MAX, p.apt + 3);
+            p.apt = std::min(std::max(APT_MAX, p.apt), p.apt + 3);
             p.stones -= 40;
         } else {                          // 悟其得失：气道经验+50
             artGain(p, "气", 50);
@@ -368,7 +369,7 @@ string wildActionError(const Game& g, const string& id) {
     const auto* loc = findLoc(g.player.location);
     if (!loc || string(loc->type) != "wild") return "请前往方壶山、青石灵脉或无尽海接野外悬赏。";
     if (g.player.location == "sea" && g.player.stage < 3) return "无尽海悬赏需筑基境界。";
-    if (g.player.health < 50) return "气血不足 50，请先休养。";
+    if (g.player.health < HealthGateMinimum) return "气血不足 30，请先休养。";
     if (g.player.stones < 3) return "接悬赏需 3 灵石。";
     if (g.bonds.wildMonth == g.clock.days / 30 && g.bonds.wildCount >= 3)
         return "本月野外悬赏已满三次。";
@@ -589,7 +590,7 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
                 const int need = realmOf(n.stage).need;
                 n.xp = static_cast<int>(std::min(static_cast<long long>(need),
                     static_cast<long long>(n.xp) + 40 * CultivationUnits::Scale));
-                n.insight = std::min(INSIGHT_MAX, n.insight + 3);
+                n.insight = std::min(std::max(INSIGHT_MAX, n.insight), n.insight + 3);
                 npcHistory(g, n, "受师尊" + p.name + "指点，修为与悟性有所增长。");
             }
         }
@@ -604,7 +605,7 @@ void societyBondComplete(Game& g, const string& kind, const Npc* npc) {
         b.bondDays += 10;
         artGain(p, a.focus, 6);
         a.heart += 2;
-        p.health = std::min(100, p.health + 4);
+        p.health = mfRecoveredHealth(p.health, mfPlayerHealthMaximum(p), 4);
         if (!b.partner.empty()) addRelation(g, b.partner, 3 + talentAffinityBonus(p));
         logEvent(g, "self",
                  "与道侣相伴共修10天：" + receipt.changes(g) + "。");
@@ -647,17 +648,6 @@ void societyWildEnd(Game& g, const Battle& b) {
     g.player.stones += b.advFee;
     g.player.renown += 2;
     g.bonds.wildWins++;
-    if (b.wildTask == "beast") {
-        vector<const data::MaterialDef*> pool;
-        const int tier = ordinaryMaterialGradeLimit(g.player);
-        for (const auto& material : data::MaterialDef_TABLE())
-            if (material.grade == tier) pool.push_back(&material);
-        if (!pool.empty()) {
-            const auto* material = pickOf(g, pool);
-            g.player.arts.materials[material->id] += 2;
-            logEvent(g, "self", "驱妖获得" + material->name + " ×2。");
-        }
-    }
     logEvent(g, "self",
              "悬赏「" + b.enemy + "」完成，领取赏金 " +
                  std::to_string(b.advFee) + " 灵石，声望 +2。",

@@ -22,6 +22,7 @@ Game makeRichGame() {
     // 天赋 4+5=9 点，属性再给 1 点，正好用满基础预算 10 点
     opts.allocation = {{"apt", 1}};
     Game g = createGame(opts);
+    g.pending.reset(); // 此夹具直接构造多年后的存档，已结束开局邀请。
 
     // 推进几下，让世界里也有内容
     g.clock.days = 360 * 3 + 30 * 5 + 12;

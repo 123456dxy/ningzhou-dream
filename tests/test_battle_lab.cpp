@@ -158,8 +158,9 @@ void mfRunBattleLabTests() {
         LabSession.CurrentGame().player.arts.battle->draw == Repeated.CurrentGame().player.arts.battle->draw,
         "同流派、境界、对手和种子真实发牌可复现");
     BattleLab::Session IndependentCopy = LabSession;
+    const int OriginalHealth = LabSession.CurrentGame().player.health;
     IndependentCopy.CurrentGame().player.health = 37;
-    check(&IndependentCopy.CurrentGame() != &LabSession.CurrentGame() && LabSession.CurrentGame().player.health == 100,
+    check(&IndependentCopy.CurrentGame() != &LabSession.CurrentGame() && LabSession.CurrentGame().player.health == OriginalHealth,
         "事务会话深拷贝真实Game，不共享可变角色状态");
 
     const auto RngBefore = LabSession.CurrentGame().rng;

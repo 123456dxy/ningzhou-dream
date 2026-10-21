@@ -19,6 +19,7 @@ Game persistenceFixture() {
     options.name = "存档模块回归";
     options.seed = 20261012;
     Game game = createGame(options);
+    game.pending.reset();
     game.clock.days = 365;
     game.year = 1;
     game.player.age = game.clock.ageBase + 1;

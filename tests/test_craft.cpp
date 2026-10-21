@@ -114,8 +114,8 @@ void runCraftTests() {
             const Player p = makeCrafter(3);
             const PillEffect e = artPillEffect(p, *r);
             checkStr(r->kind, "heal", "化淤丹属于治疗类");
-            checkEq(e.value, 20, "化淤丹恢复 20 气血");
-            checkStr(e.text, "恢复气血 20", "化淤丹效果文案正确");
+            checkEq(e.value, 40, "化淤丹恢复40点气血");
+            checkStr(e.text, "恢复气血 40点", "化淤丹效果文案正确");
         }
     }
     {
